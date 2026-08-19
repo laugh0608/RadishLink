@@ -1,0 +1,57 @@
+name: 缺陷报告
+description: 报告可复现的功能、协议、文档或工具问题
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        安全漏洞、真实密钥或私密通信内容不要写入公开 Issue。请先阅读 SECURITY.md 并使用私密报告渠道。
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认这不是需要私下报告的安全漏洞
+          required: true
+        - label: 我已搜索现有 Issue，并阅读 docs/status/current.md 和相关专题
+          required: true
+        - label: 我没有附带真实凭据、私密通信、未经脱敏的日志或受限第三方材料
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题摘要
+      description: 简明说明实际问题及其影响。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境与条件
+      description: 记录提交、平台、硬件、固件、节点数；射频问题还需记录监管域、信道、带宽、功率、天线、距离、视距与高度。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 提供最小、可重复且不泄露秘密的步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为与证据
+      description: 附上脱敏后的错误、日志或测试结果，并说明证据不能覆盖的范围。
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 风险、临时缓解与补充信息

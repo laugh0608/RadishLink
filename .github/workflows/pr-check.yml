@@ -1,0 +1,74 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-hygiene:
+    name: Repo Hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Check repository baseline
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ -n "${BASE_SHA}" ]]; then
+            ./scripts/check-repo.sh --base-ref "${BASE_SHA}"
+          else
+            ./scripts/check-repo.sh
+          fi
+
+  candidate-quality:
+    name: Candidate Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - repo-hygiene
+
+    steps:
+      - name: Summarize candidate quality
+        shell: bash
+        env:
+          REPO_HYGIENE_RESULT: ${{ needs.repo-hygiene.result }}
+        run: |
+          {
+            echo "## Candidate Quality"
+            echo
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Repo Hygiene | ${REPO_HYGIENE_RESULT} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${REPO_HYGIENE_RESULT}" != "success" ]]; then
+            echo "Repository hygiene did not succeed." >&2
+            exit 1
+          fi
+
+          echo "All candidate quality components succeeded."
