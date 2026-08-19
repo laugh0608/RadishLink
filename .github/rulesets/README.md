@@ -38,6 +38,20 @@
 7. 用非默认分支发起测试 PR，验证直接 push、force push、删除、会话解决和 strict required check 行为。
 8. 导出远程实际状态，与仓库模板记录的策略逐项复核；不要把“文件已提交”写成“远程已启用”。
 
+## RadishLink 远程实例状态
+
+截至 2026-08-19，`laugh0608/RadishLink` 已完成以下远程配置并通过 API 回读复核：
+
+- GitHub 默认分支为 `master`，远程同时存在 `master` 与 `dev`；
+- merge commit 与 rebase merge 已开启，squash merge 已关闭；
+- Ruleset `Protect master via reviewed PR` 处于 `active`，只匹配 `refs/heads/master`；
+- 删除和 non-fast-forward 更新被禁止，所有变更必须关联 PR 并解决 review conversation；
+- required context 为 strict、最新的 `Candidate Quality`，审批数为 `0`；
+- 管理员 RepositoryRole 只允许在 PR 内 bypass，不开放直接 push bypass；
+- `Candidate Quality` 已由首次 `dev -> master` PR 实际产生并通过。
+
+以上证明远程配置与 PR 正向路径已成立。为避免把验证动作本身意外写入稳定主线，本次没有主动执行直接 push、force push 或删除 `master` 的现场负例；这些行为如需实测，必须使用不会在规则失效时污染稳定分支的受控方法，并保存结果。远程 Ruleset 被停用、替换或删除时，必须同步更新本节与 `docs/status/current.md`。
+
 GitHub 支持通过 JSON 导入 Ruleset，也允许管理员配置“仅 Pull Request”绕过。required checks 的 strict 模式要求主题分支在合并前与目标分支保持最新；仓库的 merge method 设置与 Ruleset 允许方式必须一致。参考 GitHub 官方的 [Rulesets 可用规则](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)、[创建 Ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)和 [Pull Request 合并方式](https://docs.github.com/en/pull-requests/reference/pull-request-merges)。
 
 ## API 运维原则
