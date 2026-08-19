@@ -17,7 +17,7 @@
 - 应用层端到端加密与无线链路加密分层实现；中继节点不得获得消息、附件或媒体明文。
 - POC 至少使用三台节点；正式外场距离测试前必须通过无线电合规门。
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
-- GitHub 公开空仓库 `laugh0608/RadishLink` 已创建；本地 PR、CI 与 Ruleset 声明已经形成基线，但远程尚无分支，Ruleset 和 Merge options 也尚未配置或启用。
+- GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 已创建为常态集成分支，Ruleset 和 Merge options 尚未配置或启用。
 
 ## 关键风险
 
@@ -34,7 +34,7 @@
 3. 先用本机网络命名空间或三台普通 Linux 设备打通加密消息、去重、TTL、存储转发和路由故障模拟。
 4. 在台架和近距离低风险环境建立无线基线，再按 100 m、500 m、1 km 阶梯外场测试。
 5. 只有语音和视频预算通过实测后，才冻结应用处理器、摄像头、显示、音频和电池规格。
-6. 对已创建的空远程仓库完成首次 `master` 推送并确认其为 GitHub 默认分支；再按[Ruleset 启用顺序](../../.github/rulesets/README.md)创建 `dev`、产生 `Candidate Quality` context、配置 Merge options 并验证保护行为。
+6. 从 `dev` 向 `master` 发起首次验证 PR，产生 `Candidate Quality` context；再按[Ruleset 启用顺序](../../.github/rulesets/README.md)配置 Merge options、启用 Ruleset 并验证保护行为。
 
 ## 尚未冻结
 
