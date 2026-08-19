@@ -34,6 +34,7 @@ RadishLink 是 Radish 家族中的离线自组网通信项目。它面向没有�
 - [仓库治理](docs/governance/repository-governance.md)
 - [参与贡献](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
+- [许可条款](LICENSE)
 
 ## 仓库检查
 
@@ -47,4 +48,8 @@ Windows PowerShell：
 pwsh ./scripts/check-repo.ps1
 ```
 
-当前仓库处于定义与可行性验证阶段，尚未冻结许可证、量产硬件、射频区域版本、应用开发栈或兼容性承诺。仓库内的 Ruleset 与 workflow 是待远程实例化和验证的治理声明，不代表 GitHub 远程状态已经配置。
+当前仓库处于定义与可行性验证阶段，尚未冻结量产硬件、射频区域版本、应用开发栈或兼容性承诺。GitHub 远程已启用 `master` Ruleset 和 `PR Checks`；仓库内模板仍只负责记录与复现策略，实际状态以[当前状态](docs/status/current.md)和[仓库治理](docs/governance/repository-governance.md)为准。
+
+## 许可
+
+本仓库原创内容采用 [RadishLink Source-Available License 1.0](LICENSE)。该许可证允许在授权平台上为个人参考和学习查看、阅读源码，但不默认授予复制、修改、再分发、衍生开发或商业使用权利；第三方组件和材料继续遵循各自许可证。完整且具有优先效力的条款以 `LICENSE` 为准。

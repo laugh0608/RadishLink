@@ -16,6 +16,7 @@
 - 长距承载首选评估 Wi-Fi HaLow；近距接入使用独立 2.4 GHz Wi-Fi / BLE。
 - 应用层端到端加密与无线链路加密分层实现；中继节点不得获得消息、附件或媒体明文。
 - POC 至少使用三台节点；正式外场距离测试前必须通过无线电合规门。
+- 仓库原创内容采用 `RadishLink Source-Available License 1.0`；该许可证允许个人参考和学习范围内的查看与阅读，但不是开放源码许可证，完整条款以根目录 `LICENSE` 为准。
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 
@@ -44,7 +45,7 @@
 - 实时媒体使用 WebRTC、定制 RTP/QUIC 或其他传输；
 - 最终应用处理器、操作系统发行版、UI 框架和升级系统；
 - 定位能力、GNSS/UWB 配置和“寻找设备”产品范围；
-- 许可证、发布渠道和兼容性承诺。
+- 发布渠道和兼容性承诺。
 
 ## 当前验证入口
 

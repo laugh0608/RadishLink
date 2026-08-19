@@ -96,7 +96,7 @@ workflow 使用 `pull_request` 与只读 token，外部 Action 固定完整 SHA�
 
 - 不创建 CODEOWNERS；当前没有真实多人所有权结构。
 - 不要求签名提交；签名、密钥恢复和机器人身份方案尚未建立。
-- 不创建 tag Ruleset、release workflow 或自动部署；版本、许可证、兼容性、签名和发布载体尚未冻结。
+- 不创建 tag Ruleset、release workflow 或自动部署；版本、兼容性、签名和发布载体尚未冻结。
 - 不把 `main` 加入模板作为备用匹配；默认分支若迁移，必须通过新的治理变更同步更新全部资产。
 - 不创建 fork 网络级 push ruleset；仓库可见性和对 fork 的影响尚未确认，路径和文件大小先由仓库检查治理。
 
