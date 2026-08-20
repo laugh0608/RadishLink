@@ -1,1 +1,5 @@
 blank_issues_enabled: false
+contact_links:
+  - name: 私下报告安全问题
+    url: https://github.com/laugh0608/RadishLink/security/policy
+    about: 不要公开披露尚未修复的漏洞、真实密钥、设备凭据或私密通信内容。
