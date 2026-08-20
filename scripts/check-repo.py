@@ -52,6 +52,7 @@ REQUIRED_FILES = (
     "docs/security/e2ee-candidate-review.md",
     "docs/security/security-architecture.md",
     "docs/status/current.md",
+    "docs/status/d0-t0-p0-plan.md",
     "docs/testing/field-validation-plan.md",
     "docs/testing/t0-p0-software-validation.md",
     "scripts/check-repo.ps1",
