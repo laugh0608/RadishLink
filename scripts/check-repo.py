@@ -49,12 +49,15 @@ REQUIRED_FILES = (
     "docs/regulatory/radio-compliance.md",
     "docs/research/technology-evidence.md",
     "docs/roadmap.md",
+    "docs/security/e2ee-candidate-review.md",
     "docs/security/security-architecture.md",
     "docs/status/current.md",
     "docs/testing/field-validation-plan.md",
+    "docs/testing/t0-p0-software-validation.md",
     "scripts/check-repo.ps1",
     "scripts/check-repo.py",
     "scripts/check-repo.sh",
+    "scripts/run-t0-three-node.sh",
 )
 
 TEXT_SUFFIXES = {

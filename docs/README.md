@@ -13,6 +13,7 @@
 - [系统架构](architecture/system-architecture.md)
 - [网络与路由](architecture/network-and-routing.md)
 - [安全架构](security/security-architecture.md)
+- [端到端加密候选评审](security/e2ee-candidate-review.md)
 - [媒体与 QoS](protocol/media-and-qos.md)
 - [手机接入方案](mobile/companion-app.md)
 
@@ -22,6 +23,7 @@
 - [原型采购清单](hardware/poc-purchase-list.md)
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
+- [T0/P0 三节点软件验证](testing/t0-p0-software-validation.md)
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录

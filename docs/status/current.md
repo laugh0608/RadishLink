@@ -1,6 +1,6 @@
 # RadishLink 当前状态
 
-更新日期：2026-08-19
+更新日期：2026-08-20
 
 ## 当前阶段
 
@@ -37,6 +37,8 @@
 5. 只有语音和视频预算通过实测后，才冻结应用处理器、摄像头、显示、音频和电池规格。
 6. 复核首次 `dev -> master` PR 在 active Ruleset 下重新通过 strict `Candidate Quality`，再使用 merge commit 合并，并在下一轮开发前将 `master` fast-forward 回流到 `dev`；直接 push、force push 和删除的现场负例需要另行安全验证并记录。
 
+当前成本约束下暂停 HaLow 硬件采购和任何射频发射，先按[T0/P0 三节点软件验证](../testing/t0-p0-software-validation.md)使用已有 Docker/OrbStack 完成 A—B—C 覆盖层闭环。该优先级调整不冻结量产硬件、生产技术栈或密码实现。
+
 ## 尚未冻结
 
 - 量产无线芯片、模块、天线、频段和目标销售地区；
@@ -51,6 +53,9 @@
 
 ```bash
 ./scripts/check-repo.sh
+./scripts/run-t0-three-node.sh
 ```
+
+第二个入口只产生 Docker/Ethernet 软件模拟证据，使用未加密合成载荷；它不构成 HaLow、E2EE、距离、媒体、功耗或法规验证。
 
 仓库治理与远程状态边界见[仓库治理](../governance/repository-governance.md)。
