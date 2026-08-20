@@ -5,7 +5,8 @@
 ## 默认入口
 
 - [当前状态](status/current.md)：当前阶段、已确定事项、风险与下一步。
-- [D0/T0/P0 软件工作计划](status/d0-t0-p0-plan.md)：计划优先顺序、候选设计、决策门与暂停线。
+- [项目执行计划](status/project-execution-plan.md)：产品阶段、SW/HW/RF 证据轨、依赖与总 gate。
+- [D0/P0 软件工作计划](status/d0-t0-p0-plan.md)：计划优先顺序、候选设计、决策门与暂停线。
 - [产品定义](product-definition.md)：定位、用户价值、范围和验收层级。
 - [路线图](roadmap.md)：从软件模拟、三节点原型到随身工程样机的推进顺序。
 
@@ -21,10 +22,11 @@
 ## 硬件、合规与验证
 
 - [硬件策略](hardware/hardware-strategy.md)
+- [低成本硬件验证计划](hardware/hardware-validation-plan.md)
 - [原型采购清单](hardware/poc-purchase-list.md)
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
-- [T0/P0 三节点软件验证](testing/t0-p0-software-validation.md)
+- [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
