@@ -42,6 +42,7 @@ REQUIRED_FILES = (
     "docs/architecture/system-architecture.md",
     "docs/governance/repository-governance.md",
     "docs/hardware/hardware-strategy.md",
+    "docs/hardware/hardware-validation-plan.md",
     "docs/hardware/poc-purchase-list.md",
     "docs/mobile/companion-app.md",
     "docs/product-definition.md",
@@ -49,12 +50,17 @@ REQUIRED_FILES = (
     "docs/regulatory/radio-compliance.md",
     "docs/research/technology-evidence.md",
     "docs/roadmap.md",
+    "docs/security/e2ee-candidate-review.md",
     "docs/security/security-architecture.md",
     "docs/status/current.md",
+    "docs/status/d0-t0-p0-plan.md",
+    "docs/status/project-execution-plan.md",
     "docs/testing/field-validation-plan.md",
+    "docs/testing/t0-p0-software-validation.md",
     "scripts/check-repo.ps1",
     "scripts/check-repo.py",
     "scripts/check-repo.sh",
+    "scripts/run-t0-three-node.sh",
 )
 
 TEXT_SUFFIXES = {

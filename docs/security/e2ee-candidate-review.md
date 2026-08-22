@@ -1,0 +1,69 @@
+# 端到端加密候选评审
+
+## 用途与非目标
+
+本文为 P0 选择成熟密码协议与实现库定义候选集和停止线，读者是安全、协议与平台实现者。当前结论是“候选待验证”，不是算法、库、版本、密码套件或生产技术栈冻结，也不授权安装依赖或写入真实密钥。
+
+本评审属于[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G2` 输入。`SW-G0/SW-G1` 未完成前不启动库 spike；`SW-G2` 未形成 ADR 前不把任何候选接入 `SW-V3/P0`。
+
+本评审不自行拼装密码原语，不用 TLS/WPA3 代替应用层 E2EE，也不因 `SW-EXP-001` 合成明文通过而宣称 B 无法读取内容。
+
+## P0 必需能力
+
+- 支持接收端离线时建立或延续一对一会话，并处理丢包、重复和有界乱序；
+- 提供消息机密性、完整性、发送者认证、forward secrecy 与 post-compromise security 的清楚边界；
+- 身份验证、密钥变化、设备新增/撤销和会话重建必须有应用可表达的状态；
+- 持久状态更新在断电、重启、回滚和并发发送下不能导致 nonce/key 重用或静默降级；
+- Linux ARM64 是 P0 必需平台，Android/iOS 与未来多设备的接入成本必须可评估；
+- 实现应持续维护、有明确许可证、安全公告与互操作/测试向量路径；
+- 中继只获得版本、目标提示、寿命、优先级、大小和防环所需的最少元数据。
+
+## 候选 A：Signal 协议实现
+
+Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端离线的异步初始密钥协商，[Double Ratchet](https://signal.org/docs/specifications/doubleratchet/)覆盖逐消息密钥演进与有界乱序，[Sesame](https://signal.org/docs/specifications/sesame/)描述异步多设备会话管理。这一能力组合与 P0 一对一离线消息最直接匹配。
+
+首选评估现成 [`libsignal`](https://github.com/signalapp/libsignal)，而不是照规范重写。当前阻塞项：
+
+- 官方仓库主要公开 Java、Swift、TypeScript bridge，Linux ARM64 的稳定嵌入接口、交叉编译和长期兼容承诺需要实测与书面确认；
+- `libsignal` 当前采用 AGPL-3.0，必须先完成它与 RadishLink Source-Available License、分发方式和未来 App Store 渠道的许可证评审；
+- 需要验证预密钥服务如何映射到无中心、可分区的 RadishLink 网络，以及 crash-safe session state、跳号上限和备份/恢复边界；
+- 不把 Signal 产品行为、服务器或 sealed sender 等相邻能力自动算入 RadishLink。
+
+结论：功能语义优先候选，许可证与受支持集成面未关闭前不得采用。
+
+## 候选 B：IETF MLS 实现
+
+[RFC 9420](https://www.rfc-editor.org/rfc/rfc9420.html)定义 MLS 协议；[RFC 9750](https://www.rfc-editor.org/rfc/rfc9750.html)说明其架构、Authentication Service 与 Delivery Service 边界，并明确两客户端组也可获得同类安全保证。它为未来群组和成员变更提供标准化方向，但不是完整即时通信协议，身份、投递、应用格式和运维策略仍由 RadishLink 定义。
+
+两个实现库进入比较：
+
+- [`OpenMLS`](https://github.com/openmls/openmls)：Rust、MIT，官方列出 Linux ARM64 测试目标和可插拔 crypto/storage provider；
+- [`mls-rs`](https://github.com/awslabs/mls-rs)：Rust、Apache-2.0/MIT，提供 SQLite state provider、互操作测试与 FFI，但官方明确说明尚未完成完整第三方安全审计。
+
+当前阻塞项：
+
+- 两成员组的离线并发 commit、乱序 epoch、分区合并和设备恢复复杂度必须以三节点故障矩阵验证；
+- Authentication Service、KeyPackage 发布/过期、Delivery Service 和联系人验证如何去中心化仍需设计；
+- 必须固定 provider、cipher suite、credential、extension、持久化事务和敏感 debug feature 策略；
+- 需继续核对审计、安全公告响应、移动平台 FFI、二进制体积与 ARM64 资源成本。
+
+结论：标准化与未来群组方向优先候选；P0 一对一复杂度和实现审计未关闭前不得采用。
+
+## 不进入候选：自行组合原语
+
+libsodium、RustCrypto、OpenSSL、Noise primitives 或单独 AEAD 都可以成为成熟协议实现的底层 provider，但它们本身不提供 RadishLink 所需的异步会话、身份变化、重放窗口、多设备和 crash-safe ratchet 状态。直接用这些原语拼接“类似 Signal/MLS”的方案属于自研密码协议，本轮明确拒绝。
+
+## 冻结前验证门
+
+1. 许可证：确认静态/动态链接、源码提供、修改公开、移动商店和第三方归属要求；
+2. 维护：固定候选版本/commit，检查发布节奏、安全公告、受支持平台和淘汰策略；
+3. 互操作：至少两个独立进程跨 Linux ARM64 重启，覆盖首次会话、离线接收、乱序、重复、丢失和密钥变化；
+4. 持久化：在每一个 ratchet/epoch 状态写入点注入崩溃，证明没有 nonce/key 重用、错误确认或静默状态回退；
+5. 安全负例：篡改密文与认证元数据、重放历史消息、伪造确认、替换身份和耗尽 skipped-key/epoch 队列均被拒绝；
+6. 元数据：记录 B 可见字段与日志，证明正文、附件密钥和会话密钥不进入中继；
+7. 平台：比较 Linux ARM64、Android、iOS 的 FFI、二进制大小、CPU/内存、备份与硬件密钥包装路径；
+8. 独立评审：由非实现者复核威胁模型、测试证据、许可证和失败恢复后再形成 ADR。
+
+## 当前建议
+
+暂不二选一，也不在 `SW-V*` 引入密码依赖。先完成工作计划 `SW-G0` 和消息语义 `SW-G1`，再为 `SW-G2` 提交受限 spike 设计、许可证评审范围、精确依赖和运行授权：Signal 路线验证一对一异步/乱序/重启语义，MLS 路线验证两成员组与分区 epoch 处理。以同一套经 `SW-G3` 评审的 A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。

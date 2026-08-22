@@ -5,6 +5,8 @@
 ## 默认入口
 
 - [当前状态](status/current.md)：当前阶段、已确定事项、风险与下一步。
+- [项目执行计划](status/project-execution-plan.md)：产品阶段、SW/HW/RF 证据轨、依赖与总 gate。
+- [D0/P0 软件工作计划](status/d0-t0-p0-plan.md)：计划优先顺序、候选设计、决策门与暂停线。
 - [产品定义](product-definition.md)：定位、用户价值、范围和验收层级。
 - [路线图](roadmap.md)：从软件模拟、三节点原型到随身工程样机的推进顺序。
 
@@ -13,15 +15,18 @@
 - [系统架构](architecture/system-architecture.md)
 - [网络与路由](architecture/network-and-routing.md)
 - [安全架构](security/security-architecture.md)
+- [端到端加密候选评审](security/e2ee-candidate-review.md)
 - [媒体与 QoS](protocol/media-and-qos.md)
 - [手机接入方案](mobile/companion-app.md)
 
 ## 硬件、合规与验证
 
 - [硬件策略](hardware/hardware-strategy.md)
+- [低成本硬件验证计划](hardware/hardware-validation-plan.md)
 - [原型采购清单](hardware/poc-purchase-list.md)
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
+- [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
@@ -33,10 +38,12 @@
 
 ## 协作与治理
 
+- [Agent 协作与执行规则](governance/agent-collaboration.md)：根入口、专题规则、当前状态与记录的职责边界，以及任务实施、验证和交接细则。
 - [仓库治理](governance/repository-governance.md)：规则层级、PR、CI、Ruleset、证据口径和演进停止线。
 - [参与贡献](../CONTRIBUTING.md)
 - [安全策略](../SECURITY.md)
 - [社区行为准则](../CODE_OF_CONDUCT.md)
+- [许可条款](../LICENSE)
 
 ## 文档规则
 
