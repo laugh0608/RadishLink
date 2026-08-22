@@ -38,6 +38,7 @@
 
 ## 协作与治理
 
+- [Agent 协作与执行规则](governance/agent-collaboration.md)：根入口、专题规则、当前状态与记录的职责边界，以及任务实施、验证和交接细则。
 - [仓库治理](governance/repository-governance.md)：规则层级、PR、CI、Ruleset、证据口径和演进停止线。
 - [参与贡献](../CONTRIBUTING.md)
 - [安全策略](../SECURITY.md)
