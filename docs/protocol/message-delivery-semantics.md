@@ -1,7 +1,7 @@
 # RadishLink 覆盖层消息交付语义
 
-- 状态：Draft，待 `SW-G1` 评审
-- 版本：0.1
+- 状态：Accepted（`SW-G1`，2026-08-24）
+- 文档版本：1.0
 - 日期：2026-08-24
 - 适用范围：D0/P0 一对一文字消息、最多一个中继的存储转发语义
 
@@ -9,7 +9,16 @@
 
 本文冻结实现前必须一致的消息语义和状态不变量，使 Ethernet、2.4 GHz 或未来 HaLow 承载可以替换而不改变“消息何时被接受、转发、送达、删除或拒绝”的含义。
 
-本文是[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G1` 候选产物。文档获评审前不得据此扩展 `tools/t0/` 或重新运行三节点场景；即使 `SW-G1` 通过，也仍需完成 `SW-G2/SW-G3` 并获得 `SW-G4` 实现授权。
+本文是[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)已接受的 `SW-G1` 产物。它只冻结语义与不变量；项目仍需完成 `SW-G2/SW-G3` 并获得 `SW-G4` 实现授权，才能扩展 `tools/t0/` 或重新运行三节点场景。
+
+## SW-G1 评审记录
+
+- 结论：Accepted；
+- 日期：2026-08-24；
+- 接受范围：message key、lifetime、hop budget、custody、destination delivery、read receipt、去重/重放、配额/淘汰和崩溃恢复语义；
+- 评审修订：区分 relay admission 与 destination E2EE 验证；把安全状态提交纳入 receipt 前置条件；限制控制优先级；以节点接受的 deadline 约束 tombstone；
+- 后续决策：认证凭据与 E2EE 绑定进入 `SW-G2`，所有数值 profile、证据格式和确定性故障点进入 `SW-G3`；
+- 授权边界：本 gate 不冻结线格式、数据库、生产语言或密码库，也不授权实现、依赖安装、容器运行或能力声明。
 
 ## 范围与非目标
 
@@ -96,6 +105,8 @@ message ID 必须在对应 origin 与 replay scope 内具有不可预测且可�
 
 完整稳定节点 ID、联系人名称和会话显示信息不得为了路由方便直接写入中继日志。是否使用短期路由别名由 `SW-G2` 的元数据评审决定。
 
+验证分为两个权限层级：relay 只验证结构、边界、逐跳 admission、可见摘要一致性和安全层明确允许其验证的凭据；destination 才验证完整端到端 origin/destination 绑定并推进会话安全状态。relay 接受 custody 不得被解释为已经验证真实用户 origin，也不得为了获得该能力扩大元数据暴露。
+
 ## Lifetime 语义
 
 ### 基本规则
@@ -129,7 +140,7 @@ message ID 必须在对应 origin 与 replay scope 内具有不可预测且可�
 节点只有在以下条件全部满足后才能接受 custody：
 
 1. 支持协议版本，结构与长度在界限内；
-2. message key、不可变摘要和必要认证可验证，或处于 `SW-G2` 前明确标记的合成测试模式；
+2. message key 的可见 scope、不可变摘要和 relay admission 凭据可按上述权限验证，或处于 `SW-G2` 前明确标记的合成测试模式；
 3. 消息未到期，hop budget 允许本节点成为 destination 或继续转发；
 4. origin、邻居、replay scope、priority 和全局队列配额均允许；
 5. 已预留空间，并把 payload、状态、deadline、去重键和恢复信息原子持久提交。
@@ -148,9 +159,12 @@ destination 只有在一次原子事务中完成以下操作后，才能产生 d
 
 1. 验证 destination、message key、不可变核心和安全层认证；
 2. 检查同 key conflict、重放和 lifetime；
-3. 持久提交密文/本地受保护消息记录；
-4. 持久提交去重 marker，确保恢复后不会再次产生用户交付；
-5. 提交可重建或已持久化的 delivery evidence 状态。
+3. 持久提交接收该消息所消耗或推进的安全会话状态；
+4. 持久提交密文/本地受保护消息记录；
+5. 持久提交去重 marker，确保恢复后不会再次产生用户交付；
+6. 提交可语义幂等重建或已持久化的 delivery evidence 状态。
+
+上述结果必须处于同一原子边界，或由 `SW-G2` 证明采用等价的 crash-safe 协调协议；不得出现安全状态已推进但消息/去重未提交，或 delivery evidence 已产生但安全状态可以回滚的窗口。
 
 delivery evidence 至少认证绑定协议版本、message key、payload authenticator、destination 身份和 receipt 类型。时间戳可用于诊断，但不得成为唯一真实性依据。精确凭据、签名或 MAC 关系由 `SW-G2` 决定。
 
@@ -178,8 +192,8 @@ read receipt 是 destination 用户界面确认内容已展示或打开后的独
 - 同 message key、同 payload authenticator：作为 duplicate 接受观察，不再次用户交付、不延长 lifetime、不提升 priority、不增加 hop budget；可以幂等重发已有 custody 或 delivery evidence；
 - 同 message key、不同 payload authenticator 或不可变核心：作为 conflict 拒绝、保留原记录、记录脱敏安全事件；
 - destination 的 inbox 提交与去重 marker 必须原子完成，提供去重窗口内的 effectively-once 用户交付；项目不宣称在 tombstone 丢失或窗口外实现数学意义上的永久 exactly-once；
-- relay 在落盘前检查活动记录和 tombstone，防止 duplicate 重复占用完整 payload 配额。
-- delivered tombstone 至少保留到原消息逻辑 not-after 加 `SW-G3` 冻结的 replay margin，或者直到安全层能够证明对应 epoch 永久拒绝旧消息；资源压力不得静默缩短该窗口。
+- relay 在落盘前检查活动记录和 tombstone，防止 duplicate 重复占用完整 payload 配额；
+- delivered tombstone 至少保留到该节点接受消息时冻结的 deadline 加 `SW-G3` 冻结的 replay margin，或者直到安全层能够证明对应 epoch 永久拒绝旧消息；资源压力不得静默缩短该窗口，origin 声明的超长 lifetime 也不得突破本地上限。
 
 ### Replay 与乱序
 
@@ -209,7 +223,7 @@ message key、replay scope、安全 epoch、lifetime 和 tombstone 共同区分�
 - tombstone、receipt 和错误响应数量；
 - 节点全局磁盘、内存、CPU 与发送速率。
 
-控制和 receipt 使用独立的小型保留配额，但也必须限速；高 priority 不能绕过身份、长度、寿命或全局安全上限。中继只能保持或降低 origin 声明的 priority，不能提升。
+控制和 receipt 使用独立的小型保留配额，但也必须限速；控制 priority 只授予通过认证且语义允许的协议消息，普通用户 payload 不能靠自报类型进入控制队列。高 priority 不能绕过身份、长度、寿命或全局安全上限。中继只能保持或降低 origin 声明的 priority，不能提升。
 
 ### 接受与淘汰顺序
 
@@ -232,7 +246,7 @@ message key、replay scope、安全 epoch、lifetime 和 tombstone 共同区分�
 
 | 状态/事实 | 进入条件 | 允许后续 |
 | --- | --- | --- |
-| `QUEUED` | message key、不可变核心和 payload 已原子持久提交 | retry、观察 custody、delivery、到期或显式失败 |
+| `QUEUED` | message key、不可变核心、payload 和发送所推进的安全状态已在 crash-safe 边界提交 | retry、观察 custody、delivery、到期或显式失败 |
 | `CUSTODY_OBSERVED` | 验证某 relay 的 custody evidence | 仍保留 payload；继续等待 delivery、到期或改路 |
 | `DESTINATION_DELIVERED` | 验证 destination delivery evidence | 释放 payload、保留 tombstone、可等待 read |
 | `READ_OBSERVED` | 验证可选 read receipt | 只更新用户状态，不改变 delivery 事实 |
@@ -258,8 +272,8 @@ message key、replay scope、安全 epoch、lifetime 和 tombstone 共同区分�
 | 状态/事实 | 进入条件 | 允许后续 |
 | --- | --- | --- |
 | `RECEIVED_UNCOMMITTED` | 网络层收到有界候选 | 验证后提交或拒绝；崩溃后不算送达 |
-| `COMMITTED` | 安全验证、消息记录与去重 marker 原子提交 | 产生/重建 delivery evidence、用户展示 |
-| `DELIVERY_EVIDENCE_READY` | evidence 状态已持久化或可由 committed 状态确定性重建 | 幂等发送 evidence |
+| `COMMITTED` | 安全状态、消息记录与去重 marker 原子或等价 crash-safe 提交 | 产生/重建 delivery evidence、用户展示 |
+| `DELIVERY_EVIDENCE_READY` | evidence 状态已持久化或可由 committed 状态语义幂等重建 | 幂等发送 evidence |
 | `READ` | 用户界面完成定义的阅读动作 | 可选产生 read receipt |
 | `REJECTED` | conflict、过期、版本、认证、配额或安全窗口失败 | 不产生 delivery evidence |
 
@@ -268,15 +282,16 @@ message key、replay scope、安全 epoch、lifetime 和 tombstone 共同区分�
 实现选型前必须保持以下不变量：
 
 1. custody evidence 不能早于 relay 的 payload、deadline、去重键和恢复状态提交；
-2. delivery evidence 不能早于 destination 的安全验证、消息记录和去重 marker 原子提交；
-3. payload 删除不能早于 delivery evidence 验证结果或显式到期/淘汰终态提交；
-4. receipt 发送与重发必须幂等，崩溃恢复不得再次触发用户交付；
-5. 同 key conflict 永远不能覆盖先前已提交的 payload、tombstone 或 evidence；
-6. lifetime、remaining hop budget 和安全 epoch 在恢复后不得回退到更宽松状态；
-7. 存储错误、部分写入、校验失败或迁移未知时 fail closed，进入 `QUARANTINED` 或拒绝启动相关队列；
-8. 只读或满盘状态不得返回 custody/delivery 成功；
-9. schema version、未知字段、升级、降级拒绝、迁移和回滚必须在选择存储实现时显式设计；
-10. 日志只记录合成或截断标识、状态、原因码和时间线，不记录正文、密钥、完整身份或精确位置。
+2. origin 不能早于发送安全状态、message key、不可变核心和 payload 的 crash-safe 提交而报告 `QUEUED`；
+3. delivery evidence 不能早于 destination 的接收安全状态、消息记录和去重 marker 原子或等价 crash-safe 提交；
+4. payload 删除不能早于 delivery evidence 验证结果或显式到期/淘汰终态提交；
+5. receipt 发送与重发必须语义幂等，崩溃恢复不得再次触发用户交付；
+6. 同 key conflict 永远不能覆盖先前已提交的 payload、tombstone 或 evidence；
+7. lifetime、remaining hop budget 和安全 epoch 在恢复后不得回退到更宽松状态；
+8. 存储错误、部分写入、校验失败或迁移未知时 fail closed，进入 `QUARANTINED` 或拒绝启动相关队列；
+9. 只读或满盘状态不得返回 custody/delivery 成功；
+10. schema version、未知字段、升级、降级拒绝、迁移和回滚必须在选择存储实现时显式设计；
+11. 日志只记录合成或截断标识、状态、原因码和时间线，不记录正文、密钥、完整身份或精确位置。
 
 ## 版本与未知输入
 
@@ -315,7 +330,7 @@ message key、replay scope、安全 epoch、lifetime 和 tombstone 共同区分�
 7. 消息在 A、B 或 C 重启期间到期，不得因重启重新获得完整 lifetime；
 8. wall clock 回拨、跳到未来或 origin 时间超前时，deadline 不变晚；
 9. B 在 custody 提交的每个崩溃点恢复后，要么没有 custody，要么 payload 与责任完整存在；
-10. C 在消息记录、去重 marker 和 evidence 提交的每个崩溃点恢复后，不重复用户交付、不提前确认；
+10. C 在接收安全状态、消息记录、去重 marker 和 evidence 提交的每个崩溃点恢复后，不重复用户交付、不提前确认、不回滚安全状态；
 11. B 满盘、只读、状态损坏或配额耗尽时 fail closed，上游不会收到虚假成功；
 12. 未知版本、critical extension、超长字段和同 key conflict 被有界拒绝，不挤占控制/receipt 配额；
 13. custody evidence 只降低上游重试压力，不把 UI 标为 destination delivered；
@@ -323,19 +338,19 @@ message key、replay scope、安全 epoch、lifetime 和 tombstone 共同区分�
 
 ## SW-G1 接受条件
 
-评审者需要逐项确认：
+2026-08-24 的评审已逐项确认：
 
 - message key、duplicate、conflict 与 replay scope 没有歧义；
 - lifetime 在重试、转存、时钟异常和重启后只会缩短或保持，不会延长；
 - hop budget 对逻辑邻接、重传和 destination 为 0 的含义明确；
 - custody、destination delivery、read 与删除提示各有独立权限和持久化前置条件；
 - relay 无法仅凭本地行为伪造 destination delivery，密码绑定要求已交给 `SW-G2`；
-- destination 用户交付与去重 marker 原子，receipt 可幂等重建；
+- destination 接收安全状态、用户交付与去重 marker 原子或等价 crash-safe，receipt 可语义幂等重建；
 - 配额、淘汰、未知版本、存储失败和崩溃路径不会默认成功或静默丢失责任；
 - 所有数值 profile、密码选择、线格式与存储实现仍在正确的后续 gate；
 - 本文没有把 Docker、Ethernet、HaLow、生产技术栈或 P0 能力写成已验证。
 
-`SW-G1` 通过后，本文状态改为 Accepted；若上述任一语义仍存在会实质改变安全、兼容、持久化或用户状态的选择，则保持 Draft，不进入实现。
+上述条件已通过，本文状态为 Accepted。后续若出现会实质改变安全、兼容、持久化或用户状态的新事实，必须重新打开 `SW-G1`，不能通过实现 fallback 绕过本语义基线。
 
 ## 后续依赖
 

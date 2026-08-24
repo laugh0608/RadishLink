@@ -95,7 +95,7 @@ docker image ls --filter label=org.radishlink.t0.run
 
 每一种 profile 都需要保存 seed、参数、软件版本、结果与失败时间线。`SW-V1` 通过仍只属于 Docker/Ethernet 仿真。
 
-### SW-V2：资源与恢复负例（待 `SW-G1/SW-G3`）
+### SW-V2：资源与恢复负例（`SW-G1` 已接受，待 `SW-G3`）
 
 - B 存储配额耗尽、状态文件损坏、只读数据目录和部分写入；
 - A/B/C 分别重启，确认未确认消息不被误报送达，已交付消息不复活为第二次用户交付；
