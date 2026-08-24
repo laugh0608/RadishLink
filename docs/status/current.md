@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受；消息语义已冻结，但不代表 E2EE 路线、验证设计、软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受；`SW-G2` 候选决策包已形成但 gate 未通过；消息语义已冻结，但不代表 E2EE 路线、验证设计、软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -36,7 +36,7 @@
 
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
-- [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0` 与[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 已接受，当前软件主线进入 `SW-G2/SW-G3` 设计；
+- [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0` 与[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)已形成，当前等待许可证结论、受限 spike 实证与 ADR，`SW-G3` 仍待设计；
 - `SW-G2/SW-G3` 未完成、`SW-G4` 未获授权前，不扩展测试代码、不新增故障 profile、不安装密码依赖，也不重新运行场景；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
 - 下一步只评审 E2EE/身份候选、验证设计、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
@@ -52,7 +52,7 @@
 
 下一步：
 
-1. 评审 Signal/MLS 候选的许可证、平台和状态安全，形成 ADR 后才能进入 E2EE 实现（`SW-G2`）；
+1. 评审并另行授权 `SW-G2` 受限 spike 的精确依赖、命令、副作用、证据和清理包；取得许可证、Linux ARM64、状态安全与中继不可解密证据并形成 ADR 后，才能进入 E2EE 实现；
 2. 冻结确定性故障 profile、指标、证据 manifest 和判定口径（`SW-G3`）；
 3. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
 4. 再分别提交软件运行、硬件采购/执行和射频实验的精确清单与授权；继续独立推进地区、SKU、频段、功率、带宽和天线核对。

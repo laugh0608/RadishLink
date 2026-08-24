@@ -45,7 +45,7 @@
 ## 当前项目位置
 
 - 产品成熟度：`D0`；
-- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划与覆盖层消息交付语义已通过 `SW-G0/SW-G1`，E2EE/身份候选和验证设计待 `SW-G2/SW-G3`；
+- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划与覆盖层消息交付语义已通过 `SW-G0/SW-G1`，E2EE/身份决策包已形成但仍待 spike、许可证结论与 ADR，验证设计待 `SW-G3`；
 - 硬件：尚未进入实体设备验证，低成本方案待 `HW-G0` 评审；
 - 射频：保持 `RF-R0` 无发射开发，HaLow 采购和发射暂停；
 - 密码：Signal/MLS 仍是候选，未形成 ADR，不存在已验证 E2EE；
@@ -130,7 +130,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 | 顺序 | 工作包 | 产物 | 状态 |
 | --- | --- | --- | --- |
 | 1 | 项目计划与命名 | 本文、roadmap 与索引统一 | `PLAN-G0` 已接受 |
-| 2 | 软件设计 | [D0/P0 软件工作计划](d0-t0-p0-plan.md)与[覆盖层消息交付语义](../protocol/message-delivery-semantics.md) | `SW-G0/SW-G1` 已接受，`SW-G2/SW-G3` 待评审 |
+| 2 | 软件设计 | [D0/P0 软件工作计划](d0-t0-p0-plan.md)、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)与[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md) | `SW-G0/SW-G1` 已接受；`SW-G2` 决策包已形成但 gate 未通过；`SW-G3` 待设计 |
 | 3 | 硬件设计 | [低成本硬件验证计划](../hardware/hardware-validation-plan.md) | 文档已形成，待 `HW-G0` |
 | 4 | 法规预检 | 地区/SKU/监管域书面记录 | 未关闭，保持 `RF-R0` |
 | 5 | 软件验证 | 版本化 manifest 与 `SW-V*` 结果 | 暂停 |

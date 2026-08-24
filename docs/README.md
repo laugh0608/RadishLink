@@ -17,6 +17,7 @@
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
 - [安全架构](security/security-architecture.md)
 - [端到端加密候选评审](security/e2ee-candidate-review.md)
+- [`SW-G2` E2EE 与身份候选决策包](security/e2ee-sw-g2-decision-package.md)
 - [媒体与 QoS](protocol/media-and-qos.md)
 - [手机接入方案](mobile/companion-app.md)
 

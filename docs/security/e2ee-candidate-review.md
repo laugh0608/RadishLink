@@ -1,10 +1,12 @@
 # 端到端加密候选评审
 
+资料核对日期：2026-08-24
+
 ## 用途与非目标
 
 本文为 P0 选择成熟密码协议与实现库定义候选集和停止线，读者是安全、协议与平台实现者。当前结论是“候选待验证”，不是算法、库、版本、密码套件或生产技术栈冻结，也不授权安装依赖或写入真实密钥。
 
-本评审属于[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G2` 输入。[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)已于 2026-08-24 通过 `SW-G1`，当前可以继续评审认证绑定、许可证、平台和状态安全；任何库 spike、依赖安装或运行仍需精确方案与另行授权，`SW-G2` 未形成 ADR 前不把任何候选接入 `SW-V3/P0`。
+本评审属于[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G2` 输入。[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)已于 2026-08-24 通过 `SW-G1`，当前可以继续评审认证绑定、许可证、平台和状态安全；候选顺序、受限 spike、接受条件和授权边界已收敛到[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)。任何库 spike、依赖安装或运行仍需精确方案与另行授权，`SW-G2` 未形成 ADR 前不把任何候选接入 `SW-V3/P0`。
 
 本评审不自行拼装密码原语，不用 TLS/WPA3 代替应用层 E2EE，也不因 `SW-EXP-001` 合成明文通过而宣称 B 无法读取内容。
 
@@ -22,9 +24,9 @@
 
 Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端离线的异步初始密钥协商，[Double Ratchet](https://signal.org/docs/specifications/doubleratchet/)覆盖逐消息密钥演进与有界乱序，[Sesame](https://signal.org/docs/specifications/sesame/)描述异步多设备会话管理。这一能力组合与 P0 一对一离线消息最直接匹配。
 
-首选评估现成 [`libsignal`](https://github.com/signalapp/libsignal)，而不是照规范重写。当前阻塞项：
+首选评估现成 [`libsignal`](https://github.com/signalapp/libsignal)，而不是照规范重写。当前核对基线为 `v0.101.0` / `b056faa`。当前阻塞项：
 
-- 官方仓库主要公开 Java、Swift、TypeScript bridge，Linux ARM64 的稳定嵌入接口、交叉编译和长期兼容承诺需要实测与书面确认；
+- 官方仓库主要公开 Java、Swift、TypeScript API，native artifact 列表未列 Debian/Linux ARM64，bridge 也不是稳定接口承诺；
 - `libsignal` 当前采用 AGPL-3.0，必须先完成它与 RadishLink Source-Available License、分发方式和未来 App Store 渠道的许可证评审；
 - 需要验证预密钥服务如何映射到无中心、可分区的 RadishLink 网络，以及 crash-safe session state、跳号上限和备份/恢复边界；
 - 不把 Signal 产品行为、服务器或 sealed sender 等相邻能力自动算入 RadishLink。
@@ -37,8 +39,8 @@ Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端
 
 两个实现库进入比较：
 
-- [`OpenMLS`](https://github.com/openmls/openmls)：Rust、MIT，官方列出 Linux ARM64 测试目标和可插拔 crypto/storage provider；
-- [`mls-rs`](https://github.com/awslabs/mls-rs)：Rust、Apache-2.0/MIT，提供 SQLite state provider、互操作测试与 FFI，但官方明确说明尚未完成完整第三方安全审计。
+- [`OpenMLS`](https://github.com/openmls/openmls)：首轮基线为稳定版 `openmls-v0.8.1` / `47dbede`；Rust、MIT，提供可插拔 crypto/storage provider；稳定版文档与当前 `main` 对 Linux ARM64 的支持表述不一致，必须实测；
+- [`mls-rs`](https://github.com/awslabs/mls-rs)：对照基线为 `0.56.0`；Rust、Apache-2.0 OR MIT，提供 SQLite state provider、互操作测试与 FFI，但官方明确说明尚未完成完整第三方安全审计，也没有完整平台支持矩阵。
 
 当前阻塞项：
 
@@ -66,4 +68,4 @@ libsodium、RustCrypto、OpenSSL、Noise primitives 或单独 AEAD 都可以成�
 
 ## 当前建议
 
-暂不二选一，也不在 `SW-V*` 引入密码依赖。下一步为 `SW-G2` 提交认证绑定、许可证评审范围和受限 spike 设计；只有在精确依赖、命令、副作用和运行授权另行确认后，Signal 路线才验证一对一异步/乱序/重启语义，MLS 路线才验证两成员组与分区 epoch 处理。以同一套经 `SW-G3` 评审的 A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。
+暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)先规划 `OpenMLS 0.8.1` 受限 spike，以 `mls-rs 0.56.0` 对照；`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前只做静态核对。只有在精确依赖、命令、副作用和运行授权另行确认后，才以同一套经 `SW-G3` 评审的 A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。
