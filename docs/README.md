@@ -14,6 +14,7 @@
 
 - [系统架构](architecture/system-architecture.md)
 - [网络与路由](architecture/network-and-routing.md)
+- [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
 - [安全架构](security/security-architecture.md)
 - [端到端加密候选评审](security/e2ee-candidate-review.md)
 - [媒体与 QoS](protocol/media-and-qos.md)

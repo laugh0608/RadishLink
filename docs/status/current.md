@@ -1,6 +1,6 @@
 # RadishLink 当前状态
 
-更新日期：2026-08-20
+更新日期：2026-08-24
 
 ## 当前阶段
 
@@ -20,6 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
+- `PLAN-G0` 与 `SW-G0` 已于 2026-08-24 接受；该结论只关闭计划与术语 gate，不代表 `SW-G1`、软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -35,21 +36,26 @@
 
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
-- 先评审[项目执行计划](project-execution-plan.md)的 `PLAN-G0`，再分别推进软件、硬件和射频证据轨；
-- 在[D0/P0 软件工作计划](d0-t0-p0-plan.md)通过 `SW-G0` 前，不扩展测试代码、不新增故障 profile、不安装密码依赖，也不重新运行场景；
+- [项目执行计划](project-execution-plan.md)的 `PLAN-G0` 与[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0` 已接受，当前软件主线进入 `SW-G1` 消息交付语义评审；
+- `SW-G1..G3` 未完成、`SW-G4` 未获授权前，不扩展测试代码、不新增故障 profile、不安装密码依赖，也不重新运行场景；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
-- 下一步只评审计划、覆盖层消息语义、E2EE 候选、验证设计和已有硬件复用条件；获明确确认后才实施；
+- 下一步只评审覆盖层消息语义、E2EE 候选、验证设计、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
 - 无射频软件计划不能替代首个测试地区的法规核对，二者可以并行研究但分别关门。
 
-## 下一道决策门
+## 决策门状态与下一步
 
-1. 接受产品阶段、`SW/HW/RF` 证据轨、依赖和停止线（`PLAN-G0`）；
-2. 接受软件工作计划的范围与探索性证据定位（`SW-G0`）；
-3. 形成消息 ID、lifetime、hop budget、custody、确认、去重、配额和崩溃恢复语义（`SW-G1`）；
-4. 评审 Signal/MLS 候选的许可证、平台和状态安全，形成 ADR 后才能进入 E2EE 实现（`SW-G2`）；
-5. 冻结确定性故障 profile、指标、证据 manifest 和判定口径（`SW-G3`）；
-6. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
-7. 再分别提交软件运行、硬件采购/执行和射频实验的精确清单与授权；继续独立推进地区、SKU、频段、功率、带宽和天线核对。
+已通过：
+
+1. `PLAN-G0`：接受产品阶段、`SW/HW/RF/EXP` 证据轨、依赖和停止线；
+2. `SW-G0`：接受软件工作计划范围、探索性证据定位、工作顺序和暂停线。
+
+下一步：
+
+1. 评审消息 ID、lifetime、hop budget、custody、确认、去重、配额和崩溃恢复语义（`SW-G1`）；
+2. 评审 Signal/MLS 候选的许可证、平台和状态安全，形成 ADR 后才能进入 E2EE 实现（`SW-G2`）；
+3. 冻结确定性故障 profile、指标、证据 manifest 和判定口径（`SW-G3`）；
+4. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
+5. 再分别提交软件运行、硬件采购/执行和射频实验的精确清单与授权；继续独立推进地区、SKU、频段、功率、带宽和天线核对。
 
 ## 尚未冻结
 
