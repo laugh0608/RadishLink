@@ -117,7 +117,7 @@
 
 ### SW-G2：E2EE 与身份候选
 
-按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件，但尚无运行实证、许可证结论或 ADR。任何依赖安装或 spike 都需要另行授权。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
+按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件。OpenMLS 0.8.1 Phase A 已生成 lockfile，但 advisory/许可证停止线触发，Phase B 禁止；下一步转为 `mls-rs 0.56.0` 静态门禁设计与稳定 OpenMLS/provider 跟踪。任何新依赖安装或 spike 都需要另行授权。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
 
 ### SW-G3：验证设计
 
@@ -137,7 +137,7 @@
 | --- | --- | --- | --- |
 | 1 | 证据归档与计划纠偏 | 本计划、探索性探针边界 | `SW-G0` 已接受 |
 | 2 | 消息交付语义 | [覆盖层消息交付语义](../protocol/message-delivery-semantics.md) | `SW-G1` 已接受 |
-| 3 | E2EE/身份决策 | [`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)与 ADR | 决策包已形成，待受限 spike、许可证结论与 ADR |
+| 3 | E2EE/身份决策 | [`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)、[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)与 ADR | OpenMLS 0.8.1 Phase A advisory/许可证 `STOP`；Phase B 禁止，待 `mls-rs 0.56.0` 静态门禁、稳定候选刷新、许可证结论与 ADR |
 | 4 | 故障与证据设计 | profile/manifest/判定规范 | 未开始 |
 | 5 | `SW-V*` 工具调整 | 经评审的最小实现 | 暂停 |
 | 6 | 三节点矩阵 | 可复现结果与限制 | 暂停 |

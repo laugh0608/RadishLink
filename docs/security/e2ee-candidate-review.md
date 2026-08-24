@@ -6,7 +6,7 @@
 
 本文为 P0 选择成熟密码协议与实现库定义候选集和停止线，读者是安全、协议与平台实现者。当前结论是“候选待验证”，不是算法、库、版本、密码套件或生产技术栈冻结，也不授权安装依赖或写入真实密钥。
 
-本评审属于[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G2` 输入。[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)已于 2026-08-24 通过 `SW-G1`，当前可以继续评审认证绑定、许可证、平台和状态安全；候选顺序、受限 spike、接受条件和授权边界已收敛到[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)。任何库 spike、依赖安装或运行仍需精确方案与另行授权，`SW-G2` 未形成 ADR 前不把任何候选接入 `SW-V3/P0`。
+本评审属于[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G2` 输入。[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)已于 2026-08-24 通过 `SW-G1`，当前可以继续评审认证绑定、许可证、平台和状态安全；候选顺序、受限 spike、接受条件和授权边界已收敛到[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)。`SW-EXP-002` Phase A 已按独立授权执行并停止；任何后续库 spike、依赖安装或运行仍需精确方案与另行授权，`SW-G2` 未形成 ADR 前不把任何候选接入 `SW-V3/P0`。
 
 本评审不自行拼装密码原语，不用 TLS/WPA3 代替应用层 E2EE，也不因 `SW-EXP-001` 合成明文通过而宣称 B 无法读取内容。
 
@@ -39,17 +39,18 @@ Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端
 
 两个实现库进入比较：
 
-- [`OpenMLS`](https://github.com/openmls/openmls)：首轮基线为稳定版 `openmls-v0.8.1` / `47dbede`；Rust、MIT，提供可插拔 crypto/storage provider；稳定版文档与当前 `main` 对 Linux ARM64 的支持表述不一致，必须实测；
+- [`OpenMLS`](https://github.com/openmls/openmls)：首轮基线为稳定版 `openmls-v0.8.1` / `47dbede`；Rust、MIT，提供可插拔 crypto/storage provider；`SW-EXP-002` Phase A 已证明固定工具链可在 Linux ARM64 容器运行并生成 lockfile，但没有构建或运行 OpenMLS 场景；
 - [`mls-rs`](https://github.com/awslabs/mls-rs)：对照基线为 `0.56.0`；Rust、Apache-2.0 OR MIT，提供 SQLite state provider、互操作测试与 FFI，但官方明确说明尚未完成完整第三方安全审计，也没有完整平台支持矩阵。
 
 当前阻塞项：
 
+- `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 的固定图已在 Phase A 命中 advisory 与许可证停止线：实际检查图含 3 个未获准的 `MPL-2.0` `hpke-rs*` crate，并包含与 AArch64 直接相关的 `RUSTSEC-2026-0212`；该 prepared run 禁止进入 Phase B；
 - 两成员组的离线并发 commit、乱序 epoch、分区合并和设备恢复复杂度必须以三节点故障矩阵验证；
 - Authentication Service、KeyPackage 发布/过期、Delivery Service 和联系人验证如何去中心化仍需设计；
 - 必须固定 provider、cipher suite、credential、extension、持久化事务和敏感 debug feature 策略；
 - 需继续核对审计、安全公告响应、移动平台 FFI、二进制体积与 ARM64 资源成本。
 
-结论：标准化与未来群组方向优先候选；P0 一对一复杂度和实现审计未关闭前不得采用。
+结论：MLS 仍是标准化与未来群组方向候选，但 OpenMLS 0.8.1 当前固定图是负向 Phase A 证据；它不代表 MLS 路线整体失败，也不得在 P0 一对一复杂度、实现审计和许可证未关闭前采用。
 
 ## 不进入候选：自行组合原语
 
@@ -68,4 +69,4 @@ libsodium、RustCrypto、OpenSSL、Noise primitives 或单独 AEAD 都可以成�
 
 ## 当前建议
 
-暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)先规划 `OpenMLS 0.8.1` 受限 spike，以 `mls-rs 0.56.0` 对照；`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前只做静态核对。只有在精确依赖、命令、副作用和运行授权另行确认后，才以同一套经 `SW-G3` 评审的 A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。
+暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)保留 OpenMLS 0.8.1 Phase A 负向证据，下一步为 `mls-rs 0.56.0` 形成只读静态门禁与独立执行授权包，并跟踪下一版稳定 OpenMLS/provider；`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前仍只做静态核对。只有新的候选通过精确依赖、advisory、许可证、命令、副作用和运行授权，才以同一套经 `SW-G3` 评审的 A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。

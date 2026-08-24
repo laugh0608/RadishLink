@@ -29,6 +29,7 @@
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
+- [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A lockfile、审计 `STOP` 与 Phase B 门禁。
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
