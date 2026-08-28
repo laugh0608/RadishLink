@@ -82,7 +82,9 @@ docker image ls --filter label=org.radishlink.t0.run
 
 `SW-EXP-001` 的 `PASS` 仅指上述脚本断言通过。由于运行前没有完成 `SW-G0..G3`，它不能升级为阶段验收，但可以作为后续设计的输入和回归参考。
 
-### SW-V1：确定性故障注入矩阵（待 `SW-G3`）
+### SW-V1：确定性故障注入矩阵（`SW-G3` Draft 已形成）
+
+精确 profile、seed、参数、观察窗、指标与判定见[`SW-G3` 确定性故障与证据设计](sw-g3-deterministic-validation-design.md)。该文档仍待评审，不能据此扩展工具或运行场景。
 
 在不新增特权和第三方依赖的前提下，为链路加入带固定 seed 的用户态故障代理，逐项而非同时注入：
 
@@ -95,7 +97,7 @@ docker image ls --filter label=org.radishlink.t0.run
 
 每一种 profile 都需要保存 seed、参数、软件版本、结果与失败时间线。`SW-V1` 通过仍只属于 Docker/Ethernet 仿真。
 
-### SW-V2：资源与恢复负例（`SW-G1` 已接受，待 `SW-G3`）
+### SW-V2：资源与恢复负例（`SW-G1` 已接受，`SW-G3` 待评审）
 
 - B 存储配额耗尽、状态文件损坏、只读数据目录和部分写入；
 - A/B/C 分别重启，确认未确认消息不被误报送达，已交付消息不复活为第二次用户交付；

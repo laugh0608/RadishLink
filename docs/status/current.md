@@ -1,6 +1,6 @@
 # RadishLink 当前状态
 
-更新日期：2026-08-24
+更新日期：2026-08-28
 
 ## 当前阶段
 
@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受；`SW-G2` 候选决策包已形成但 gate 未通过；消息语义已冻结，但不代表 E2EE 路线、验证设计、软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受；`SW-G2` 候选决策包、`mls-rs 0.56.0` 静态门禁与 `SW-G3` Draft 已形成，但 `SW-G2/SW-G3` gate 均未通过；消息语义已冻结，不代表 E2EE 路线、验证设计、软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -31,14 +31,15 @@
 5. **媒体复杂度风险**：实时语音、视频、路由切换、拥塞控制和端到端加密必须联合验证，单独跑通 `iperf3` 不等于产品可用。
 6. **设计漂移风险**：`SW-EXP-001` 探针早于已接受的消息语义、故障模型和证据格式；后续实现若直接继承探针 JSON、摘要 ACK 或 snapshot，会偏离 `SW-G1` 并把测试技术栈误当成产品协议。
 7. **低成本硬件捷径风险**：直接用三块 MCU 重写 Core 会偏离嵌入式 Linux 基线，也无法覆盖目标媒体、持久化和升级边界；MCU 只进入交互与低功耗辅助域。
-8. **E2EE 候选依赖风险**：`OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定图已命中活跃 RustSec advisory，其中包含 AArch64 constant-time 错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 也未通过初始许可证门，不能直接进入场景验证。
+8. **E2EE 候选依赖风险**：`OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定图已命中活跃 RustSec advisory，其中包含 AArch64 constant-time 错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 也未通过初始许可证门。OpenMLS 0.9.0 虽已稳定发布，但新传递图尚未审计；`mls-rs 0.56.0` 也没有完整第三方安全审计，二者均不能直接进入场景验证。
 
 ## 当前优先级与暂停线
 
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
-- [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0` 与[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)及[`SW-EXP-002` OpenMLS 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)已形成；OpenMLS 0.8.1 Phase A 已生成 lockfile，但在许可证与 advisory 门 `STOP`，Phase B 禁止执行，`SW-G3` 仍待设计；
-- 除已完成的 `SW-EXP-002` Phase A 骨架与审计外，`SW-G2/SW-G3` 未完成、`SW-G4` 未获授权前，不再扩展测试代码、不新增故障 profile、不安装密码依赖，也不重新运行场景；
+- [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0` 与[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)、[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)及[`SW-G3` Draft](../testing/sw-g3-deterministic-validation-design.md)已形成；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
+- OpenMLS 0.9.0 已于 2026-08-25 稳定发布并列为新的静态刷新候选，但未生成 RadishLink lockfile、未审计、未构建、未运行；不得继承 0.8.1 的授权或通过结论；
+- 除 `SW-EXP-002` Phase A 骨架的已授权静态收口外，`SW-G2/SW-G3` 未完成、`SW-G4` 未获授权前，不再扩展测试代码、不实现新故障 profile、不安装密码依赖，也不重新运行场景；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
 - 下一步只评审 E2EE/身份候选、验证设计、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
 - 无射频软件计划不能替代首个测试地区的法规核对，二者可以并行研究但分别关门。
@@ -53,18 +54,19 @@
 
 下一步：
 
-1. 复核[`SW-EXP-002` Phase A advisory/许可证 `STOP` 记录](../testing/sw-g2-openmls-spike-authorization.md)，为 `mls-rs 0.56.0` 形成独立静态门禁与执行授权包，并只读跟踪下一版稳定 OpenMLS/provider；不得在 OpenMLS 0.8.1 prepared run 上进入 Phase B，也不得用 prerelease、ignore 或许可证例外绕过停止线；
-2. 冻结确定性故障 profile、指标、证据 manifest 和判定口径（`SW-G3`）；
-3. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
-4. 再分别提交软件运行、硬件采购/执行和射频实验的精确清单与授权；继续独立推进地区、SKU、频段、功率、带宽和天线核对。
+1. 对 `SW-EXP-002` 脚本/骨架静态收口做独立复核，确认 schema 2、隔离写面、lockfile 漂移和 Phase B 硬阻断后，再按脚本/骨架与已有 lockfile 的可审阅边界提交；不得重跑已停止的 OpenMLS 0.8.1 Phase A；
+2. 评审[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)，并为 OpenMLS 0.9.0 形成独立静态依赖/许可证/advisory 包；两者都先不下载、不构建、不运行；
+3. 评审并接受[`SW-G3` 确定性故障与证据设计](../testing/sw-g3-deterministic-validation-design.md)；接受前不修改 `tools/t0/`；
+4. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
+5. 再分别提交软件运行、硬件采购/执行和射频实验的精确清单与授权；继续独立推进地区、SKU、频段、功率、带宽和天线核对。
 
-## 明日事项（2026-08-25）
+## 今日推进（2026-08-28）
 
-1. **先收口今日工作区**：审阅尚未提交的 `SW-EXP-002` 脚本、spike 骨架与 `Cargo.lock`，重点核对 run 目录碰撞/符号链接、权限、证据 manifest 和 Phase B 硬阻断；通过对应静态检查后按实现与生成依赖图拆分提交，不把 ignored artifacts 纳入 Git。
-2. **推进 `SW-G2` 下一候选**：为 `mls-rs 0.56.0` 形成只读静态门禁，固定直接依赖、provider、许可证、advisory、Linux ARM64/移动支持和停止线；先形成授权包，不安装、不构建、不运行。
-3. **保持 OpenMLS 跟踪边界**：只读核对下一版稳定 OpenMLS/provider 是否越过 `hpke-rs 0.6` 与已记录 RustSec 问题；不采用 `main`、prerelease、手改 lockfile、advisory ignore 或未评审许可证例外。
-4. **并行准备 `SW-G3`**：起草确定性故障 profile、固定 seed、指标、证据 manifest 与 `PASS/FAIL/INVALID` 判定，继续保持 `tools/t0/` 和三节点场景暂停。
-5. **可选收尾**：约 1.5 GiB `SW-EXP-002` 忽略 cache 与固定 Rust 镜像默认保留；只有复核精确路径、引用和证据保留需求并取得单独清理授权后再删除。
+1. **`SW-EXP-002` 静态收口已通过本地静态验证**：脚本改用唯一私有 run 目录、隔离副本和 lockfile 哈希比较，补齐 manifest schema 2 与 checksum 顺序；仍待独立复核，未运行 Docker/Phase A/Phase B。
+2. **`SW-G2` 候选资料已刷新**：`mls-rs 0.56.0` 静态门禁与执行授权包已形成；OpenMLS 0.9.0 已确认稳定发布并转入独立静态门，不把“新版本”写成“已修复”。
+3. **`SW-G3` Draft 已形成**：已定义 profile schema、固定 seed、单变量矩阵、D0 测试数值、证据 manifest 和 `PASS/FAIL/INVALID`；当前只等待评审，不构成实现或运行授权。
+4. **保持暂停线**：今天不安装/构建密码依赖、不运行容器或三节点场景、不采购/刷写硬件、不发射射频。
+5. **保留历史证据**：约 1.5 GiB `SW-EXP-002` ignored cache、历史 artifact 与 fixed Rust image 默认保留；未获单独清理授权不删除。
 
 ## 尚未冻结
 

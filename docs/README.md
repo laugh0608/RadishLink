@@ -30,6 +30,8 @@
 - [外场验证计划](testing/field-validation-plan.md)
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A lockfile、审计 `STOP` 与 Phase B 门禁。
+- [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：固定 provider/features、许可证与 advisory 停止线；当前未执行。
+- [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：profile、seed、数值、manifest 与 `PASS/FAIL/INVALID` Draft。
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
