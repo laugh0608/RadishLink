@@ -38,7 +38,7 @@
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
 - [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0`、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 与[确定性故障设计](../testing/sw-g3-deterministic-validation-design.md)的 `SW-G3` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)仍为 Draft；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
-- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[OpenMLS 0.9.0 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)均已接受。两者均未生成 RadishLink lockfile、未审计、未构建、未运行，也不得继承 OpenMLS 0.8.1 的授权或结论；
+- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[OpenMLS 0.9.0 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)均已接受；OpenMLS 的[实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md) Draft 已形成。两条候选均未生成 RadishLink lockfile、未审计、未构建、未运行，也不得继承 OpenMLS 0.8.1 的授权或结论；
 - [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
 - 下一步只评审 E2EE/身份候选、`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
@@ -56,7 +56,7 @@
 
 下一步：
 
-1. 形成[`OpenMLS 0.9.0` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)对应的“实施骨架 + Phase A”精确授权清单；在用户另行确认 L3 命令、副作用、时长和清理前，不新增文件、不联网、不下载、不生成 lockfile、不构建或运行；
+1. 评审[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)；实施单元 A 与 L3 执行单元 B 必须分别明确授权，在此之前不新增 spike 文件、不联网、不下载、不生成 lockfile、不构建或运行；
 2. 基于已通过的 `SW-V0` 评审 `SW-V1/V2` 最小实现与运行授权边界；当前不新增 profile、不重跑 Docker，且 `SW-G2` 未通过前不执行 `SW-V3`；
 3. `SW-G2` 继续比较 mls-rs 0.56.0 与 OpenMLS 0.9.0 的 lockfile、许可证、advisory、状态安全与 Linux ARM64 实证；
 4. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
@@ -71,6 +71,7 @@
 5. **Docker canonical run 已通过**：两次权限前置失败分别保留为 `INVALID`；clean revision `674707a` 的 `sw-v0-20260828T131927Z-49781` 四个 profile 各三次均为 `PASS`，12 份 checksum 复核通过，退出码与残留均为零。
 6. **保持暂停线**：今天未安装或构建密码依赖，除获授权的 `SW-V0` 外未重跑其他容器或三节点场景；不采购/刷写硬件、不发射射频，`SW-V0 PASS` 不升级为产品或 P0 能力。
 7. **保留历史证据**：约 1.5 GiB `SW-EXP-002` ignored cache、三份本轮 `SW-V0` artifact 与其他历史 artifact 默认保留；未获单独清理授权不删除。
+8. **`SW-EXP-004` 精确授权包已形成**：只新增 Draft 文档，把最小 runner/crate 实施与一次 Phase A L3 运行分开，并固定首次 lockfile 来源门、Docker/网络资源、45 分钟与 5 GiB 上限、证据和清理边界；两单元均未授权或执行。
 
 ## 尚未冻结
 

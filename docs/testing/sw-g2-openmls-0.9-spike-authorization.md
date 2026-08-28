@@ -24,7 +24,7 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：固定候选版本与 feature、Phase A/Phase B 分段、许可证与 advisory 停止线、自描述 JSON storage、新建 SQLite 基线、Linux ARM64 目标、证据和清理边界；
-- 直接结果：后续只可提交“实施骨架 + Phase A”的精确 L3 授权请求；接受本文不授权新增文件、联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
+- 直接结果：已形成[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md) Draft；接受本文不授权其中任一单元，也不授权新增文件、联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
 - 结论限制：当前没有实际解析图、许可证结论、安全公告结论或运行证据；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
 
 ## 官方基线与新增停止线
@@ -128,12 +128,14 @@ Phase B 只有在 Phase A 完整通过、许可证表达得到人工确认并由
 
 ```text
 artifacts/sw-g2-openmls-0.9/<run-id>/
+├── Cargo.lock
 ├── manifest.json
 ├── generated-lock-sha256.txt
 ├── cargo-metadata.json
 ├── cargo-tree.txt
 ├── cargo-tree-features.txt
 ├── cargo-tree-duplicates.txt
+├── cargo-deny-sources.txt
 ├── cargo-audit.json
 ├── cargo-deny.txt
 ├── audit-exit-codes.json
@@ -145,10 +147,11 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 
 授权必须拆分为：
 
-1. **实施骨架 + Phase A**：新增精确文件、下载固定依赖并生成/审计新 lockfile；
-2. **Phase B**：Phase A 通过后构建并运行无网络 Linux ARM64 新建状态场景；
-3. **0.8.1→0.9.0 迁移包**：只有存在产品迁移需求时另行设计，不包含在前两项；
-4. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
-5. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
+1. **实施骨架**：按[精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)新增受限文件并执行无网络静态验证；
+2. **Phase A**：骨架已提交且工作区干净后，另行授权一次依赖下载、lockfile 生成与审计；
+3. **Phase B**：Phase A 通过后构建并运行无网络 Linux ARM64 新建状态场景；
+4. **0.8.1→0.9.0 迁移包**：只有存在产品迁移需求时另行设计，不包含在前三项；
+5. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
+6. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-当前静态门禁已接受。`SW-EXP-004` 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；本文不构成 Phase A 或 Phase B 授权，`SW-G2` 继续保持未通过。
+当前静态门禁已接受，实施骨架与 Phase A 精确授权包 Draft 已形成。`SW-EXP-004` 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；本文不构成实施、Phase A 或 Phase B 授权，`SW-G2` 继续保持未通过。

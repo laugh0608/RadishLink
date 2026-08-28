@@ -12,7 +12,7 @@
 当前执行顺序为：
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
-2. 按已接受的[`OpenMLS 0.9.0` 静态门禁与执行授权包](../testing/sw-g2-openmls-0.9-spike-authorization.md)另行提交 Phase A 精确授权，不能继承 0.8.1 lockfile 或授权；
+2. 评审[`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)，按分段授权实施受限 runner 后再单独决定一次 Phase A；不能继承 0.8.1 lockfile、cache 或授权；
 3. 以[`mls-rs 0.56.0` 静态门禁与执行授权包](../testing/sw-g2-mls-rs-spike-authorization.md)对照许可证、advisory、存储、互操作与平台边界；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
@@ -110,7 +110,7 @@
 
 ## 运行授权包要求
 
-本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)与[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的静态方案均已接受；两者的实施、下载、审计和运行都必须另行授权。进入后续 spike 前必须满足：
+本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)与[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的静态方案均已接受；OpenMLS 的[实施骨架与 Phase A 精确包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)仍为 Draft。两者的实施、下载、审计和运行都必须另行授权。进入后续 spike 前必须满足：
 
 - 精确依赖版本、commit、校验值、来源、许可证和 lockfile 变更；
 - 精确命令、目标平台、网络访问、临时目录、预计时长和最大资源占用；
