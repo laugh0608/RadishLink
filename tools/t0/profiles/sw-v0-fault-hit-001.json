@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "profile_id": "SW-V0-FAULT-HIT-001",
+  "profile_version": 1,
+  "seed_hex": "0x524c535747330102",
+  "topology": "a-b-c-one-relay",
+  "payload_size_bytes": 1,
+  "message_count": 3,
+  "lifetime_ms": 30000,
+  "initial_hop_budget": 2,
+  "fault": {
+    "kind": "drop",
+    "direction": "a-to-b",
+    "trigger_event": "synthetic-frame",
+    "trigger_index": 2,
+    "parameters": {}
+  },
+  "retry": {
+    "backoff_ms": [250, 500, 1000, 2000],
+    "max_attempts": 4,
+    "deadline_ms": 10000
+  },
+  "observation_window_ms": 10000,
+  "expected_events": ["frame_1_forwarded", "frame_2_dropped", "frame_3_forwarded", "fault_hit_once"],
+  "forbidden_events": ["fault_hit_wrong_direction", "fault_hit_multiple"],
+  "evidence_schema_version": 1
+}
