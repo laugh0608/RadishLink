@@ -1,6 +1,6 @@
 # SW-G2 OpenMLS 0.9.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Draft（静态门禁已形成；未实施、未下载、未生成 lockfile、未构建、未运行）
+- 状态：Accepted（静态门禁，2026-08-28；未实施、未下载、未生成 lockfile、未构建、未运行）
 - 资料核对日期：2026-08-28
 - 计划证据编号：`SW-EXP-004`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
@@ -19,6 +19,14 @@
 - 迁移任何真实数据库，或使用真实身份、联系人、消息和设备密钥；
 - 修改 `tools/t0/`、运行 `SW-V*`、启动 VM、操作硬件或产生射频发射。
 
+## 静态门禁评审记录
+
+- 结论：Accepted；
+- 日期：2026-08-28；
+- 接受范围：固定候选版本与 feature、Phase A/Phase B 分段、许可证与 advisory 停止线、自描述 JSON storage、新建 SQLite 基线、Linux ARM64 目标、证据和清理边界；
+- 直接结果：后续只可提交“实施骨架 + Phase A”的精确 L3 授权请求；接受本文不授权新增文件、联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
+- 结论限制：当前没有实际解析图、许可证结论、安全公告结论或运行证据；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
+
 ## 官方基线与新增停止线
 
 | 项目 | 固定基线 | 官方事实 | RadishLink 仍需验证 |
@@ -31,6 +39,8 @@
 
 [0.9.0 release notes](https://book.openmls.tech/releases/0.9.0.html)把 MSRV 提升到 Rust 1.91，并声明非自描述 storage format 不再受支持；[迁移说明](https://book.openmls.tech/user_manual/migration.html)要求旧版本使用 `migration-export`、新版本使用 `migration-import`，通过自描述编码桥接。RadishLink 当前没有可迁移的产品数据库，所以首轮只允许新建 JSON 编码的合成 SQLite；不得把 `SW-EXP-002` 临时状态伪装成产品迁移实证。
 
+[`OpenMLS` 官方安全策略](https://github.com/openmls/openmls/security/policy)的协调披露范围只覆盖主 `openmls` crate；crypto provider 与 storage backend 明确不在同一保障范围内。Phase A 必须分别检查 `openmls_rust_crypto`、`openmls_sqlite_storage` 及其完整传递图；“主 crate 未列出 advisory”不能写成 provider 或 storage 已安全。官方迁移说明同时指出 storage traits 不提供事务 API，因此 provider 的 SQLite 测试通过也不能证明覆盖层消息状态与 MLS 安全状态已经原子提交。
+
 0.9.0 还把不支持的 ciphersuite 提前变成显式错误，并改变 own message、pending commit 与 AppDataUpdate 的部分处理结果。Phase B 必须把这些结果映射为显式状态，不能以 catch-all、默认成功或静默忽略保持旧行为。
 
 ## 固定直接依赖与 feature
@@ -41,7 +51,7 @@
 | --- | --- | --- |
 | `openmls` | `=0.9.0` | `default-features = false`；只启用 `fork-resolution` |
 | `openmls_basic_credential` | `=0.6.0` | 合成 A/C credential 与签名材料 |
-| `openmls_rust_crypto` | `=0.6.0` | 不启用可选 draft/test feature |
+| `openmls_rust_crypto` | `=0.6.0` | 不启用可选 draft/test feature；其固定 manifest 会向 `hpke-rs 0.7` 传递 `experimental` feature，必须在解析图中显式保留并审计 |
 | `openmls_sqlite_storage` | `=0.3.0` | 合成 endpoint 安全状态持久化 |
 | `openmls_traits` | `=0.6.0` | 组合 RustCrypto、随机源与 SQLite storage provider |
 | `rusqlite` | `=0.32.1` | 只启用 `bundled`，固定 SQLite 构建来源；必须与 provider 解析范围兼容 |
@@ -76,9 +86,9 @@
 1. 只复制固定输入到本轮私有 `.work/repo/`，仓库不得可写挂入容器；
 2. 使用 fixed-digest Rust 1.96.1 Linux ARM64 image；记录 MSRV、host/daemon/container architecture 和工具链；
 3. 只允许 crates.io registry；未知 registry、git source、path override、yanked crate 或 lockfile 漂移立即 `STOP`；
-4. 生成新 lockfile 后固定 SHA-256，再运行 `cargo metadata --locked` 和 `cargo tree --locked --target all`；
+4. 生成新 lockfile 后固定 SHA-256，再运行 `cargo metadata --locked`、`cargo tree --locked --target all`、`cargo tree --locked --target all --edges features` 与 `cargo tree --locked --duplicates`；
 5. 固定 `cargo-audit 0.22.2` 与 `cargo-deny 0.20.2`，保存 advisory DB revision、完整退出码和报告；
-6. 对 `hpke-rs 0.7`、RustCrypto、bundled SQLite 与 proc-macro 的全部传递依赖逐项执行许可证、source 和 advisory 门；
+6. 对 `hpke-rs 0.7`、RustCrypto、bundled SQLite 与 proc-macro 的全部传递依赖逐项执行许可证、source 和 advisory 门；provider/storage 不继承主 `openmls` crate 的安全公告结论；
 7. 初始 allowlist 仅为 `MIT`、`Apache-2.0`、`BSD-2-Clause`、`BSD-3-Clause`、`ISC`、`Unicode-3.0`、`Zlib`；SQLite public-domain 表达、`MPL-2.0`、未知或缺失许可证均进入人工复核，不自动放行；
 8. schema 2 manifest 另记 direct dependency/features、resolved package 数量、SQLite source/version 和 storage codec；manifest 完成后再生成 checksum。
 
@@ -122,6 +132,8 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 ├── generated-lock-sha256.txt
 ├── cargo-metadata.json
 ├── cargo-tree.txt
+├── cargo-tree-features.txt
+├── cargo-tree-duplicates.txt
 ├── cargo-audit.json
 ├── cargo-deny.txt
 ├── audit-exit-codes.json
@@ -139,4 +151,4 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 4. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
 5. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-当前只完成静态门禁。`SW-EXP-004` 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；`SW-G2` 继续保持未通过。
+当前静态门禁已接受。`SW-EXP-004` 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；本文不构成 Phase A 或 Phase B 授权，`SW-G2` 继续保持未通过。

@@ -117,7 +117,7 @@
 
 ### SW-G2：E2EE 与身份候选
 
-按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件。OpenMLS 0.8.1 Phase A 已生成 lockfile，但 advisory/许可证停止线触发，prepared run 的 Phase B 禁止；[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受，[OpenMLS 0.9.0 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)已形成待评审。两者均未下载、审计或运行。任何新依赖安装或 spike 都需要另行授权。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
+按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件。OpenMLS 0.8.1 Phase A 已生成 lockfile，但 advisory/许可证停止线触发，prepared run 的 Phase B 禁止；[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[OpenMLS 0.9.0 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)均已接受但未执行。任何新依赖安装或 spike 都需要另行授权。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
 
 ### SW-G3：验证设计
 
@@ -125,7 +125,7 @@
 
 ### SW-G4：实现授权
 
-[`SW-G4 / SW-V0` Harness 最小实现与运行授权包](../testing/sw-g4-sw-v0-harness-authorization.md)Draft 已形成，把实现文件/单元验证与 Docker 运行拆为两个授权单位。当前尚未接受；获得对应明确授权后才实现 harness 或运行短生命周期容器，不能由 `SW-G3` Accepted 自动推导。
+[`SW-G4 / SW-V0` Harness 最小实现与运行授权包](../testing/sw-g4-sw-v0-harness-authorization.md)已接受并按两个授权单位完成。四个 canonical profile 各三次通过且归一化一致；该结果只接受 harness 有效，不授权重跑、修改 profile/schema 或扩展 `SW-V1/V2/V3`。
 
 ### SW-G5：阶段判定
 
@@ -137,9 +137,9 @@
 | --- | --- | --- | --- |
 | 1 | 证据归档与计划纠偏 | 本计划、探索性探针边界 | `SW-G0` 已接受 |
 | 2 | 消息交付语义 | [覆盖层消息交付语义](../protocol/message-delivery-semantics.md) | `SW-G1` 已接受 |
-| 3 | E2EE/身份决策 | [`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)、[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)、[`mls-rs` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)、[`OpenMLS 0.9.0` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)与 ADR | OpenMLS 0.8.1 Phase A advisory/许可证 `STOP`；mls-rs 静态门已接受；OpenMLS 0.9.0 静态门待评审；两者均无实证或 ADR |
+| 3 | E2EE/身份决策 | [`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)、[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)、[`mls-rs` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)、[`OpenMLS 0.9.0` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)与 ADR | OpenMLS 0.8.1 Phase A advisory/许可证 `STOP`；两份新候选静态门均已接受但无实证或 ADR |
 | 4 | 故障与证据设计 | [`SW-G3`](../testing/sw-g3-deterministic-validation-design.md) | `SW-G3` 已接受 |
-| 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | Draft 已形成；实施与运行均未授权 |
+| 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | `SW-V0` 已完成并通过；无重跑或后续 `SW-V*` 授权 |
 | 6 | 三节点矩阵 | 可复现结果与限制 | 暂停 |
 | 7 | P0 进入评审 | D0 退出证据汇总 | 未开始 |
 
@@ -149,4 +149,4 @@
 - 修改测试实现需要明确范围；运行容器前再次说明命令、目标、副作用、时长和清理；
 - 依赖安装、VM 启动、系统网络、`NET_ADMIN`、射频、硬件、真实密钥和外部状态分别授权；
 - 任一设计缺失会影响安全、兼容、数据或结论时，停止实现并回到相应决策门；
-- `SW-G2` 未完成、`SW-G4` 未获授权前，下一步仍只限 E2EE 静态门评审、实现授权设计与只读核对。
+- `SW-G2` 未完成前，下一步仍只限 E2EE Phase A 精确授权设计、`SW-V1/V2` 授权边界评审与只读核对；不得由 `SW-V0 PASS` 推导重跑或 `SW-V3` 授权。

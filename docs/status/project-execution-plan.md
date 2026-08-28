@@ -45,7 +45,7 @@
 ## 当前项目位置
 
 - 产品成熟度：`D0`；
-- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划、覆盖层消息交付语义与验证设计已通过 `SW-G0/SW-G1/SW-G3`。OpenMLS 0.8.1 Phase A advisory/许可证门 `STOP`，prepared run 的 Phase B 禁止；`mls-rs 0.56.0` 静态门已接受，OpenMLS 0.9.0 静态门与 `SW-G4/SW-V0` 授权包 Draft 已形成，均未执行；
+- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划、覆盖层消息交付语义与验证设计已通过 `SW-G0/SW-G1/SW-G3`。OpenMLS 0.8.1 Phase A advisory/许可证门 `STOP`，prepared run 的 Phase B 禁止；`mls-rs 0.56.0` 与 OpenMLS 0.9.0 静态门均已接受但未执行；`SW-G4/SW-V0` 已完成且 harness 自检通过；
 - 硬件：尚未进入实体设备验证，低成本方案待 `HW-G0` 评审；
 - 射频：保持 `RF-R0` 无发射开发，HaLow 采购和发射暂停；
 - 密码：Signal/MLS 仍是候选，未形成 ADR，不存在已验证 E2EE；
@@ -130,7 +130,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 | 顺序 | 工作包 | 产物 | 状态 |
 | --- | --- | --- | --- |
 | 1 | 项目计划与命名 | 本文、roadmap 与索引统一 | `PLAN-G0` 已接受 |
-| 2 | 软件设计 | [D0/P0 软件工作计划](d0-t0-p0-plan.md)、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)、[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)、两份 MLS 静态门禁、[`SW-G3`](../testing/sw-g3-deterministic-validation-design.md)与[`SW-G4/SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | `SW-G0/SW-G1/SW-G3` 已接受；`SW-G2` 未通过；`SW-G4` Draft 待评审 |
+| 2 | 软件设计 | [D0/P0 软件工作计划](d0-t0-p0-plan.md)、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)、[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)、两份 MLS 静态门禁、[`SW-G3`](../testing/sw-g3-deterministic-validation-design.md)与[`SW-G4/SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | `SW-G0/SW-G1/SW-G3` 已接受；`SW-G2` 未通过；`SW-G4/SW-V0` 已完成 |
 | 3 | 硬件设计 | [低成本硬件验证计划](../hardware/hardware-validation-plan.md) | 文档已形成，待 `HW-G0` |
 | 4 | 法规预检 | 地区/SKU/监管域书面记录 | 未关闭，保持 `RF-R0` |
 | 5 | 软件验证 | 版本化 manifest 与 `SW-V*` 结果 | 暂停 |
@@ -141,7 +141,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 ## 计划与授权门
 
 - `PLAN-G0` 未通过：只修订文档和做只读资料核对；
-- `SW-G4` 未通过：不扩展或重跑软件场景；
+- `SW-G4/SW-V0` 已完成但无持续授权：不扩展或重跑软件场景；
 - `HW-G2` 未通过：不采购 SBC、MCU、外设或制作 PCB；
 - `RF-R1` 未通过：不启动 HaLow 设备和任何射频发射；
 - 密码 ADR 未通过：不安装或集成密码候选库，不宣称 E2EE；

@@ -1,6 +1,6 @@
 # SW-G2 E2EE 与身份候选决策包
 
-- 状态：Draft（OpenMLS 0.8.1 Phase A 已停止；mls-rs 0.56.0 静态门已接受；OpenMLS 0.9.0 静态门待评审；两者均无实证）
+- 状态：Draft（OpenMLS 0.8.1 Phase A 已停止；mls-rs 0.56.0 与 OpenMLS 0.9.0 静态门均已接受；两者均无实证）
 - 资料核对日期：2026-08-28
 - 适用 gate：`SW-G2`
 - 前置决策：`SW-G0/SW-G1` 已接受
@@ -12,7 +12,7 @@
 当前执行顺序为：
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
-2. 评审[`OpenMLS 0.9.0` 静态门禁与执行授权包](../testing/sw-g2-openmls-0.9-spike-authorization.md)，不能继承 0.8.1 lockfile 或授权；
+2. 按已接受的[`OpenMLS 0.9.0` 静态门禁与执行授权包](../testing/sw-g2-openmls-0.9-spike-authorization.md)另行提交 Phase A 精确授权，不能继承 0.8.1 lockfile 或授权；
 3. 以[`mls-rs 0.56.0` 静态门禁与执行授权包](../testing/sw-g2-mls-rs-spike-authorization.md)对照许可证、advisory、存储、互操作与平台边界；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
@@ -33,7 +33,7 @@
 
 - [`libsignal` 官方仓库](https://github.com/signalapp/libsignal)说明公共 Java、Swift、TypeScript API 由 Rust 实现支撑；[`v0.101.0`](https://github.com/signalapp/libsignal/releases/tag/v0.101.0)是本轮固定的发布基线；[当前许可证](https://raw.githubusercontent.com/signalapp/libsignal/main/LICENSE)为 AGPL-3.0。官方 bridge 说明明确这些接口可能无通知变化，因此不能当作生产兼容承诺。
 - [`OpenMLS` 官方仓库](https://github.com/openmls/openmls)与[`openmls-v0.8.1`](https://github.com/openmls/openmls/releases/tag/openmls-v0.8.1)是首轮基线。[持久化说明](https://book.openmls.tech/user_manual/persistence.html)要求持续保存组状态并保护敏感密钥；[安全公告页](https://github.com/openmls/openmls/security)显示历史持久化和 tag 验证问题，固定版本时仍需重查当前公告与传递依赖。
-- 2026-08-28 静态刷新确认[`openmls 0.9.0`](https://docs.rs/crate/openmls/0.9.0)已于 2026-08-25 成为稳定发布，公开依赖面转向 `openmls_rust_crypto ^0.6.0`、`openmls_sqlite_storage ^0.3.0` 与 `openmls_traits ^0.6.0`。这解除的只是 prerelease 停止线；是否越过 0.8.1 的 advisory、`hpke-rs*` 许可证和持久化风险，必须由新的 lockfile 与审计回答。
+- 2026-08-28 静态刷新确认[`openmls 0.9.0`](https://docs.rs/crate/openmls/0.9.0)已于 2026-08-25 成为稳定发布，公开依赖面转向 `openmls_rust_crypto ^0.6.0`、`openmls_sqlite_storage ^0.3.0` 与 `openmls_traits ^0.6.0`。这解除的只是 prerelease 停止线；是否越过 0.8.1 的 advisory、`hpke-rs*` 许可证和持久化风险，必须由新的 lockfile 与审计回答。官方安全策略只覆盖主 `openmls` crate，crypto provider 与 storage backend 必须独立查询并保留“无公告不等于安全”的边界。
 - [`mls-rs` 官方仓库](https://github.com/awslabs/mls-rs)和[`0.56.0` API 文档](https://docs.rs/mls-rs/latest/mls_rs/)是对照基线；官方说明尚无完整第三方安全审计。[SQLite provider](https://docs.rs/mls-rs-provider-sqlite/latest/mls_rs_provider_sqlite/)只证明存在接口，不证明与覆盖层状态满足同一原子提交边界。
 - [RFC 9420](https://www.rfc-editor.org/rfc/rfc9420.html)定义 MLS；[RFC 9750](https://www.rfc-editor.org/rfc/rfc9750.html)允许两成员组和去中心化 Delivery Service，但也把身份绑定、投递可用性、并发 commit 与分区协调留给应用和服务架构。标准可用不等于 RadishLink 映射已经安全。
 
@@ -110,7 +110,7 @@
 
 ## 运行授权包要求
 
-本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)的静态方案已接受，[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)仍待评审；两者的实施和运行都必须另行授权。进入后续 spike 前必须满足：
+本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)与[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的静态方案均已接受；两者的实施、下载、审计和运行都必须另行授权。进入后续 spike 前必须满足：
 
 - 精确依赖版本、commit、校验值、来源、许可证和 lockfile 变更；
 - 精确命令、目标平台、网络访问、临时目录、预计时长和最大资源占用；
@@ -134,4 +134,4 @@
 8. 篡改、重放、乱序、耗尽、旧 epoch、fork 与失败恢复结果可复现；
 9. 独立复核完成并以 Accepted ADR 冻结选择、限制和迁移边界。
 
-当前已完成决策包、上游证据收敛和 OpenMLS 0.8.1 Phase A。最终 run `20260824-215104-90006` 生成了 229 个 crates.io package 的 lockfile，来源检查通过；许可证检查拒绝实际检查图中的 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 对完整 lockfile 共报告 6 个 vulnerability。该 Phase A 保持 `STOP`，Phase B 禁止执行。2026-08-28 已接受 `mls-rs 0.56.0` 静态门禁，并形成 OpenMLS 0.9.0 独立静态门禁 Draft；两者均未下载、生成 lockfile、审计或运行。尚无候选许可证结论、运行实证或 ADR，`SW-G2` 保持未通过。
+当前已完成决策包、上游证据收敛和 OpenMLS 0.8.1 Phase A。最终 run `20260824-215104-90006` 生成了 229 个 crates.io package 的 lockfile，来源检查通过；许可证检查拒绝实际检查图中的 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 对完整 lockfile 共报告 6 个 vulnerability。该 Phase A 保持 `STOP`，Phase B 禁止执行。2026-08-28 已接受 `mls-rs 0.56.0` 与 OpenMLS 0.9.0 两份独立静态门禁；两者均未下载、生成 lockfile、审计或运行。尚无候选许可证结论、运行实证或 ADR，`SW-G2` 保持未通过。
