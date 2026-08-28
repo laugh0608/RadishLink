@@ -216,6 +216,7 @@ CGO_ENABLED=0 \
 GOOS=linux \
 GOARCH="${GO_ARCH}" \
   go -C "${REPO_ROOT}/tools/t0" build -trimpath -o "${BINARY_PATH}" ./cmd/sw-v0-harness
+chmod 0555 "${BINARY_PATH}"
 BINARY_DIGEST="$(shasum -a 256 "${BINARY_PATH}" | awk '{print $1}')"
 
 docker build \
