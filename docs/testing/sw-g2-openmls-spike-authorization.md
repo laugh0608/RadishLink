@@ -248,4 +248,4 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 2. **Phase B**：在 Phase A 人工复核通过后，运行无网络 Linux ARM64 场景；
 3. **可选清理镜像**：只在满足精确前置条件时执行，不包含在前两项默认授权中。
 
-隔离 spike 骨架与 lockfile 已形成；Phase A 最终在许可证和 advisory 门 `STOP`，来源检查通过但安全与许可证条件未关闭。Phase B 不再是“待授权即可执行”，而是被本轮负向证据阻断；镜像与 1.5 GiB 忽略 cache 的清理也未授权。OpenMLS 0.9.0 独立实施骨架已完成，下一步只可另行决定一次 L3 Phase A；不得复用本轮 prepared run 进入场景。
+隔离 spike 骨架与 lockfile 已形成；Phase A 最终在许可证和 advisory 门 `STOP`，来源检查通过但安全与许可证条件未关闭。Phase B 不再是“待授权即可执行”，而是被本轮负向证据阻断；镜像与 1.5 GiB 忽略 cache 的清理也未授权。OpenMLS 0.9.0 独立实施骨架已完成，下一步先关闭其 45 分钟与 5 GiB 运行上限控制差距，再另行决定一次 L3 Phase A；不得复用本轮 prepared run 进入场景。

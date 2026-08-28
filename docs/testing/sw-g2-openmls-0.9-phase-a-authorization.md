@@ -1,6 +1,6 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：Accepted（精确方案，2026-08-28；实施单元 A 已授权并完成；L3 执行单元 B 未授权、未执行）
+- 状态：Accepted（精确方案，2026-08-28；实施单元 A 已授权并完成；L3 执行单元 B 未授权、未执行，且须先关闭运行上限控制差距）
 - 日期：2026-08-28
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
@@ -137,7 +137,15 @@ A 完成后先审阅和提交新增文件，使 B 从 clean revision 运行；�
 - 首次负例在 shell 入口前以退出码 `126` 暴露 runner 未设置 executable mode；当时没有创建 artifact 或进入 Docker。将唯一脚本改为 `0755` 后，同一无参数与 `run` 负例均按设计以退出码 `2` 拒绝；
 - `bash -n`、两个参数负例、feature-gate 合成正负例、仓库基线与 `git diff --check` 通过，且 `artifacts/sw-g2-openmls-0.9/` 不存在；
 - 本轮没有执行 `prepare`、`docker`、`cargo` 或 `rustc`，没有联网、下载、安装、生成 lockfile、构建候选或产生 `SW-EXP-004` artifact；
-- 单元 A 授权已消费完毕。下一步只能先复核 clean revision，再以本文完整副作用获得一次单元 B L3 明确授权。
+- 单元 A 授权已消费完毕。下面的代码—授权包复核进一步收紧了停止点；当前下一步以复核后的运行上限控制要求为准。
+
+### 2026-08-28 代码—授权包一致性复核
+
+- 固定依赖、镜像 digest、平台、CPU/内存/PID/capability 限制、私有 `.work`、source/feature gate、lockfile 原子写入、schema 2 manifest、checksum 和精确 label 清理均已落实到 runner；
+- runner 在启动前要求 artifact 所在卷至少有 5 GiB 可用空间，但当前没有运行期 `du`/quota 监测，因此“最多 5 GiB”仍是人工停止线，不是脚本内硬上限；
+- runner 当前没有内建 45 分钟总超时；`INT`/`TERM` 可进入精确清理，但达到时限仍依赖外部监督触发；
+- 依赖与审计容器使用 Docker 默认出站网络，不映射端口，但不提供域名 allowlist；Docker Hub、crates.io 与 GitHub RustSec 是预期访问范围，不是由 runner 技术强制的唯一目的地；
+- 因此单元 B 在 2026-08-28 收口时继续保持未授权、未执行。明日优先形成一个无 Docker/无网络的最小实施单元，为 45 分钟和 5 GiB 提供可验证的强制或监控机制，并把默认网络边界写入下一次 L3 授权；完成并提交 clean revision 前不申请或执行 B。
 
 ## L3 执行单元 B：一次 Phase A
 
@@ -149,7 +157,7 @@ B 只有在以下条件全部成立并获得当前任务明确授权后才可执
 2. 新候选目录首次执行前不存在 `Cargo.lock`；若未来已存在，runner 只能重生成并逐字比较，不得更新；
 3. `SW-EXP-002` 的源码、lockfile、artifact、`.work` cache、advisory DB 和授权均不复用；
 4. Docker daemon 可用，artifact root、输入和目标 lockfile 均不是 symlink；
-5. 没有相同精确 run label 的残留；磁盘可用量满足本包 5 GiB 上限；
+5. 没有相同精确 run label 的残留；磁盘可用量不少于 5 GiB，且 45 分钟总时限与 5 GiB 运行期预算已具备经复核的强制或监控机制；
 6. 用户已看到并接受本节的网络、代码执行、磁盘、Docker 与保留副作用。
 
 ### 唯一执行入口
@@ -180,14 +188,14 @@ runner 必须按顺序执行：
 - 工具链核对容器使用 `--network none`；依赖与审计容器只使用 Docker 默认出站网络，不创建 named network、不映射端口；
 - 两类容器均使用 `--read-only`、宿主非 root UID/GID、`--cap-drop ALL`、`--security-opt no-new-privileges`、`--pids-limit 512` 和专用 tmpfs；
 - 依赖与审计容器上限为 4 CPU、4 GiB 内存；不挂载 Docker socket、SSH agent、真实 home、主机 Cargo cache、Git credential 或系统密钥目录；
-- 预期访问仅为 Docker Hub（只在 exact image 缺失时）、crates.io index/download 与 GitHub RustSec advisory DB；不访问项目 Git remote，不 push，不创建 PR、Release 或部署；
+- 预期访问仅为 Docker Hub（只在 exact image 缺失时）、crates.io index/download 与 GitHub RustSec advisory DB；当前 Docker 默认出站网络不实施域名 allowlist，这一限制必须在执行授权中明确接受；runner 不主动访问项目 Git remote，不 push，不创建 PR、Release 或部署；
 - 不使用 `--privileged`、host network、`NET_ADMIN`、系统代理修改、VM、长期服务或后台守护进程。
 
 ## 预计副作用与上限
 
-- 预计持续 15–45 分钟；达到 45 分钟仍未完成时中断同一次进程并保留 `STOP` 证据，不自动重试；
+- 预计持续 15–45 分钟；达到 45 分钟仍未完成时中断同一次进程并保留 `STOP` 证据，不自动重试。当前 runner 没有内建总超时，须在 B 前补齐经复核的强制或监控机制；
 - 网络下载约 0.8–2.5 GiB，包含可能缺失的固定 Rust image、候选 crates、固定审计工具和当次 advisory DB；
-- `artifacts/sw-g2-openmls-0.9/<run-id>/.work/` 与证据磁盘峰值不超过 5 GiB；
+- `artifacts/sw-g2-openmls-0.9/<run-id>/.work/` 与证据磁盘预算不超过 5 GiB。当前 runner 只验证启动前至少有 5 GiB 可用空间，不实施运行期硬配额，须在 B 前补齐经复核的强制或监控机制；
 - 可能新增由 Cargo 生成的 `tools/spikes/sw-g2-openmls-0.9/Cargo.lock`，但只在 source gate 通过后发生；不自动 `git add`、commit 或 push；
 - fixed Rust image、本轮 crates/audit cache 和 evidence 默认保留；不清理 Docker 全局 cache；
 - 不创建 Docker network、volume、端口、长期容器或服务，不修改系统配置，不读取真实用户数据。
@@ -255,11 +263,11 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 
 ## 当前停止点与未来授权措辞
 
-本文精确方案已接受，单元 A 已完成。当前没有执行 Docker，没有网络访问、依赖下载、lockfile、审计结果或 `SW-EXP-004` artifact；单元 B 仍未授权。
+本文精确方案已接受，单元 A 已完成。当前没有执行 Docker，没有网络访问、依赖下载、lockfile、审计结果或 `SW-EXP-004` artifact；单元 B 仍未授权，且在 45 分钟总时限与 5 GiB 运行期预算的控制机制关闭前不申请执行。
 
 未来授权必须明确指出授权单元：
 
 - 单元 A：按本文文件清单实施最小骨架并运行列出的无网络静态验证；
-- 单元 B：在 A 已提交且工作区干净后，执行一次 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare`，接受本文列出的 Docker、网络、第三方审计工具编译、最多 5 GiB 保留数据、可能新增 Cargo 生成的 lockfile，以及 45 分钟上限。
+- 单元 B：在 A 与运行上限控制改进均已提交、工作区干净后，执行一次 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare`，接受本文列出的 Docker、默认出站网络不具备域名 allowlist、第三方审计工具编译、最多 5 GiB 保留数据、可能新增 Cargo 生成的 lockfile，以及 45 分钟上限。
 
 任何只写“接受文档”“继续下一步”或此前只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。

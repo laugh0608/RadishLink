@@ -1,17 +1,17 @@
 # SW-G2 OpenMLS 0.9.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Accepted（静态门禁，2026-08-28；未实施、未下载、未生成 lockfile、未构建、未运行）
+- 状态：Accepted（静态门禁，2026-08-28；后续精确包的实施单元 A 已完成；Phase A 未授权、未下载、未生成 lockfile、未构建、未运行）
 - 资料核对日期：2026-08-28
 - 计划证据编号：`SW-EXP-004`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
 
 ## 目的与结论边界
 
-本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。它只允许在运行前评审精确方案，不构成实施或执行授权，也不把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
+本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)已另行接受并完成实施单元 A，但仍未授权或执行 Phase A，也不把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
 
 `SW-EXP-002` 的源码、lockfile、prepared cache、审计结果和运行授权不得复用。新候选必须生成自己的 lockfile、完整传递图和证据编号；任何“版本更新后应该已修复”的推断都不能替代审计。
 
-本包明确不授权：
+本静态门禁本身明确不授权；后续实际状态以精确包为准：
 
 - 新增 `tools/spikes/sw-g2-openmls-0.9/`、运行脚本或修改 `SW-EXP-002`；
 - 访问 crates.io、Docker Hub、GitHub advisory DB 或其他外部服务；
@@ -24,7 +24,7 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：固定候选版本与 feature、Phase A/Phase B 分段、许可证与 advisory 停止线、自描述 JSON storage、新建 SQLite 基线、Linux ARM64 目标、证据和清理边界；
-- 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已接受并完成实施单元 A；L3 单元 B 仍未授权，不得联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
+- 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已接受并完成实施单元 A；代码—授权包复核又发现 45 分钟总时限和 5 GiB 运行期磁盘预算尚无 runner 内建控制，L3 单元 B 仍未授权且须先关闭该差距，不得联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
 - 结论限制：当前没有实际解析图、许可证结论、安全公告结论或运行证据；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
 
 ## 官方基线与新增停止线
@@ -98,9 +98,9 @@
 
 以下只是未来授权前的保守估计，不是已发生事实：
 
-- 首次耗时约 15–45 分钟，取决于镜像、crates 和 advisory DB cache；
+- 首次耗时约 15–45 分钟，取决于镜像、crates 和 advisory DB cache；当前 runner 尚未内建 45 分钟总超时，执行前须先关闭该控制差距；
 - 网络下载约 0.8–2.5 GiB；
-- 忽略目录磁盘峰值不超过 5 GiB；
+- 忽略目录磁盘预算不超过 5 GiB；当前 runner 仅验证启动前可用空间，尚未内建运行期上限，执行前须先关闭该控制差距；
 - 会编译审计工具与 bundled SQLite 的后续 Phase B 可能增加 CPU/磁盘占用；
 - 不创建长期容器、Docker network、端口、服务，不访问项目远程或提交任何内容；
 - fixed Rust image 和本轮 `.work` cache 默认保留，清理需要精确目标与独立授权。
