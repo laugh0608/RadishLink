@@ -1,6 +1,6 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：Draft（精确清单已形成；实施单元 A 与 L3 执行单元 B 均未授权、未执行）
+- 状态：Accepted（精确方案，2026-08-28；实施单元 A 已授权并完成；L3 执行单元 B 未授权、未执行）
 - 日期：2026-08-28
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
@@ -130,6 +130,15 @@ git diff --check
 
 A 完成后先审阅和提交新增文件，使 B 从 clean revision 运行；提交是独立 Git 动作，接受本文本身不授权 commit 或 push。若 A 证明必须新增、删除或修改清单外文件，停止并修订本包。
 
+### 2026-08-28 单元 A 实施记录
+
+- 用户明确授权提交本包并实施单元 A；新增文件与职责严格等于清单，没有生成 `Cargo.lock`，没有修改旧 spike、产品代码、CI 或历史 artifact；
+- runner 使用 `umask 077`、唯一 run 目录、fixed digest、非 root 只读容器、capability/进程/CPU/内存限制、独立 Cargo cache、source/feature gate、原子 lockfile promotion、schema 2 manifest、checksum 与精确 label 清理；仅接受 `prepare`，没有 Phase B action；
+- 首次负例在 shell 入口前以退出码 `126` 暴露 runner 未设置 executable mode；当时没有创建 artifact 或进入 Docker。将唯一脚本改为 `0755` 后，同一无参数与 `run` 负例均按设计以退出码 `2` 拒绝；
+- `bash -n`、两个参数负例、feature-gate 合成正负例、仓库基线与 `git diff --check` 通过，且 `artifacts/sw-g2-openmls-0.9/` 不存在；
+- 本轮没有执行 `prepare`、`docker`、`cargo` 或 `rustc`，没有联网、下载、安装、生成 lockfile、构建候选或产生 `SW-EXP-004` artifact；
+- 单元 A 授权已消费完毕。下一步只能先复核 clean revision，再以本文完整副作用获得一次单元 B L3 明确授权。
+
 ## L3 执行单元 B：一次 Phase A
 
 ### 前置条件
@@ -246,11 +255,11 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 
 ## 当前停止点与未来授权措辞
 
-本文只是 Draft。当前没有新增 runner/crate，没有执行静态单元验证或 Docker，没有网络访问、依赖下载、lockfile、审计结果或 `SW-EXP-004` artifact。
+本文精确方案已接受，单元 A 已完成。当前没有执行 Docker，没有网络访问、依赖下载、lockfile、审计结果或 `SW-EXP-004` artifact；单元 B 仍未授权。
 
 未来授权必须明确指出授权单元：
 
 - 单元 A：按本文文件清单实施最小骨架并运行列出的无网络静态验证；
 - 单元 B：在 A 已提交且工作区干净后，执行一次 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare`，接受本文列出的 Docker、网络、第三方审计工具编译、最多 5 GiB 保留数据、可能新增 Cargo 生成的 lockfile，以及 45 分钟上限。
 
-任何只写“接受文档”“继续下一步”或只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。
+任何只写“接受文档”“继续下一步”或此前只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。
