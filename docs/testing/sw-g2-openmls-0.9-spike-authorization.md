@@ -24,7 +24,7 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：固定候选版本与 feature、Phase A/Phase B 分段、许可证与 advisory 停止线、自描述 JSON storage、新建 SQLite 基线、Linux ARM64 目标、证据和清理边界；
-- 直接结果：已形成[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md) Draft；接受本文不授权其中任一单元，也不授权新增文件、联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
+- 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已接受并完成实施单元 A；L3 单元 B 仍未授权，不得联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
 - 结论限制：当前没有实际解析图、许可证结论、安全公告结论或运行证据；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
 
 ## 官方基线与新增停止线
@@ -154,4 +154,4 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 5. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
 6. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-当前静态门禁已接受，实施骨架与 Phase A 精确授权包 Draft 已形成。`SW-EXP-004` 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；本文不构成实施、Phase A 或 Phase B 授权，`SW-G2` 继续保持未通过。
+当前静态门禁和精确方案已接受，实施单元 A 已完成。`SW-EXP-004` Phase A 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；L3 单元 B 与 Phase B 均未授权，`SW-G2` 继续保持未通过。
