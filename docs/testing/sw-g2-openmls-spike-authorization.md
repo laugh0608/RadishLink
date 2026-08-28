@@ -83,7 +83,9 @@ scripts/run-sw-g2-openmls-spike.sh
 - `store.rs` 当前只验证 artifact 相对路径不能绝对化或穿越；没有连接 OpenMLS SQLite provider，也没有创建覆盖层队列、去重或证据表。
 - `evidence.rs` 当前只输出 Phase A 信息和 Phase B 阻断证据；未来即使获准扩展，也不得输出 plaintext、credential 私钥、key package 私有部分、会话密钥或数据库正文。
 - `deny.toml` 只允许 crates.io registry；初始许可证 allowlist 为 `MIT`、`Apache-2.0`、`BSD-2-Clause`、`BSD-3-Clause`、`ISC`、`Unicode-3.0`、`Zlib`。出现其他表达式、未知来源或缺失许可证即停止，由人工复核，不自动加入例外。
-- `run-sw-g2-openmls-spike.sh` 使用时间戳加 PID 的 run ID、精确 label、严格 shell 选项和 trap；不开放端口，不使用 `--privileged`、`NET_ADMIN`、host network、真实 home 或主机 Cargo cache。当前 run 目录不是由 `mktemp -d` 创建，提交实现前仍需复核碰撞、符号链接与目录权限边界。
+- `run-sw-g2-openmls-spike.sh` 使用 `mktemp -d` 在固定 artifact root 下创建带时间戳、PID 与随机后缀的唯一 run 目录，并以 `umask 077` 收紧新建目录和证据文件；artifact 路径、所列源码输入和清理容器都拒绝符号链接或 label 不匹配。脚本不开放端口，不使用 `--privileged`、`NET_ADMIN`、host network、真实 home 或主机 Cargo cache。
+- 仓库不再以可写方式挂入容器。脚本把固定输入复制到本轮 `.work/repo/`，仅挂载本轮 run 目录；容器在隔离副本中重新生成 `Cargo.lock` 并与待评审 lockfile 的 SHA-256 比较，任何漂移以退出码 `21` 停止，运行后宿主 lockfile 变化以退出码 `22` 停止。
+- 未来 run 使用 manifest schema 2，记录开始/结束时间、最终退出码、container architecture、Rust/Cargo 版本、advisory DB revision、镜像 index digest 与本地平台 image ID；`checksums.sha256` 在 manifest 之后生成并包含 manifest、固定输入与实际存在的证据文件。
 
 这些文件已在 Phase A 获明确授权后实施。当前实现仍硬阻断 Phase B；Phase A 审计 `STOP` 后不得为继续运行而添加 advisory ignore、放宽许可证 allowlist、更新传递依赖或改用 prerelease。
 
@@ -102,10 +104,10 @@ scripts/run-sw-g2-openmls-spike.sh
 1. 只读检查 Git 工作区、Docker daemon、host/daemon architecture 和固定镜像是否已存在；
 2. 若 exact-digest 镜像已存在，以 `docker image inspect` 核对 image ID、`RepoDigests` 和平台；否则运行 `docker buildx imagetools inspect` 核对 index digest；
 3. 只在 exact-digest 镜像不存在时运行 `docker pull --platform linux/arm64`；本地复用与新拉取均再次保存并核对 image inspect；
-4. 在 `linux/arm64` 容器内，以独立 `CARGO_HOME` 和 `CARGO_TARGET_DIR` 运行 `cargo generate-lockfile`、`cargo fetch --locked`；
+4. 把已评审的 manifest、lockfile、deny 配置和源码复制到本轮忽略目录；在 `linux/arm64` 容器内以独立 `CARGO_HOME` / `CARGO_TARGET_DIR` 对隔离副本运行 `cargo generate-lockfile`，要求结果与仓库 lockfile 哈希完全一致，再运行 `cargo fetch --locked`；
 5. 在同一隔离 cache 内运行 `cargo install cargo-audit --version 0.22.2 --locked` 与 `cargo install cargo-deny --version 0.20.2 --locked`；
 6. 保存 `cargo metadata --locked --format-version 1`、`cargo tree --locked --target all`、`cargo audit --json` 和 `cargo deny check advisories licenses sources` 的完整退出码与脱敏输出；
-7. 计算 `Cargo.lock`、manifest、metadata、tree 和审计报告的 SHA-256；然后停止，不自动进入 Phase B。
+7. 先生成 schema 2 manifest，再计算 `LICENSE`、spike 输入、manifest、metadata、tree 和审计报告的 SHA-256；然后停止，不自动进入 Phase B。
 
 Phase A 允许容器访问 Docker Hub、crates.io index/download 和 GitHub RustSec advisory DB，不访问项目远程、不 push、不创建 PR 或 Release。外部服务不可达、镜像 digest 不符、lockfile 漂移、yanked crate、任何未解释 advisory、未知 registry/git source、未知或未许可许可证均为 `STOP`，不能通过 ignore、更新候选版本或添加例外继续。
 
@@ -114,7 +116,7 @@ Phase A 允许容器访问 Docker Hub、crates.io index/download 和 GitHub Rust
 - 首次耗时约 15–40 分钟，取决于镜像和 crates 下载；
 - 网络下载预估 0.8–2.0 GiB；
 - 临时磁盘峰值预估不超过 4 GiB；
-- 会生成待评审的 `tools/spikes/sw-g2-openmls/Cargo.lock`；
+- 首次已授权 Phase A 会生成待评审的 `tools/spikes/sw-g2-openmls/Cargo.lock`；收口后的脚本要求该 lockfile 已存在，只在忽略的隔离副本中重新生成并比较，不再写入仓库；
 - 会在 `artifacts/sw-g2-openmls/<run-id>/` 生成忽略的 metadata、审计与日志；
 - Docker 全局状态会保留固定 Rust 镜像；无长期容器、端口或后台服务。
 
@@ -156,7 +158,14 @@ Phase A 允许容器访问 Docker Hub、crates.io index/download 和 GitHub Rust
 - 该 run 的原始 manifest 因生成顺序把 `stage` 记为 `evidence-finalize`，但 `prepare_exit_code=20`、审计退出码和报告内容完整；不回写原 artifact，脚本已修正为后续审计失败明确记录 `dependency-audit`。
 - 所有登记在 `checksums.sha256` 的 manifest、lockfile、metadata、tree 和审计报告均复核通过；没有残留容器或后台进程。固定镜像保留；忽略目录保留约 1.5 GiB 的审计工具/cache 与证据，未获清理授权不删除。
 
-以上结果是 `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定候选图的负向 Phase A 证据。它不证明 MLS 路线整体不可用，但明确禁止以该 prepared run 进入 Phase B。下一步应为 `mls-rs 0.56.0` 形成独立静态门禁与执行授权包，同时只读跟踪下一版稳定 OpenMLS/provider；不得直接采用上游 prerelease、手改 lockfile 或绕过 advisory/许可证停止线。
+以上结果是 `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定候选图的负向 Phase A 证据。它不证明 MLS 路线整体不可用，但明确禁止以该 prepared run 进入 Phase B。`mls-rs 0.56.0` 独立静态门禁与执行授权包已于 2026-08-28 形成，OpenMLS 0.9.0 稳定版则转入另一轮独立静态刷新；不得直接复用本轮 lockfile、采用未经审计的候选、手改 lockfile 或绕过 advisory/许可证停止线。
+
+### 2026-08-28 实现静态收口
+
+- 未重跑 Phase A、未构建 OpenMLS、未安装依赖，也未修改历史 artifact；最终 run `20260824-215104-90006` 的原始 manifest 和 checksum 继续按生成时状态保留；
+- 脚本已关闭 run 目录碰撞、artifact/source 符号链接、默认权限、全仓库可写挂载和 lockfile 静默漂移路径；
+- 新 manifest schema 2 与 checksum 顺序已覆盖本节上方列出的缺口，Phase B 仍在参数解析阶段硬阻断；
+- 静态验证只覆盖 shell 语法、格式、文本门禁和未授权 action 的退出行为，不证明新 evidence finalizer 已在 Docker/Linux ARM64 中实际运行；任何新的 Phase A 仍需单独说明并授权。
 
 ## Phase B：无网络 Linux ARM64 可行性运行
 
@@ -199,17 +208,21 @@ Phase B 的所有容器使用 `--platform linux/arm64 --network none --read-only
 ```text
 artifacts/sw-g2-openmls/<run-id>/
 ├── manifest.json
+├── generated-lock-sha256.txt
+├── container-toolchain.txt
+├── advisory-db-revision.txt
+├── audit-exit-codes.json
 ├── cargo-audit.json
 ├── cargo-deny.txt
 ├── cargo-metadata.json
 ├── cargo-tree.txt
 ├── checksums.sha256
-├── scenario-summary.json
-├── b-visible-inventory.json
 └── run.log
 ```
 
-`manifest.json` 至少记录 Git revision、dirty 状态、镜像 index/platform digest、host/daemon/container architecture、Rust/Cargo 版本、`Cargo.lock` 哈希、advisory DB revision、场景 ID、开始/结束时间和退出码。
+以上是 Phase A 最小证据；`scenario-summary.json` 与 `b-visible-inventory.json` 只属于未来另行授权的 Phase B，不由 Phase A 占位生成。
+
+schema 2 `manifest.json` 至少记录 Git revision、dirty 状态、镜像 index digest 与本地平台 image ID、host/daemon/container architecture、Rust/Cargo 版本、`Cargo.lock` 哈希、advisory DB revision、场景 ID、开始/结束时间和最终退出码。早期失败无法取得的字段使用 `null` 或明确的 `unavailable`，不能伪造默认值。
 
 不得保留或提交 endpoint SQLite、私钥、完整 credential、随机种子原值、合成 plaintext、core dump 或包含敏感 feature 的日志。B inventory 只列相对对象名、类型、字节数和 SHA-256；日志中的合成节点 ID 固定为 A/B/C。
 
@@ -235,4 +248,4 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 2. **Phase B**：在 Phase A 人工复核通过后，运行无网络 Linux ARM64 场景；
 3. **可选清理镜像**：只在满足精确前置条件时执行，不包含在前两项默认授权中。
 
-隔离 spike 骨架与 lockfile 已形成；Phase A 最终在许可证和 advisory 门 `STOP`，来源检查通过但安全与许可证条件未关闭。Phase B 不再是“待授权即可执行”，而是被本轮负向证据阻断；镜像与 1.5 GiB 忽略 cache 的清理也未授权。下一步先形成 `mls-rs 0.56.0` 静态门禁/授权包并跟踪下一版稳定 OpenMLS/provider，不得复用本轮 prepared run 进入场景。
+隔离 spike 骨架与 lockfile 已形成；Phase A 最终在许可证和 advisory 门 `STOP`，来源检查通过但安全与许可证条件未关闭。Phase B 不再是“待授权即可执行”，而是被本轮负向证据阻断；镜像与 1.5 GiB 忽略 cache 的清理也未授权。下一步评审已形成的 `mls-rs 0.56.0` 静态门禁，并为 OpenMLS 0.9.0 建立独立静态依赖、许可证与 advisory 门；不得复用本轮 prepared run 进入场景。
