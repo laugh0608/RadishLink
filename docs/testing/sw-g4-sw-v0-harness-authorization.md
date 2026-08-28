@@ -1,7 +1,7 @@
 # SW-G4 / SW-V0 Harness 最小实现与运行授权包
 
-- 状态：Draft（待评审；未实施、未构建、未运行）
-- 文档版本：0.1
+- 状态：Accepted（实施单元 A 与 Docker 运行单元 B 已分别授权并完成；`SW-V0 PASS`）
+- 文档版本：0.2
 - 日期：2026-08-28
 - 适用 gate：`SW-G4`
 - 前置决策：`SW-G0/SW-G1/SW-G3` 已接受，`SW-G2` 未通过
@@ -12,7 +12,16 @@
 
 它不修改正式消息状态机，不把 `tools/t0/` 的旧 JSON frame、摘要 ACK 或 snapshot 升级为产品协议，也不执行 `SW-V1/V2/V3`。`SW-V0` 通过只证明 harness 在记录条件下有效，不能证明三节点消息语义、E2EE、HaLow、距离、媒体、功耗或法规能力。
 
-当前 Draft 不授权写代码、运行 `go test`、构建镜像或启动容器。授权必须按下文“实施”和“Docker 运行”两个单位分别确认；接受本文也不自动执行命令。
+本文的实施单元 A 与 Docker 运行单元 B 已在 2026-08-28 分别获得明确授权并完成。该授权已经消费完毕，不构成未来重跑、扩展 `SW-V1/V2/V3`、安装依赖或修改产品状态机的持续授权。
+
+## 实施与运行结果
+
+- `67556fe` 实现授权清单内的 15 个新增文件；`7a4344b` 与 `674707a` 分别修复 `umask 077` 下 binary 和 profile 在非 root 容器内的读取/执行权限；旧 `t0node`、`go.mod` 与探索性入口未修改；
+- 实施期 `go test ./...`、shell 语法、仓库基线与 `git diff --check` 通过；未新增依赖或触发 toolchain download；
+- `sw-v0-20260828T131658Z-48803` 因 binary mode `0700` 在容器启动前判为 `INVALID`；`sw-v0-20260828T131816Z-49265` 完成拓扑探针后因 profile mode `0600` 判为 `INVALID`；两次失败证据均保留，且精确标签残留为零；
+- 修复后的 `sw-v0-20260828T131927Z-49781` 基于 clean revision `674707a` 完成四个 profile 各三次独立 canonical run，全部 `PASS`；归一化事件摘要依次为 topology `49e9b6de…6424`、fault hit `34bcce5c…6dd6`、evidence `65095e68…a277`、clock `aabecc70…774c`；
+- 12 份 `checksums.sha256` 已在运行后独立复核通过；总 manifest 为 `PASS`、退出码 `0`，精确 run label 下的 container/network/image 均为零；
+- 结论只接受 `SW-V0` harness 在 `arm64`、Go `1.26.3`、OrbStack Docker 记录条件下有效，不外推产品消息语义、E2EE、P0、HaLow、距离、媒体、功耗或法规能力。
 
 ## 复用与隔离原则
 
@@ -165,4 +174,4 @@ artifacts/sw-v/sw-v0-<run-id>/<profile-id>/<repeat>/
 7. `SW-G2` 未通过时不会进入 `SW-V3`；
 8. 任何范围扩大都会回到评审。
 
-当前停止在 Draft。未获得“实施授权单元 A”的明确确认前不新增上述文件；未获得“运行授权单元 B”的独立确认前不启动 Docker。
+本授权包已经执行完毕，当前没有重跑或扩大范围的持续授权。后续若进入 `SW-V1/V2`、再次运行 Docker、修改 profile/schema 或触及 `SW-G2/SW-V3`，必须形成新的精确授权单元；`SW-G2` 未通过前仍不得执行 `SW-V3`。

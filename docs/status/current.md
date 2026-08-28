@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 已于 2026-08-28 接受；`mls-rs 0.56.0` 静态门已接受，OpenMLS 0.9.0 静态门 Draft 已形成，但 `SW-G2` 仍未通过；消息与验证语义已冻结，不代表 E2EE 路线、软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 静态门已接受，OpenMLS 0.9.0 静态门 Draft 已形成，但 `SW-G2` 仍未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -39,9 +39,9 @@
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
 - [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0`、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 与[确定性故障设计](../testing/sw-g3-deterministic-validation-design.md)的 `SW-G3` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)仍为 Draft；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
 - [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受；[OpenMLS 0.9.0 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)Draft 已形成。两者均未生成 RadishLink lockfile、未审计、未构建、未运行，也不得继承 OpenMLS 0.8.1 的授权或结论；
-- 除已提交的 `SW-EXP-002` 静态收口外，`SW-G2` 未完成、`SW-G4` 未获授权前，不再扩展测试代码、不实现新故障 profile、不安装密码依赖，也不重新运行场景；
+- [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
-- 下一步只评审 E2EE/身份候选、验证设计、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
+- 下一步只评审 E2EE/身份候选、`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
 - 无射频软件计划不能替代首个测试地区的法规核对，二者可以并行研究但分别关门。
 
 ## 决策门状态与下一步
@@ -52,12 +52,13 @@
 2. `SW-G0`：接受软件工作计划范围、探索性证据定位、工作顺序和暂停线；
 3. `SW-G1`：接受消息身份、lifetime、hop budget、custody、delivery/read、去重、配额和崩溃恢复语义；
 4. `SW-G3`：接受 profile schema、固定 seed、单变量故障矩阵、D0 数值、观察窗、证据和 `PASS/FAIL/INVALID` 判定。
+5. `SW-G4/SW-V0`：授权清单内实现、无依赖单元门禁和 Docker harness 自检完成；四个 profile 各三次 canonical run 均通过且归一化一致。
 
 下一步：
 
 1. 评审并决定是否接受[`OpenMLS 0.9.0` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)；即使接受，也只允许未来提交独立 Phase A 精确授权请求，不自动下载、构建或运行；
-2. 评审[`SW-G4 / SW-V0` Harness 最小实现与运行授权包](../testing/sw-g4-sw-v0-harness-authorization.md)；实施单元 A 与 Docker 运行单元 B 必须分别授权，当前不修改 `tools/t0/`；
-3. `SW-G2` 继续比较 mls-rs 0.56.0 与 OpenMLS 0.9.0 的 lockfile、许可证、advisory、状态安全与 Linux ARM64 实证；未通过前不执行 `SW-V3`；
+2. 基于已通过的 `SW-V0` 评审 `SW-V1/V2` 最小实现与运行授权边界；当前不新增 profile、不重跑 Docker，且 `SW-G2` 未通过前不执行 `SW-V3`；
+3. `SW-G2` 继续比较 mls-rs 0.56.0 与 OpenMLS 0.9.0 的 lockfile、许可证、advisory、状态安全与 Linux ARM64 实证；
 4. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
 5. 再分别提交软件运行、硬件采购/执行和射频实验的精确清单与授权；继续独立推进地区、SKU、频段、功率、带宽和天线核对。
 
@@ -66,9 +67,10 @@
 1. **`SW-EXP-002` 静态收口已提交**：`7da9140` 收口脚本、隔离副本、lockfile 漂移、manifest schema 2 与 checksum；未运行 Docker/Phase A/Phase B。
 2. **`SW-G3` 已接受**：`a5f5598` 形成的 profile schema、固定 seed、单变量矩阵、D0 数值、证据 manifest 和 `PASS/FAIL/INVALID` 已冻结；不构成实现或运行授权。
 3. **两个新候选门禁已分流**：`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 的 `SW-EXP-004` 静态门 Draft 已形成，新增 MSRV、JSON storage、0.8.1 迁移和 `hpke-rs 0.7` 传递图停止线。
-4. **`SW-G4/SW-V0` Draft 已形成**：只覆盖 topology、fault hit、clock 和 evidence 自检，冻结新增文件、无依赖单元验证、Docker 副作用与分段授权；未实施或运行。
-5. **保持暂停线**：今天不安装/构建密码依赖、不运行容器或三节点场景、不采购/刷写硬件、不发射射频。
-6. **保留历史证据**：约 1.5 GiB `SW-EXP-002` ignored cache、历史 artifact 与 fixed Rust image 默认保留；未获单独清理授权不删除。
+4. **`SW-G4/SW-V0` 已完成**：`67556fe` 实现四个 canonical profile、注入时钟、synthetic proxy、evidence finalizer 与正式入口；`7a4344b`、`674707a` 修复非 root 镜像权限，旧探索性状态机与 `go.mod` 未修改。
+5. **Docker canonical run 已通过**：两次权限前置失败分别保留为 `INVALID`；clean revision `674707a` 的 `sw-v0-20260828T131927Z-49781` 四个 profile 各三次均为 `PASS`，12 份 checksum 复核通过，退出码与残留均为零。
+6. **保持暂停线**：今天未安装或构建密码依赖，除获授权的 `SW-V0` 外未重跑其他容器或三节点场景；不采购/刷写硬件、不发射射频，`SW-V0 PASS` 不升级为产品或 P0 能力。
+7. **保留历史证据**：约 1.5 GiB `SW-EXP-002` ignored cache、三份本轮 `SW-V0` artifact 与其他历史 artifact 默认保留；未获单独清理授权不删除。
 
 ## 尚未冻结
 
@@ -94,6 +96,12 @@
 ./scripts/run-t0-three-node.sh
 ```
 
-第二个入口只产生 Docker/Ethernet 探索性证据，使用未加密合成载荷；脚本打印的 `T0 PASS` 是历史内部输出，只代表内部断言通过，不构成 `SW-V*`、P0、HaLow、E2EE、距离、媒体、功耗或法规验证。
+`SW-V0` 正式入口（已完成的授权不代表当前可重跑）：
+
+```bash
+./scripts/run-sw-v0-harness.sh run
+```
+
+探索性入口只产生 Docker/Ethernet 探针证据，使用未加密合成载荷；脚本打印的 `T0 PASS` 是历史内部输出。`SW-V0` 入口只验证 topology、fault hit、clock 与 evidence harness。两者都不构成 P0、HaLow、E2EE、距离、媒体、功耗或法规验证。
 
 仓库治理与远程状态边界见[仓库治理](../governance/repository-governance.md)。
