@@ -208,6 +208,7 @@ trap 'exit 143' TERM
 
 mkdir -p "${BUILD_CONTEXT}"
 cp -R "${REPO_ROOT}/tools/t0/profiles" "${BUILD_CONTEXT}/profiles"
+chmod -R a=rX "${BUILD_CONTEXT}/profiles"
 
 GO_ARCH="$(go env GOARCH)"
 GOCACHE="${WORK_DIR}/go-cache" \
