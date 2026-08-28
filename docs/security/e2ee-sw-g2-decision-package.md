@@ -1,6 +1,6 @@
 # SW-G2 E2EE 与身份候选决策包
 
-- 状态：Draft（OpenMLS 0.8.1 Phase A 已因 advisory/许可证停止；OpenMLS 0.9.0 与 mls-rs 0.56.0 待独立静态门和实证）
+- 状态：Draft（OpenMLS 0.8.1 Phase A 已停止；mls-rs 0.56.0 静态门已接受；OpenMLS 0.9.0 静态门待评审；两者均无实证）
 - 资料核对日期：2026-08-28
 - 适用 gate：`SW-G2`
 - 前置决策：`SW-G0/SW-G1` 已接受
@@ -12,7 +12,7 @@
 当前执行顺序为：
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
-2. 对 2026-08-25 发布的稳定 `OpenMLS 0.9.0` 重新形成精确依赖、provider、许可证和 advisory 静态门，不能继承 0.8.1 lockfile 或授权；
+2. 评审[`OpenMLS 0.9.0` 静态门禁与执行授权包](../testing/sw-g2-openmls-0.9-spike-authorization.md)，不能继承 0.8.1 lockfile 或授权；
 3. 以[`mls-rs 0.56.0` 静态门禁与执行授权包](../testing/sw-g2-mls-rs-spike-authorization.md)对照许可证、advisory、存储、互操作与平台边界；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
@@ -110,7 +110,7 @@
 
 ## 运行授权包要求
 
-本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)目前也只完成静态门禁。OpenMLS 0.9.0 刷新与任一候选运行仍必须重新形成独立授权。进入后续 spike 前必须满足：
+本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)的静态方案已接受，[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)仍待评审；两者的实施和运行都必须另行授权。进入后续 spike 前必须满足：
 
 - 精确依赖版本、commit、校验值、来源、许可证和 lockfile 变更；
 - 精确命令、目标平台、网络访问、临时目录、预计时长和最大资源占用；
@@ -134,4 +134,4 @@
 8. 篡改、重放、乱序、耗尽、旧 epoch、fork 与失败恢复结果可复现；
 9. 独立复核完成并以 Accepted ADR 冻结选择、限制和迁移边界。
 
-当前已完成决策包、上游证据收敛和 OpenMLS 0.8.1 Phase A。最终 run `20260824-215104-90006` 生成了 229 个 crates.io package 的 lockfile，来源检查通过；许可证检查拒绝实际检查图中的 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 对完整 lockfile 共报告 6 个 vulnerability。该 Phase A 保持 `STOP`，Phase B 禁止执行。2026-08-28 已形成 `mls-rs 0.56.0` 静态门禁，并确认 OpenMLS 0.9.0 已稳定发布；两者均未下载、生成 lockfile、审计或运行。尚无候选许可证结论、运行实证或 ADR，`SW-G2` 保持未通过。
+当前已完成决策包、上游证据收敛和 OpenMLS 0.8.1 Phase A。最终 run `20260824-215104-90006` 生成了 229 个 crates.io package 的 lockfile，来源检查通过；许可证检查拒绝实际检查图中的 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 对完整 lockfile 共报告 6 个 vulnerability。该 Phase A 保持 `STOP`，Phase B 禁止执行。2026-08-28 已接受 `mls-rs 0.56.0` 静态门禁，并形成 OpenMLS 0.9.0 独立静态门禁 Draft；两者均未下载、生成 lockfile、审计或运行。尚无候选许可证结论、运行实证或 ADR，`SW-G2` 保持未通过。
