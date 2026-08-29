@@ -13,8 +13,8 @@
 ## 工作流
 
 1. 先阅读[当前状态](docs/status/current.md)、[文档入口](docs/README.md)和对应专题。
-2. 普通变更从主题分支向 `dev` 发起 PR；`master` 只接收阶段性 `dev` 晋级或明确的 `hotfix/*`。
-3. 主题分支使用 `feature/*`、`fix/*`、`docs/*`、`research/*`、`experiment/*`、`chore/*` 或 `hotfix/*`。
+2. 项目所有者或已授权维护者串行推进普通任务时直接在 `dev` 开发和提交；外部贡献、并行写入、确有隔离价值的高风险改动或明确需要评审时，才从主题分支向 `dev` 发起 PR。`master` 只接收阶段性 `dev` 晋级或明确的 `hotfix/*`。
+3. 需要主题分支时，使用 `feature/*`、`fix/*`、`docs/*`、`research/*`、`experiment/*`、`chore/*` 或 `hotfix/*`；Agent 不因默认流程自动创建 `codex/*` 分支或额外 worktree。
 4. 提交遵循 Conventional Commits，例如 `docs(governance): define repository rules`。
 5. 不在提交信息中添加 AI 协作者署名；提交作者应是对变更负责的真实贡献者。
 6. PR 只记录实际执行过的验证，并显式列出未执行、受环境阻塞和需要人工或实验室完成的项目。

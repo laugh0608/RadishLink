@@ -15,7 +15,7 @@
 | RadishFlow | 多平台检查作为独立组件进入聚合 job | 未来 Linux 主机、辅助 MCU、手机端和协议测试分别接入，不提前冻结平台矩阵 |
 | RadishAxiom | 治理资产层级、可审阅 Ruleset 模板、提交规则放在 PR 范围检查 | 采用同类分层，并进一步移除模板中的远程角色魔法 ID |
 
-因此，RadishLink 的共同拓扑是 `topic -> dev -> master -> dev`；项目特有门禁则围绕无线电法规、设备身份、端到端加密、升级、公共协议、三节点证据和用户数据展开。
+因此，RadishLink 的共同拓扑是 `dev -> master -> dev`；确有隔离或评审需要时在前面增加 `topic -> dev`。项目特有门禁围绕无线电法规、设备身份、端到端加密、升级、公共协议、三节点证据和用户数据展开。
 
 ## 规则层级
 
@@ -59,7 +59,8 @@
 
 - `master` 是默认稳定主线，只通过 PR 接收阶段性晋级或 hotfix。
 - `dev` 是常态开发与集成分支。
-- 主题分支使用 `feature/*`、`fix/*`、`docs/*`、`research/*`、`experiment/*`、`chore/*` 或 `hotfix/*`。
+- 串行推进的普通任务直接进入 `dev`；外部贡献、并行写入、风险隔离或明确评审需求通过主题分支 PR 进入 `dev`。
+- 需要主题分支时，使用 `feature/*`、`fix/*`、`docs/*`、`research/*`、`experiment/*`、`chore/*` 或 `hotfix/*`；Agent 不自动创建 `codex/*` 分支或额外 worktree。
 - `research/*` 承载证据收集，`experiment/*` 承载原型；两者的结果都不会自动成为产品承诺或 Accepted ADR。
 - 共享分支禁止 force push、reset 或 rebase 造成的历史重写。
 - 提交使用 Conventional Commits，并按可审阅主题拆分；正常 Git merge commit 允许存在。
