@@ -1,6 +1,6 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：Accepted（精确方案，2026-08-28；实施单元 A 与运行控制单元 A2 已授权、完成本地实现和离线验证并形成 clean revision；L3 执行单元 B 未授权、未执行）
+- 状态：Executed / STOP（2026-08-30；固定 SQLite 依赖图在 lockfile 生成前冲突，Phase B 禁止）
 - 日期：2026-08-30
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
@@ -304,14 +304,27 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 - fixed image、artifact、`.work` cache 与 source gate 通过后生成的仓库 `Cargo.lock` 默认保留；删除或回滚任何一项都需要复核精确目标并另行授权；
 - 不运行 `docker system prune`、`docker image prune`、宽泛 label 删除、递归 artifact 清理、`git reset`、`git checkout` 或手工 lockfile 修复。
 
+## 2026-08-30 Phase A 执行结果
+
+用户在获知唯一命令、Docker/网络、预计时长与下载、用户态 deadline、磁盘监测、默认保留和清理边界后，明确授权执行一次单元 B。
+
+- 首次启动在任何 Docker、Cargo 或网络操作前因受限执行环境拒绝 Bash `/dev/fd` process substitution，以 `STOP/preflight`、退出码 `1` 结束；证据目录为 `20260830-085136-79099.fY2Gf7`。它只证明该受限环境不支持 runner 的日志重定向，不是候选依赖证据；
+- 随后经当前任务明确批准在沙箱外重试同一唯一命令。clean revision 为 `af14ef970f9343e6dd25e5c20e7e3ee0c746ad33`，有效证据目录为 `20260830-085316-79789.Pc2ZKb`；
+- fixed image 已存在，index digest 与本地 platform image ID 均为 `sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663`；host、daemon 与容器分别为 `arm64`、`aarch64`、`aarch64`，容器内为 `rustc/cargo 1.96.1`；
+- Cargo 更新 crates.io index 后在生成 lockfile 前退出 `101`。`openmls_sqlite_storage =0.3.0` 需要 `rusqlite ^0.37`，解析到 `rusqlite 0.37.0` / `libsqlite3-sys ^0.35.0`；本包另行固定的 `rusqlite =0.32.1` 引入 `libsqlite3-sys 0.30.1`。Cargo 禁止同一图同时包含两个 `links = "sqlite3"` 实现，因此该固定依赖基线不可解析；
+- 最终 manifest 为 `STOP/dependency-audit`，退出码 `101`；未生成或写入 `Cargo.lock`，source、license/advisory、feature 四类门均未开始，advisory DB revision 不可用，不得推导任何许可证或安全结论；
+- monitor 正常停止，耗时 `15029 ms`，本轮目录峰值 `4428 KiB`，未触发 45 分钟或 5 GiB 边界；checksum 全部通过，精确容器残留为 `0`，fixed image 和两份 ignored evidence 按约定保留；
+- 本次不构建或运行 OpenMLS 候选，不进入 Phase B，不修改产品代码，不生成迁移证据，不重跑。修订 `rusqlite` 固定版本或移除直接依赖都会改变已接受基线，必须先形成新的静态差异评审和精确授权，不能在本包内直接修补。
+
 ## 当前停止点与未来授权措辞
 
-本文精确方案已接受，单元 A 与运行控制单元 A2 已完成本地实现、离线验证并形成 clean revision。当前没有执行 Docker，没有网络访问、依赖下载、lockfile、审计结果或 `SW-EXP-004` artifact；单元 B 仍未授权且不得执行。
+本文精确方案已执行并在依赖解析门 `STOP`。当前存在两份 `SW-EXP-004` ignored evidence，但没有新 lockfile、许可证/advisory 结果、候选构建或场景实证；Phase B 禁止，固定依赖修订和再次 Phase A 均未授权。
 
 未来授权必须明确指出授权单元：
 
 - 单元 A：按本文文件清单实施最小骨架并运行列出的无网络静态验证；
 - 运行控制单元 A2：按本节文件清单实现并离线验证 deadline、磁盘 monitor、信号收口和证据；不包含 `prepare`、commit 或外部运行；
-- 单元 B：在 A 与 A2 均已提交、工作区干净后，执行一次 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare`，接受本文列出的 Docker、默认出站网络不具备域名 allowlist、第三方审计工具编译、5 GiB 用户态定期监测而非硬配额、可能新增 Cargo 生成的 lockfile，以及 45 分钟用户态 deadline。
+- 后续静态修订单元：只评审 `openmls_sqlite_storage 0.3.0` 与直接 `rusqlite` 的版本/feature 边界、迁移覆盖和相应来源；不得下载、生成 lockfile 或执行容器；
+- 新的执行单元：只有静态修订另行接受并提交为 clean revision 后，才可重新形成唯一命令、网络、依赖、证据、保留与清理边界并申请一次 Phase A 授权。
 
 任何只写“接受文档”“继续下一步”或此前只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。

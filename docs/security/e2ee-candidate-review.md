@@ -1,12 +1,12 @@
 # 端到端加密候选评审
 
-资料核对日期：2026-08-28
+资料核对日期：2026-08-30
 
 ## 用途与非目标
 
 本文为 P0 选择成熟密码协议与实现库定义候选集和停止线，读者是安全、协议与平台实现者。当前结论是“候选待验证”，不是算法、库、版本、密码套件或生产技术栈冻结，也不授权安装依赖或写入真实密钥。
 
-本评审属于[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G2` 输入。[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)已于 2026-08-24 通过 `SW-G1`，当前可以继续评审认证绑定、许可证、平台和状态安全；候选顺序、受限 spike、接受条件和授权边界已收敛到[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)。`SW-EXP-002` Phase A 已按独立授权执行并停止；任何后续库 spike、依赖安装或运行仍需精确方案与另行授权，`SW-G2` 未形成 ADR 前不把任何候选接入 `SW-V3/P0`。
+本评审属于[D0/P0 软件工作计划](../status/d0-t0-p0-plan.md)的 `SW-G2` 输入。[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)已于 2026-08-24 通过 `SW-G1`，当前可以继续评审认证绑定、许可证、平台和状态安全；候选顺序、受限 spike、接受条件和授权边界已收敛到[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)。`SW-EXP-002` 与 `SW-EXP-004` Phase A 均已按各自授权执行并停止；任何后续库 spike、固定依赖修订、依赖安装或运行仍需精确方案与另行授权，`SW-G2` 未形成 ADR 前不把任何候选接入 `SW-V3/P0`。
 
 本评审不自行拼装密码原语，不用 TLS/WPA3 代替应用层 E2EE，也不因 `SW-EXP-001` 合成明文通过而宣称 B 无法读取内容。
 
@@ -45,7 +45,7 @@ Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端
 当前阻塞项：
 
 - `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 的固定图已在 Phase A 命中 advisory 与许可证停止线：实际检查图含 3 个未获准的 `MPL-2.0` `hpke-rs*` crate，并包含与 AArch64 直接相关的 `RUSTSEC-2026-0212`；该 prepared run 禁止进入 Phase B；
-- `OpenMLS 0.9.0` 的稳定发布只解除 prerelease 停止线，不能证明旧 advisory、许可证和持久化风险已经关闭；[`SW-EXP-004` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)已接受，实施骨架与运行控制 A2 已完成本地实现、离线验证并形成 clean revision，但 Phase A 尚未执行；官方安全策略只覆盖主 `openmls` crate，crypto provider 与 storage backend 必须独立审计；
+- `OpenMLS 0.9.0` 的稳定发布只解除 prerelease 停止线，不能证明旧 advisory、许可证和持久化风险已经关闭；[`SW-EXP-004` Phase A](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已执行并在依赖解析门 `STOP`：固定 `rusqlite =0.32.1` 与 `openmls_sqlite_storage =0.3.0` 解析出的 `rusqlite 0.37.0` 分别引入不兼容的 `libsqlite3-sys`，未生成 lockfile 或进入许可证/advisory 门；官方安全策略只覆盖主 `openmls` crate，crypto provider 与 storage backend 必须独立审计；
 - 两成员组的离线并发 commit、乱序 epoch、分区合并和设备恢复复杂度必须以三节点故障矩阵验证；
 - Authentication Service、KeyPackage 发布/过期、Delivery Service 和联系人验证如何去中心化仍需设计；
 - 必须固定 provider、cipher suite、credential、extension、持久化事务和敏感 debug feature 策略；
@@ -70,4 +70,4 @@ libsodium、RustCrypto、OpenSSL、Noise primitives 或单独 AEAD 都可以成�
 
 ## 当前建议
 
-暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)保留 OpenMLS 0.8.1 Phase A 负向证据；[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[OpenMLS 0.9.0 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)均已接受但未执行，OpenMLS 0.9.0 仅完成不含依赖下载的实施骨架。`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前仍只做静态核对。只有候选通过精确依赖、advisory、许可证、命令、副作用和运行授权，才以同一套已接受 `SW-G3` A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。
+暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)保留 OpenMLS 0.8.1 Phase A 负向证据；[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受但未执行；[OpenMLS 0.9.0 Phase A](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已在固定 SQLite 依赖图冲突处停止，须先重新评审依赖基线。`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前仍只做静态核对。只有候选通过精确依赖、advisory、许可证、命令、副作用和运行授权，才以同一套已接受 `SW-G3` A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。

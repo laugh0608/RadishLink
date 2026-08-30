@@ -1,7 +1,7 @@
 # SW-G2 E2EE 与身份候选决策包
 
-- 状态：Draft（OpenMLS 0.8.1 Phase A 已停止；mls-rs 0.56.0 与 OpenMLS 0.9.0 静态门均已接受；两者均无实证）
-- 资料核对日期：2026-08-28
+- 状态：Draft（OpenMLS 0.8.1 与 0.9.0 Phase A 均已 `STOP`；mls-rs 0.56.0 静态门已接受但未执行）
+- 资料核对日期：2026-08-30
 - 适用 gate：`SW-G2`
 - 前置决策：`SW-G0/SW-G1` 已接受
 
@@ -12,7 +12,7 @@
 当前执行顺序为：
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
-2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已接受并完成实施单元 A 与运行控制单元 A2 的本地实现、离线验证及 clean revision；下一步先复核用户态 deadline、5 GiB 定期监测和默认网络无域名 allowlist，再单独决定一次 L3 Phase A，不能继承 0.8.1 lockfile、cache 或授权；
+2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已接受并完成实施单元 A/A2；获单次授权的 Phase A 在固定 `rusqlite` 与 storage backend 的 `sqlite3` links 冲突处 `STOP`，未生成 lockfile 或进入许可证/advisory 门，下一步必须先重新评审固定依赖基线，不能继承 0.8.1 lockfile、cache 或授权；
 3. 以[`mls-rs 0.56.0` 静态门禁与执行授权包](../testing/sw-g2-mls-rs-spike-authorization.md)对照许可证、advisory、存储、互操作与平台边界；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
@@ -23,7 +23,7 @@
 | 候选 | 固定评估基线 | 适配优势 | 当前停止线 | 当前定位 |
 | --- | --- | --- | --- | --- |
 | `OpenMLS` 旧基线 | `openmls-v0.8.1` / `47dbede` | MIT；Rust；可插拔 crypto/storage；MLS 两成员组与未来群组共用标准语义 | 固定图命中活跃 RustSec advisory，其中包含 AArch64 相关密码错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 未通过初始 allowlist | Phase A 负向基线；prepared run 禁止进入 Phase B |
-| `OpenMLS` 稳定刷新 | `openmls 0.9.0`（2026-08-25） | 官方列出 Linux AArch64 构建与测试；provider/storage 版本线已更新 | 完整传递图、许可证、advisory、存储迁移与 0.8 行为差异尚未审计；不得根据主 crate 发布页推定旧问题全部关闭 | 新静态候选，未授权下载或运行 |
+| `OpenMLS` 稳定刷新 | `openmls 0.9.0`（2026-08-25） | 官方列出 Linux AArch64 构建与测试；provider/storage 版本线已更新 | 固定 `rusqlite =0.32.1` 与 storage backend 所需 `rusqlite 0.37.0` 的 `sqlite3` links 冲突；完整传递图、许可证、advisory、迁移与 0.8 行为差异均未形成结论 | Phase A 依赖解析 `STOP`；先重审固定依赖基线 |
 | `mls-rs` | `0.56.0` | Apache-2.0 OR MIT；Rust；提供 storage traits、SQLite provider、互操作与 FFI/UniFFI 路径 | 官方未给出完整 Linux ARM64 支持矩阵，并明确没有完整第三方安全审计 | 对照候选，不是后备默认值 |
 | `libsignal` | `v0.101.0` / `b056faa` | 一对一异步初始协商、逐消息 ratchet 与多设备会话语义最直接 | AGPL-3.0 与本仓库、分发和商店渠道的义务尚未独立确认；官方 native artifact 列表未列 Debian/Linux ARM64；公开 bridge 不是稳定 API 承诺 | 静态核对，未过停止线不进入运行 |
 
@@ -110,7 +110,7 @@
 
 ## 运行授权包要求
 
-本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)与[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的静态方案均已接受；OpenMLS 的[实施骨架与 Phase A 精确包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已接受且单元 A/A2 已完成本地实现、离线验证并形成 clean revision，L3 单元 B 仍未授权。两者的依赖下载、审计和运行都必须另行授权。进入后续 spike 前必须满足：
+本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)与[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的静态方案均已接受；OpenMLS 的[实施骨架与 Phase A 精确包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已执行并在依赖解析门 `STOP`，未生成 lockfile 或进入许可证/advisory 门。两者任何新的依赖下载、审计和运行都必须另行授权。进入后续 spike 前必须满足：
 
 - 精确依赖版本、commit、校验值、来源、许可证和 lockfile 变更；
 - 精确命令、目标平台、网络访问、临时目录、预计时长和最大资源占用；

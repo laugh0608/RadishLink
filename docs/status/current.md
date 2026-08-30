@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 与 OpenMLS 0.9.0 静态门均已接受但未执行，OpenMLS 0.9.0 Phase A 精确包的实施单元 A 与运行控制单元 A2 已完成本地实现、离线验证并形成 clean revision，L3 单元 B 未授权，`SW-G2` 仍未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 Phase A 已执行并因固定 `rusqlite` 与 storage backend 的 `sqlite3` links 冲突在 lockfile 生成前 `STOP`，`SW-G2` 仍未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -38,7 +38,7 @@
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
 - [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0`、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 与[确定性故障设计](../testing/sw-g3-deterministic-validation-design.md)的 `SW-G3` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)仍为 Draft；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
-- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[OpenMLS 0.9.0 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)均已接受；OpenMLS 的[实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已接受，实施单元 A 与运行控制单元 A2 已完成本地实现、离线验证并形成 clean revision，L3 单元 B 未授权。A2 增加 45 分钟用户态 deadline、5 GiB 每 5 秒 apparent-size 监测、受控子进程终止和停止证据；该磁盘控制不是文件系统硬配额，默认出站网络也仍不提供域名 allowlist。只有下一次授权明确接受这些边界，才可执行 B。两条候选均未生成 RadishLink lockfile、未审计、未构建、未运行，也不得继承 OpenMLS 0.8.1 的授权或结论；
+- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受但未执行；OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已执行，固定 `rusqlite =0.32.1` 与 `openmls_sqlite_storage =0.3.0` 所需 `rusqlite 0.37.0` 分别引入不兼容的 `libsqlite3-sys`，Cargo 在 lockfile 生成前 `STOP`。没有许可证/advisory 结论、候选构建或场景运行；Phase B 禁止，固定依赖修订和再次 Phase A 均须另行评审与授权；
 - [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
 - 下一步只评审 E2EE/身份候选、`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
@@ -56,7 +56,7 @@
 
 下一步：
 
-1. 对已形成 clean revision 的[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)执行 L3 前复核；只有下一次授权明确接受用户态 deadline、5 GiB 定期监测而非硬配额及默认出站网络无域名 allowlist，才执行一次单元 B；
+1. 为 `SW-EXP-004` 形成无 Docker、无网络的固定 SQLite 依赖差异评审，比较将直接 `rusqlite` 对齐 storage backend 或移除直接依赖的影响；在依赖、feature、迁移和许可证边界重新接受前不修改候选、不重跑 Phase A；
 2. 基于已通过的 `SW-V0` 评审 `SW-V1/V2` 最小实现与运行授权边界；当前不新增 profile、不重跑 Docker，且 `SW-G2` 未通过前不执行 `SW-V3`；
 3. `SW-G2` 继续比较 mls-rs 0.56.0 与 OpenMLS 0.9.0 的 lockfile、许可证、advisory、状态安全与 Linux ARM64 实证；
 4. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
@@ -64,10 +64,12 @@
 
 ## 今日推进（2026-08-30）
 
-1. **运行控制单元 A2 已完成本地实现**：新增 Python 标准库 monitor，并接入既有 OpenMLS 0.9 runner；固定 45 分钟用户态 deadline、5 GiB 每 5 秒 apparent-size 监测、受控子进程 `TERM`/最多 5 秒后 `KILL` 收口、退出期 `du` 复核和 schema 2 运行控制证据。
-2. **离线负例已通过**：合成 deadline、磁盘越界、monitor 向父进程发 `TERM`、runner 主动停止 monitor 均通过；shell 语法和无参数/`run` 前置拒绝通过。没有运行 `prepare`、Docker、Cargo 或网络，也没有生成 lockfile 或 `SW-EXP-004` artifact。
-3. **结论边界未扩大**：5 GiB 是用户态定期监测，不是文件系统硬配额；Docker 默认出站网络仍没有域名 allowlist；A2 已形成 clean revision，但 L3 单元 B 未授权，`SW-G2` 仍未通过。
-4. **下一停止点**：完成 L3 单元 B 的只读执行前复核，向用户重新说明精确命令、副作用、时长、下载、保留与清理并申请一次授权；不得把笼统“继续下一步”解释为执行授权。
+1. **运行控制单元 A2 已提交**：`af14ef9` 新增 Python 标准库 monitor 并接入 OpenMLS 0.9 runner；固定 45 分钟用户态 deadline、5 GiB 每 5 秒 apparent-size 监测、受控子进程终止、退出复核和 schema 2 证据。
+2. **离线门禁已通过**：deadline、磁盘越界、信号收口、shell 语法、参数拒绝、manifest 渲染、仓库基线和 diff 检查均通过。
+3. **受限环境前置尝试已停止**：`20260830-085136-79099.fY2Gf7` 在 Docker/Cargo/网络前因 `/dev/fd` process substitution 被环境拒绝，以 `STOP/preflight` 结束；该尝试不是候选证据。
+4. **获批准的 Phase A 已在依赖解析门停止**：clean revision `af14ef9` 的 `20260830-085316-79789.Pc2ZKb` 验证固定 ARM64 image 与 Rust/Cargo 1.96.1 后，Cargo 因两套不兼容 `libsqlite3-sys` 的 `links = "sqlite3"` 冲突退出 `101`；未生成 lockfile，未进入来源、许可证/advisory 或 feature 门。
+5. **证据与清理已闭合**：有效运行 checksum 全部通过，monitor 在 `15029 ms` 正常停止，目录峰值 `4428 KiB`，容器残留为 `0`；两份 ignored evidence 与原有 fixed image 保留，未 push、未进入 Phase B。
+6. **下一停止点**：先形成无 Docker、无网络的固定 SQLite 依赖差异评审；直接把 `rusqlite` 改为 0.37、移除直接依赖或重跑都不在当前授权内，`SW-G2` 仍未通过。
 
 ## 上一批次（2026-08-28）
 
@@ -83,9 +85,9 @@
 
 ## 下一事项
 
-1. **先完成 L3 前复核**：确认 A2 clean revision、工作区、候选目录、可用空间与授权包口径一致；只读预检不调用 Docker、Cargo 或网络。
-2. **随后才决定一次 L3 单元 B**：向用户完整说明唯一命令、Docker/网络、第三方审计工具编译、15–45 分钟、0.8–2.5 GiB 下载、5 GiB 用户态监测而非硬配额、可能新增 Cargo lockfile、默认保留 cache/evidence 和精确清理方式；获得当次明确授权后才执行一次，不自动重试、不进入 Phase B。
-3. **若不进入 L3**：只做 `SW-V1/V2` 最小授权边界或 `HW-G0/HW-G1` 已有设备/BSP 的只读评审；继续不重跑容器、不安装依赖、不采购/刷写硬件、不产生射频发射。
+1. **先做固定依赖差异评审**：只读比较 `openmls_sqlite_storage 0.3.0`、`rusqlite 0.37.0` 与直接 `rusqlite` 是否必要，明确 `bundled` feature、JSON/SQLite 双后端、0.8.1 迁移和许可证影响；当前不改 `Cargo.toml`。
+2. **修订需重新过门**：任何依赖或 feature 变化都使既有精确包失效；先形成静态修订包并另行接受，再实施 clean revision，最后才申请新的单次 Phase A。
+3. **并行低风险事项**：若不修订 OpenMLS，可只做 `SW-V1/V2` 最小授权边界或 `HW-G0/HW-G1` 已有设备/BSP 的只读评审；继续不重跑容器、不安装依赖、不采购/刷写硬件、不产生射频发射。
 
 ## 尚未冻结
 
