@@ -13,37 +13,182 @@ lock_relative="${spike_relative}/Cargo.lock"
 repo_lock="${repo_root}/${lock_relative}"
 artifact_parent="${repo_root}/artifacts"
 artifact_root="${artifact_parent}/sw-g2-openmls-0.9"
+audit_tools_artifact_root="${artifact_parent}/sw-g2-openmls-0.9-audit-tools"
 image_digest="sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663"
 image_ref="rust:1.96.1-bookworm@${image_digest}"
 expected_platform="linux/arm64"
 label_key="org.radishlink.sw-g2-openmls-0.9.run"
 scenario_id="phase-a-dependency-audit"
+audit_tool_bundle_contract="sw-exp-004-audit-tools-v1"
+cargo_audit_version="0.22.2"
+cargo_deny_version="0.20.2"
 minimum_disk_kib=5242880
 runtime_timeout_seconds=2700
 runtime_disk_budget_kib=5242880
 runtime_poll_interval_seconds=5
 
 usage() {
-  echo "usage: $0 prepare" >&2
+  echo "usage: $0 prepare <audit-tool-bundle-id>" >&2
 }
 
-if [ "$#" -ne 1 ]; then
+if [ "$#" -ne 2 ]; then
   usage
   exit 2
 fi
 
 action=$1
+audit_tool_bundle_id=$2
 if [ "${action}" != "prepare" ]; then
   echo "only Phase A 'prepare' is implemented; Phase B remains blocked" >&2
   exit 2
 fi
+if ! [[ "${audit_tool_bundle_id}" =~ ^[0-9]{8}-[0-9]{6}-[0-9]+\.[A-Za-z0-9]{6}$ ]]; then
+  echo "audit tool bundle ID does not match the fixed run ID format" >&2
+  exit 2
+fi
 
-for command_name in awk basename chmod cp date df docker du find git id jq ln mkdir mktemp mv pwd python3 rg rm shasum sleep tee uname; do
+for command_name in awk basename chmod cp date df docker du find git id jq ln mkdir mktemp mv pwd python3 rg rm shasum sleep sort tee uname; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "required command is unavailable: ${command_name}" >&2
     exit 1
   fi
 done
+
+if [ ! -d "${audit_tools_artifact_root}" ] || [ -L "${audit_tools_artifact_root}" ]; then
+  echo "audit tool artifact root is missing or is a symbolic link: ${audit_tools_artifact_root}" >&2
+  exit 2
+fi
+resolved_audit_tools_artifact_root="$(CDPATH= cd -- "${audit_tools_artifact_root}" && pwd -P)"
+if [ "${resolved_audit_tools_artifact_root}" != "${audit_tools_artifact_root}" ]; then
+  echo "audit tool artifact root resolves outside the expected repository path" >&2
+  exit 2
+fi
+
+audit_tool_bundle_dir="${audit_tools_artifact_root}/${audit_tool_bundle_id}"
+audit_tool_bundle_bin="${audit_tool_bundle_dir}/bundle/bin"
+audit_tool_bundle_manifest="${audit_tool_bundle_dir}/manifest.json"
+audit_tool_bundle_checksums="${audit_tool_bundle_dir}/checksums.sha256"
+if [ ! -d "${audit_tool_bundle_dir}" ] || [ -L "${audit_tool_bundle_dir}" ]; then
+  echo "requested audit tool bundle is missing or is a symbolic link: ${audit_tool_bundle_id}" >&2
+  exit 2
+fi
+resolved_audit_tool_bundle_dir="$(CDPATH= cd -- "${audit_tool_bundle_dir}" && pwd -P)"
+if [ "${resolved_audit_tool_bundle_dir}" != "${audit_tool_bundle_dir}" ]; then
+  echo "audit tool bundle resolves outside the expected artifact root" >&2
+  exit 2
+fi
+if find "${audit_tool_bundle_dir}/bundle" -type l -print -quit | rg -q .; then
+  echo "audit tool bundle payload must not contain symbolic links" >&2
+  exit 2
+fi
+
+bundle_required_files=(
+  "${audit_tool_bundle_bin}/cargo-audit"
+  "${audit_tool_bundle_bin}/cargo-deny"
+  "${audit_tool_bundle_dir}/cargo-audit-version.txt"
+  "${audit_tool_bundle_dir}/cargo-deny-version.txt"
+  "${audit_tool_bundle_dir}/container-toolchain.txt"
+  "${audit_tool_bundle_dir}/git-status-after.txt"
+  "${audit_tool_bundle_dir}/git-status-before.txt"
+  "${audit_tool_bundle_dir}/image-index.txt"
+  "${audit_tool_bundle_dir}/image-inspect.json"
+  "${audit_tool_bundle_manifest}"
+  "${audit_tool_bundle_dir}/runtime-control.json"
+  "${audit_tool_bundle_checksums}"
+)
+for bundle_required_file in "${bundle_required_files[@]}"; do
+  if [ ! -f "${bundle_required_file}" ] || [ -L "${bundle_required_file}" ]; then
+    echo "audit tool bundle file is missing or invalid: ${bundle_required_file}" >&2
+    exit 2
+  fi
+done
+if [ ! -x "${audit_tool_bundle_bin}/cargo-audit" ] || [ ! -x "${audit_tool_bundle_bin}/cargo-deny" ]; then
+  echo "audit tool bundle binaries must be executable" >&2
+  exit 2
+fi
+if [ -w "${audit_tool_bundle_bin}/cargo-audit" ] || [ -w "${audit_tool_bundle_bin}/cargo-deny" ]; then
+  echo "audit tool bundle binaries must not be host-writable" >&2
+  exit 2
+fi
+if find "${audit_tool_bundle_bin}" -mindepth 1 -maxdepth 1 \
+  ! -name cargo-audit ! -name cargo-deny -print -quit | rg -q .; then
+  echo "audit tool bundle bin directory contains an unexpected entry" >&2
+  exit 2
+fi
+if ! jq -e \
+  --arg contract "${audit_tool_bundle_contract}" \
+  --arg run_id "${audit_tool_bundle_id}" \
+  --arg image_ref "${image_ref}" \
+  --arg platform "${expected_platform}" \
+  --arg audit_version "${cargo_audit_version}" \
+  --arg deny_version "${cargo_deny_version}" '
+    .schema_version == 1
+    and .bundle_contract == $contract
+    and .run_id == $run_id
+    and .outcome == "PASS"
+    and .stage == "audit-tools-bundle-ready"
+    and .exit_code == 0
+    and .image_ref == $image_ref
+    and .image_index_digest == ($image_ref | split("@") | .[1])
+    and .target_platform == $platform
+    and (.image_platform_id | test("^sha256:[0-9a-f]{64}$"))
+    and .container_arch == "aarch64"
+    and (.rust_version | test("^rustc 1\\.96\\.1 "))
+    and (.cargo_version | test("^cargo 1\\.96\\.1 "))
+    and .git_status_before == ""
+    and .git_status_after == ""
+    and .tools.cargo_audit.requested_version == $audit_version
+    and .tools.cargo_deny.requested_version == $deny_version
+    and .tools.cargo_audit.reported_version == ("cargo-audit " + $audit_version)
+    and .tools.cargo_deny.reported_version == ("cargo-deny " + $deny_version)
+    and .runtime_controls.termination_reason == "completed"
+    and .runtime_controls.timeout_seconds == 5400
+    and .runtime_controls.disk_budget_kib == 5242880
+    and .runtime_controls.network_egress_enforcement == "docker-default-network-no-domain-allowlist"
+    and .runtime_controls.validation_network == "none"
+    and .container_residual_count == 0
+  ' "${audit_tool_bundle_manifest}" >/dev/null; then
+  echo "audit tool bundle manifest does not satisfy the fixed contract" >&2
+  exit 2
+fi
+
+bundle_checksum_prefix="artifacts/sw-g2-openmls-0.9-audit-tools/${audit_tool_bundle_id}"
+bundle_expected_checksum_labels="$(printf '%s\n' \
+  "${bundle_checksum_prefix}/bundle/bin/cargo-audit" \
+  "${bundle_checksum_prefix}/bundle/bin/cargo-deny" \
+  "${bundle_checksum_prefix}/cargo-audit-version.txt" \
+  "${bundle_checksum_prefix}/cargo-deny-version.txt" \
+  "${bundle_checksum_prefix}/container-toolchain.txt" \
+  "${bundle_checksum_prefix}/git-status-after.txt" \
+  "${bundle_checksum_prefix}/git-status-before.txt" \
+  "${bundle_checksum_prefix}/image-index.txt" \
+  "${bundle_checksum_prefix}/image-inspect.json" \
+  "${bundle_checksum_prefix}/manifest.json" \
+  "${bundle_checksum_prefix}/runtime-control.json" | LC_ALL=C sort)"
+bundle_actual_checksum_labels="$(awk 'NF == 2 { print $2 } NF != 2 { invalid = 1 } END { if (invalid) exit 1 }' \
+  "${audit_tool_bundle_checksums}" | LC_ALL=C sort)" || {
+  echo "audit tool bundle checksum file has an invalid format" >&2
+  exit 2
+}
+if [ "${bundle_actual_checksum_labels}" != "${bundle_expected_checksum_labels}" ]; then
+  echo "audit tool bundle checksum set does not match the fixed contract" >&2
+  exit 2
+fi
+if ! (CDPATH= cd -- "${repo_root}" && shasum -a 256 -c "${audit_tool_bundle_checksums}" >/dev/null); then
+  echo "audit tool bundle checksum verification failed" >&2
+  exit 2
+fi
+
+audit_tool_bundle_manifest_sha="$(shasum -a 256 "${audit_tool_bundle_manifest}" | awk '{print $1}')"
+cargo_audit_binary_sha="$(shasum -a 256 "${audit_tool_bundle_bin}/cargo-audit" | awk '{print $1}')"
+cargo_deny_binary_sha="$(shasum -a 256 "${audit_tool_bundle_bin}/cargo-deny" | awk '{print $1}')"
+if [ "$(jq -r '.tools.cargo_audit.binary_sha256' "${audit_tool_bundle_manifest}")" != "${cargo_audit_binary_sha}" ] ||
+  [ "$(jq -r '.tools.cargo_deny.binary_sha256' "${audit_tool_bundle_manifest}")" != "${cargo_deny_binary_sha}" ]; then
+  echo "audit tool bundle binary digest does not match its manifest" >&2
+  exit 2
+fi
+cargo_audit_reported_version="$(jq -r '.tools.cargo_audit.reported_version' "${audit_tool_bundle_manifest}")"
+cargo_deny_reported_version="$(jq -r '.tools.cargo_deny.reported_version' "${audit_tool_bundle_manifest}")"
 
 required_inputs=(
   "${repo_root}/LICENSE"
@@ -151,7 +296,6 @@ runtime_disk_peak_kib="unavailable"
 mkdir -p \
   "${work_dir}/cargo-home" \
   "${work_dir}/cargo-target" \
-  "${work_dir}/audit-tools" \
   "${prepared_spike}/src"
 : > "${run_log}"
 
@@ -164,7 +308,7 @@ write_manifest() {
   local manifest_tmp="${run_dir}/manifest.json.tmp"
 
   jq -n \
-    --arg schema_version "2" \
+    --arg schema_version "3" \
     --arg evidence_id "SW-EXP-004" \
     --arg phase "phase-a" \
     --arg scenario_id "${scenario_id}" \
@@ -186,6 +330,15 @@ write_manifest() {
     --arg target_platform "${expected_platform}" \
     --arg rust_version "${rust_version}" \
     --arg cargo_version "${cargo_version}" \
+    --arg audit_tool_bundle_contract "${audit_tool_bundle_contract}" \
+    --arg audit_tool_bundle_id "${audit_tool_bundle_id}" \
+    --arg audit_tool_bundle_manifest_sha256 "${audit_tool_bundle_manifest_sha}" \
+    --arg cargo_audit_requested_version "${cargo_audit_version}" \
+    --arg cargo_audit_reported_version "${cargo_audit_reported_version}" \
+    --arg cargo_audit_binary_sha256 "${cargo_audit_binary_sha}" \
+    --arg cargo_deny_requested_version "${cargo_deny_version}" \
+    --arg cargo_deny_reported_version "${cargo_deny_reported_version}" \
+    --arg cargo_deny_binary_sha256 "${cargo_deny_binary_sha}" \
     --arg cargo_lock_sha256 "${lock_sha}" \
     --arg expected_lock_sha256 "${expected_lock_sha}" \
     --arg advisory_db_revision "${advisory_db_revision}" \
@@ -239,6 +392,22 @@ write_manifest() {
       target_platform: \$target_platform,
       rust_version: \$rust_version,
       cargo_version: \$cargo_version,
+      audit_tool_bundle: {
+        contract: \$audit_tool_bundle_contract,
+        id: \$audit_tool_bundle_id,
+        manifest_sha256: \$audit_tool_bundle_manifest_sha256,
+        mount_mode: "read-only",
+        cargo_audit: {
+          requested_version: \$cargo_audit_requested_version,
+          reported_version: \$cargo_audit_reported_version,
+          binary_sha256: \$cargo_audit_binary_sha256
+        },
+        cargo_deny: {
+          requested_version: \$cargo_deny_requested_version,
+          reported_version: \$cargo_deny_reported_version,
+          binary_sha256: \$cargo_deny_binary_sha256
+        }
+      },
       direct_dependencies: {
         openmls: { version: \"=0.9.0\", default_features: false, features: [\"fork-resolution\"] },
         openmls_basic_credential: { version: \"=0.6.0\", features: [] },
@@ -267,7 +436,10 @@ write_manifest() {
         deny_toml: \$deny_toml_sha256,
         main_rs: \$main_rs_sha256,
         runtime_control_helper: \$runtime_control_helper_sha256,
-        runner: \$runner_sha256
+        runner: \$runner_sha256,
+        audit_tool_bundle_manifest: \$audit_tool_bundle_manifest_sha256,
+        cargo_audit_binary: \$cargo_audit_binary_sha256,
+        cargo_deny_binary: \$cargo_deny_binary_sha256
       },
       lockfile_preexisting: (\$lockfile_preexisting == \"true\"),
       lockfile_written: (\$lockfile_written == \"true\"),
@@ -359,7 +531,10 @@ inputs_unchanged() {
     [ "$(shasum -a 256 "${spike_root}/deny.toml" | awk '{print $1}')" = "${deny_toml_sha}" ] &&
     [ "$(shasum -a 256 "${spike_root}/src/main.rs" | awk '{print $1}')" = "${main_rs_sha}" ] &&
     [ "$(shasum -a 256 "${runtime_control_helper}" | awk '{print $1}')" = "${runtime_control_helper_sha}" ] &&
-    [ "$(shasum -a 256 "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" | awk '{print $1}')" = "${runner_sha}" ]
+    [ "$(shasum -a 256 "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" | awk '{print $1}')" = "${runner_sha}" ] &&
+    [ "$(shasum -a 256 "${audit_tool_bundle_manifest}" | awk '{print $1}')" = "${audit_tool_bundle_manifest_sha}" ] &&
+    [ "$(shasum -a 256 "${audit_tool_bundle_bin}/cargo-audit" | awk '{print $1}')" = "${cargo_audit_binary_sha}" ] &&
+    [ "$(shasum -a 256 "${audit_tool_bundle_bin}/cargo-deny" | awk '{print $1}')" = "${cargo_deny_binary_sha}" ]
 }
 
 promote_lockfile() {
@@ -510,6 +685,87 @@ load_runtime_control_state() {
   runtime_disk_peak_kib="$(jq -r '.disk_peak_kib // "unavailable"' "${runtime_state_path}")"
 }
 
+load_partial_dependency_state() {
+  local advisory_git_dir=""
+
+  if [ -f "${run_dir}/Cargo.lock" ] && [ ! -L "${run_dir}/Cargo.lock" ]; then
+    lock_sha="$(shasum -a 256 "${run_dir}/Cargo.lock" | awk '{print $1}')"
+  fi
+  if [ -f "${run_dir}/cargo-metadata.json" ] && [ ! -L "${run_dir}/cargo-metadata.json" ] &&
+    jq -e '.packages | type == "array"' "${run_dir}/cargo-metadata.json" >/dev/null 2>&1; then
+    resolved_package_count="$(jq '.packages | length' "${run_dir}/cargo-metadata.json")"
+  fi
+  if [ -f "${run_dir}/audit-exit-codes.json" ] && [ ! -L "${run_dir}/audit-exit-codes.json" ] &&
+    jq -e . "${run_dir}/audit-exit-codes.json" >/dev/null 2>&1; then
+    source_status="$(jq -r '.source // "unavailable"' "${run_dir}/audit-exit-codes.json")"
+    audit_status="$(jq -r '.audit // "unavailable"' "${run_dir}/audit-exit-codes.json")"
+    deny_status="$(jq -r '.deny // "unavailable"' "${run_dir}/audit-exit-codes.json")"
+    feature_status="$(jq -r '.feature // "unavailable"' "${run_dir}/audit-exit-codes.json")"
+  fi
+  if [ -f "${run_dir}/advisory-db-revision.txt" ] &&
+    [ ! -L "${run_dir}/advisory-db-revision.txt" ]; then
+    advisory_db_revision="$(awk 'NF { print; found = 1; exit } END { if (!found) exit 1 }' \
+      "${run_dir}/advisory-db-revision.txt" 2>/dev/null || printf '%s' unavailable)"
+  elif [ -d "${work_dir}/cargo-home" ] && [ ! -L "${work_dir}/cargo-home" ]; then
+    advisory_git_dir="$(find "${work_dir}/cargo-home" -type d -name .git -path '*/advisory-db*' -print -quit 2>/dev/null || true)"
+    if [ -n "${advisory_git_dir}" ]; then
+      advisory_db_revision="$(git --git-dir "${advisory_git_dir}" rev-parse HEAD 2>/dev/null || printf '%s' unavailable)"
+    fi
+  fi
+}
+
+evaluate_feature_gate() {
+  if [ ! -f "${run_dir}/cargo-metadata.json" ] || [ -L "${run_dir}/cargo-metadata.json" ] ||
+    ! jq -e . "${run_dir}/cargo-metadata.json" >/dev/null 2>&1; then
+    feature_status="unavailable"
+    return 0
+  fi
+
+  set +e
+  jq -e '
+    . as $metadata
+    | [$metadata.packages[] | select(.name == "hpke-rs" and (.version | startswith("0.7."))) | .id] as $hpke_ids
+    | [$metadata.packages[] | select(.name | startswith("openmls")) | .id] as $openmls_ids
+    | ($hpke_ids | length) > 0
+      and ($openmls_ids | length) > 0
+      and all($hpke_ids[];
+        . as $package_id
+        | any($metadata.resolve.nodes[];
+            .id == $package_id and (.features | index("experimental") != null)))
+      and all($openmls_ids[];
+        . as $package_id
+        | any($metadata.resolve.nodes[];
+            .id == $package_id
+            and ([.features[] | select(
+              . == "content-debug"
+              or . == "crypto-debug"
+              or . == "test-utils"
+              or . == "backtrace"
+              or . == "migration-import"
+              or . == "migration-export"
+              or . == "0-8-1-storage-format"
+            )] | length) == 0))
+  ' "${run_dir}/cargo-metadata.json" >/dev/null
+  feature_status=$?
+  set -e
+}
+
+write_gate_exit_codes() {
+  jq -n \
+    --arg source "${source_status}" \
+    --arg audit "${audit_status}" \
+    --arg deny "${deny_status}" \
+    --arg feature "${feature_status}" \
+    "${number_or_null_jq}
+    {
+      source: number_or_null(\$source),
+      audit: number_or_null(\$audit),
+      deny: number_or_null(\$deny),
+      feature: number_or_null(\$feature)
+    }" > "${run_dir}/audit-exit-codes.json.tmp"
+  mv "${run_dir}/audit-exit-codes.json.tmp" "${run_dir}/audit-exit-codes.json"
+}
+
 handle_int() {
   received_signal="INT"
   exit 130
@@ -557,6 +813,10 @@ cleanup() {
         ;;
     esac
   fi
+
+  # Signals and runtime stops bypass the normal post-container path. Recover only
+  # evidence that was already written; do not run or imply an unexecuted gate.
+  load_partial_dependency_state
 
   if [ -e "${promotion_temp}" ] && [ -f "${promotion_temp}" ] && [ ! -L "${promotion_temp}" ]; then
     rm -f -- "${promotion_temp}"
@@ -809,7 +1069,7 @@ container_arch="$(awk 'NR == 1 { print $2; exit }' "${run_dir}/container-toolcha
 rust_version="$(awk '/^rustc / { print; exit }' "${run_dir}/container-toolchain.txt")"
 cargo_version="$(awk '/^cargo / { print; exit }' "${run_dir}/container-toolchain.txt")"
 
-echo "[6/8] generate the independent lockfile and run source, license, and advisory gates"
+echo "[6/8] generate the independent lockfile and run gates with the verified read-only audit tool bundle"
 current_stage="dependency-audit"
 set +e
 run_controlled docker run --rm \
@@ -830,10 +1090,11 @@ run_controlled docker run --rm \
   --env CARGO_INCREMENTAL=0 \
   --env CARGO_TERM_COLOR=never \
   --mount "type=bind,source=${run_dir},target=/evidence" \
+  --mount "type=bind,source=${audit_tool_bundle_bin},target=/audit-tools/bin,readonly" \
   --workdir "/evidence/.work/repo/${spike_relative}" \
   "${image_ref}" \
   sh -euc '
-    mkdir -p "$HOME" "$CARGO_HOME" "$CARGO_TARGET_DIR" /evidence/.work/audit-tools
+    mkdir -p "$HOME" "$CARGO_HOME" "$CARGO_TARGET_DIR"
     cargo generate-lockfile
     cp Cargo.lock /evidence/Cargo.lock
     generated_lock_sha="$(sha256sum Cargo.lock | awk '\''{print $1}'\'')"
@@ -843,15 +1104,12 @@ run_controlled docker run --rm \
     cargo tree --locked --target all > /evidence/cargo-tree.txt
     cargo tree --locked --target all --edges features > /evidence/cargo-tree-features.txt
     cargo tree --locked --duplicates > /evidence/cargo-tree-duplicates.txt
-    cargo install cargo-audit --version 0.22.2 --locked --root /evidence/.work/audit-tools
-    cargo install cargo-deny --version 0.20.2 --locked --root /evidence/.work/audit-tools
-    export PATH="/evidence/.work/audit-tools/bin:$PATH"
     set +e
-    cargo deny check sources > /evidence/cargo-deny-sources.txt 2>&1
+    /audit-tools/bin/cargo-deny check sources > /evidence/cargo-deny-sources.txt 2>&1
     source_status=$?
-    cargo audit --json > /evidence/cargo-audit.json
+    /audit-tools/bin/cargo-audit --json > /evidence/cargo-audit.json
     audit_status=$?
-    cargo deny check advisories licenses > /evidence/cargo-deny.txt 2>&1
+    /audit-tools/bin/cargo-deny check advisories licenses > /evidence/cargo-deny.txt 2>&1
     deny_status=$?
     set -e
     printf "{\"source\":%s,\"audit\":%s,\"deny\":%s}\n" \
@@ -867,71 +1125,13 @@ run_controlled docker run --rm \
 prepare_status=$?
 set -e
 
-if [ -f "${run_dir}/Cargo.lock" ] && [ ! -L "${run_dir}/Cargo.lock" ]; then
-  lock_sha="$(shasum -a 256 "${run_dir}/Cargo.lock" | awk '{print $1}')"
-fi
-if [ -f "${run_dir}/cargo-metadata.json" ] && jq -e . "${run_dir}/cargo-metadata.json" >/dev/null 2>&1; then
-  resolved_package_count="$(jq '.packages | length' "${run_dir}/cargo-metadata.json")"
-  set +e
-  jq -e '
-    . as $metadata
-    | [$metadata.packages[] | select(.name == "hpke-rs" and (.version | startswith("0.7."))) | .id] as $hpke_ids
-    | [$metadata.packages[] | select(.name | startswith("openmls")) | .id] as $openmls_ids
-    | ($hpke_ids | length) > 0
-      and ($openmls_ids | length) > 0
-      and all($hpke_ids[];
-        . as $package_id
-        | any($metadata.resolve.nodes[];
-            .id == $package_id and (.features | index("experimental") != null)))
-      and all($openmls_ids[];
-        . as $package_id
-        | any($metadata.resolve.nodes[];
-            .id == $package_id
-            and ([.features[] | select(
-              . == "content-debug"
-              or . == "crypto-debug"
-              or . == "test-utils"
-              or . == "backtrace"
-              or . == "migration-import"
-              or . == "migration-export"
-              or . == "0-8-1-storage-format"
-            )] | length) == 0))
-  ' "${run_dir}/cargo-metadata.json" >/dev/null
-  feature_status=$?
-  set -e
-else
-  feature_status="unavailable"
-fi
-
-if [ -f "${run_dir}/audit-exit-codes.json" ] && jq -e . "${run_dir}/audit-exit-codes.json" >/dev/null 2>&1; then
-  source_status="$(jq -r '.source' "${run_dir}/audit-exit-codes.json")"
-  audit_status="$(jq -r '.audit' "${run_dir}/audit-exit-codes.json")"
-  deny_status="$(jq -r '.deny' "${run_dir}/audit-exit-codes.json")"
-  if [[ "${feature_status}" =~ ^[0-9]+$ ]]; then
-    jq --argjson feature "${feature_status}" '. + {feature: $feature}' \
-      "${run_dir}/audit-exit-codes.json" > "${run_dir}/audit-exit-codes.json.tmp"
-  else
-    jq '. + {feature: null}' \
-      "${run_dir}/audit-exit-codes.json" > "${run_dir}/audit-exit-codes.json.tmp"
-  fi
-  mv "${run_dir}/audit-exit-codes.json.tmp" "${run_dir}/audit-exit-codes.json"
-else
-  if [[ "${feature_status}" =~ ^[0-9]+$ ]]; then
-    jq -n --argjson feature "${feature_status}" \
-      '{source: null, audit: null, deny: null, feature: $feature}' \
-      > "${run_dir}/audit-exit-codes.json"
-  else
-    jq -n '{source: null, audit: null, deny: null, feature: null}' \
-      > "${run_dir}/audit-exit-codes.json"
-  fi
-fi
+load_partial_dependency_state
+evaluate_feature_gate
+write_gate_exit_codes
 
 echo "[7/8] record advisory revision and apply feature/source promotion gates"
 current_stage="gate-finalize"
-advisory_git_dir="$(find "${work_dir}/cargo-home" -type d -name .git -path '*/advisory-db*' -print -quit 2>/dev/null || true)"
-if [ -n "${advisory_git_dir}" ]; then
-  advisory_db_revision="$(git --git-dir "${advisory_git_dir}" rev-parse HEAD)"
-fi
+load_partial_dependency_state
 printf '%s\n' "${advisory_db_revision}" > "${run_dir}/advisory-db-revision.txt"
 
 if [[ "${feature_status}" =~ ^[0-9]+$ ]] && [ "${feature_status}" -ne 0 ]; then

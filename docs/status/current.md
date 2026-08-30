@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 A3 后依赖图可解析，但 Phase A 在安装固定审计工具期间触发 45 分钟 deadline，尚无正式审计结论，`SW-G2` 仍未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 A3 后依赖图可解析，A4 已离线实现固定审计工具 bundle、只读消费和 partial evidence 回填，但 bundle 尚未构建、Phase A 未重跑，仍无正式审计结论，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -38,7 +38,7 @@
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
 - [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0`、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 与[确定性故障设计](../testing/sw-g3-deterministic-validation-design.md)的 `SW-G3` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)仍为 Draft；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
-- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受但未执行；OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已执行。A3 已关闭原 SQLite 解析冲突，最新 evidence 包含 264-package partial graph、唯一 `rusqlite 0.37.0` / `libsqlite3-sys 0.35.0` 和 evidence-only lockfile；但 `cargo-audit` 安装未在 45 分钟内完成，source、audit、deny、feature 门均无结果。Phase B 禁止，运行资源修订和再次 Phase A 均须另行授权；
+- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受但未执行；OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已执行。A3 已关闭原 SQLite 解析冲突，最新 evidence 包含 264-package partial graph、唯一 `rusqlite 0.37.0` / `libsqlite3-sys 0.35.0` 和 evidence-only lockfile；但 `cargo-audit` 安装未在 45 分钟内完成，source、audit、deny、feature 门均无结果。A4 不复用 `.work` 或延长 Phase A deadline，而是把固定工具构建拆为独立 L3 单元；成功 bundle 与新的 Phase A 都尚未执行，Phase B 禁止；
 - [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
 - 下一步只评审 E2EE/身份候选、`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
@@ -56,7 +56,7 @@
 
 下一步：
 
-1. 为 `SW-EXP-004` 形成无 Docker、无网络的运行资源与证据收口评审：比较固定审计工具准备、受控且可验证的 cache/产物复用、partial evidence 字段回填和 deadline 调整；未接受前不复用 `.work`、不延长时限、不重跑 Phase A；
+1. A4 clean revision 形成后，先为 `SW-EXP-004` 固定审计工具 bundle 构建单元形成精确 L3 授权；不直接复用 retained `.work`，bundle 未 `PASS` 和人工复核前不申请新的 Phase A；
 2. 基于已通过的 `SW-V0` 评审 `SW-V1/V2` 最小实现与运行授权边界；当前不新增 profile、不重跑 Docker，且 `SW-G2` 未通过前不执行 `SW-V3`；
 3. `SW-G2` 继续比较 mls-rs 0.56.0 与 OpenMLS 0.9.0 的 lockfile、许可证、advisory、状态安全与 Linux ARM64 实证；
 4. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
@@ -73,7 +73,9 @@
 7. **A3 后 Phase A 已按 deadline 停止**：clean revision `851f3bb` 的 `20260830-091344-87309.iyw1Dm` 已生成 264-package partial graph；evidence lock SHA-256 为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`，只有 `rusqlite 0.37.0` / `libsqlite3-sys 0.35.0`，确认 A3 关闭原解析冲突。
 8. **正式审计门尚未开始**：`cargo-audit 0.22.2` 安装期间 crates.io 多次出现传输 EOF；monitor 在 `2704774 ms` 触发 deadline，最终 `STOP/runtime-deadline`、退出 `124`。source、audit、deny、feature 均无退出码，仓库 `Cargo.lock` 未写入，不得形成许可证/advisory 结论。
 9. **证据与清理已闭合**：最新 run checksum 全部通过，目录峰值 `337380 KiB`，容器残留为 `0`；三份 `SW-EXP-004` ignored evidence 与 fixed image 保留，工作区干净，未自动重试、未进入 Phase B、未 push。
-10. **下一停止点**：先做运行资源与证据收口评审；不得直接复用未校验 `.work`、放宽工具版本、跳过审计门或只延长 deadline 掩盖网络/工具准备成本，`SW-G2` 仍未通过。
+10. **deadline 后停止线已遵守**：在 A4 形成前没有直接复用未校验 `.work`、放宽工具版本、跳过审计门、延长 Phase A deadline 或重跑；`SW-G2` 仍未通过。
+11. **A4 运行资源修订已实施**：新增独立 fixed-image 审计工具 bundle builder，冻结 `sw-exp-004-audit-tools-v1` manifest/checksum 合同、90 分钟与 5 GiB 构建上限和无网络运行验证；Phase A 改为显式精确 bundle ID、在 artifact/Docker 前验证并只读挂载两个固定二进制，不再安装工具或消费 bundle `.work`。
+12. **partial evidence 收口已修正并离线验证**：deadline/signal cleanup 只从已经落盘的 Cargo.lock、metadata、advisory DB 和退出码回填 manifest，不补跑或伪造 feature/source/license/advisory 门，也不提升仓库 lockfile。语法、六个参数/bundle 负例、monitor 自检、既有 evidence 的 264-package/lock SHA 回填探针、仓库基线与 diff 检查通过；没有构建 bundle、调用 Docker/Cargo/网络、重跑 Phase A 或 push。
 
 ## 上一批次（2026-08-28）
 
@@ -89,9 +91,9 @@
 
 ## 下一事项
 
-1. **先形成运行资源差异评审**：基于本轮 45 分钟实测，比较固定审计工具产物、可验证 cache/续跑模型与新的总时限；同时设计在 deadline/信号停止时从已校验文件回填 resolved count 和 lock SHA，避免 manifest 与 partial evidence 脱节。
-2. **修订需重新过门**：任何 cache 复用、工具准备方式、deadline 或 manifest 行为变化都先形成无 Docker、无网络的精确实施单元并另行接受；不得直接使用 retained `.work` 或修改当前 evidence。
-3. **新的 Phase A 仍需重新授权**：只有运行资源修订形成 clean revision 后，才重新说明唯一命令、Docker 默认出站网络无域名 allowlist、时长/下载、deadline、5 GiB 用户态监测、保留与精确清理；获得当次授权后执行一次，不自动重试、不进入 Phase B。
+1. **先构建固定审计工具 bundle**：基于 A4 clean revision 精确说明并申请一次 L3 单元 C；唯一入口为 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh prepare`，最多 90 分钟、5 GiB、4 CPU/4 GiB，默认出站网络无域名 allowlist，失败不自动重试。
+2. **先复核再消费**：只有 bundle manifest/checksum、fixed image/platform、工具版本/摘要、clean 状态和精确残留均 `PASS` 后，才把该精确 bundle ID 写入新的 Phase A 授权；不得自动选择 latest 或消费 bundle `.work`。
+3. **新的 Phase A 仍需单独授权**：唯一入口将为 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare <bundle-id>`；重新说明候选 crates/RustSec 网络、45 分钟、5 GiB、可能写入 lockfile、证据、保留与精确清理，执行一次，不自动重试、不进入 Phase B。
 4. **并行低风险事项**：若不修订 OpenMLS，可只做 `SW-V1/V2` 最小授权边界或 `HW-G0/HW-G1` 已有设备/BSP 的只读评审；继续不重跑容器、不安装依赖、不采购/刷写硬件、不产生射频发射。
 
 ## 尚未冻结

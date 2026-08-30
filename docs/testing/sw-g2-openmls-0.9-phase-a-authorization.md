@@ -1,6 +1,6 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：Executed / STOP（2026-08-30；A3 后依赖图可解析，但 Phase A 在审计工具安装期间触发 45 分钟 deadline，Phase B 禁止）
+- 状态：A4 implemented / L3 pending（2026-08-30；固定审计工具 bundle 与 partial evidence 收口已离线实现，bundle 尚未构建，Phase A 未重跑，Phase B 禁止）
 - 日期：2026-08-30
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
@@ -8,11 +8,14 @@
 
 ## 目的与结论边界
 
-本文把已接受的 OpenMLS 0.9.0 静态门禁转换为三个必须依次、分别授权的动作：
+本文把已接受的 OpenMLS 0.9.0 静态门禁转换为必须依次、分别授权的动作。前三个单元已经执行并保留为历史合同；A3 后 deadline 结果又形成 A4 及两个新的 L3 单元：
 
 1. **实施单元 A**：新增只支持依赖解析的最小 crate 与受限 runner，执行无网络静态验证；
 2. **运行控制单元 A2**：在不执行 runner 的前提下补齐 45 分钟 deadline、5 GiB 定期监测、信号收口与停止证据；
 3. **L3 执行单元 B**：在 A/A2 已提交、工作区干净且再次明确授权后，只运行一次 Phase A，生成新 lockfile 并执行来源、许可证和 advisory 门。
+4. **运行资源单元 A4**：离线实现固定、可验证的审计工具 bundle，Phase A 只读消费精确 bundle ID，并在 deadline/signal 下回填已经落盘的 partial evidence；
+5. **L3 审计工具 bundle 构建单元 C**：另行授权后，只构建一次固定 `cargo-audit` / `cargo-deny` bundle；
+6. **L3 Phase A 执行单元 D**：只有 bundle `PASS`、人工复核且再次单独授权后，才以精确 bundle ID 重跑一次 Phase A。
 
 分段用于保证用户在任何联网、依赖下载、审计工具编译或 Docker 容器启动前，能够先审阅真实脚本。接受本文不授权 A 或 B；A 的授权不自动包含 B，B 的一次授权也不构成失败重试、Phase B、清理或其他候选的持续授权。
 
@@ -25,7 +28,7 @@
 - crate：`openmls =0.9.0`、`openmls_basic_credential =0.6.0`、`openmls_rust_crypto =0.6.0`、`openmls_sqlite_storage =0.3.0`、`openmls_traits =0.6.0`、`rusqlite =0.37.0`、`serde =1.0.229`、`serde_json =1.0.151`、`tls_codec =0.5.0` 与 dev dependency `tempfile =3.27.0`；
 - 镜像：`rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663`；
 - 平台：`linux/arm64`，容器内必须为 Linux `aarch64`、`rustc 1.96.1`、`cargo 1.96.1`；
-- 审计工具：`cargo-audit =0.22.2`、`cargo-deny =0.20.2`，均使用 `cargo install --locked` 安装到本轮 `.work`；
+- 审计工具：`cargo-audit =0.22.2`、`cargo-deny =0.20.2`；A4 后只能由独立单元 C 使用 `cargo install --locked` 构建固定 bundle，Phase A 不再安装工具，也不得挂载构建 bundle 的 `.work`；
 - 来源：候选和审计工具只允许 crates.io；RustSec advisory DB 只由固定审计工具获取；
 - 许可证初始 allowlist：`MIT`、`Apache-2.0`、`BSD-2-Clause`、`BSD-3-Clause`、`ISC`、`Unicode-3.0`、`Zlib`。
 
@@ -110,9 +113,10 @@ tools/spikes/sw-g2-openmls-0.9/
 | `deny.toml` | 固定 target、来源拒绝、空 advisory ignore 和初始许可证 allowlist | 自动例外、许可证法律结论 |
 | `main.rs` | 显式说明 Phase B 未实现并拒绝所有场景命令 | MLS 状态机、provider 初始化、身份、加密、SQLite 或网络 |
 | 运行控制 monitor | 45 分钟 deadline、5 GiB 本轮目录定期监测、触发原因与离线自检 | 文件系统 quota、Docker 域名 allowlist、依赖或场景执行 |
-| runner | 参数门、隔离目录、镜像/平台核对、单次 Phase A、证据与精确残留处理 | Phase B、重试循环、容器网络/端口、主机 Cargo home、真实数据 |
+| audit tool bundle builder | 使用固定镜像构建、无网络运行验证、manifest/checksum、90 分钟与 5 GiB 用户态上限、精确残留处理 | Phase A、候选依赖、产品构建、自动重试、`.work` 复用 |
+| runner | 参数门、bundle 合同核对、隔离目录、镜像/平台核对、单次 Phase A、证据与精确残留处理 | Phase B、工具安装、重试循环、容器网络/端口、主机 Cargo home、真实数据 |
 
-runner 只接受一个参数 `prepare`；无参数、多参数、`run`、未知 action 都必须在 Docker、artifact 或网络访问前以退出码 `2` 拒绝。脚本使用 `set -euo pipefail`、`umask 077`，拒绝 symlink 输入、artifact root 偏移、run 目录碰撞和 label 不匹配的容器清理。
+原单元 A runner 只接受一个参数 `prepare`。A4 后当前 runner 只接受 `prepare <audit-tool-bundle-id>`，bundle ID 必须是精确 run ID；无参数、缺失或多余参数、`run`、未知 action、未知 bundle 都必须在 Phase A artifact、Docker 或网络访问前以退出码 `2` 拒绝。bundle builder 只接受一个参数 `prepare`。两个脚本都使用 `set -euo pipefail`、`umask 077`，拒绝 symlink 输入、artifact root 偏移、run 目录碰撞和 label 不匹配的容器清理。
 
 仓库根不得可写挂入容器。runner 只把 `LICENSE`、新 crate 的三个固定输入和可选的既有 `Cargo.lock` 复制到本轮 `artifacts/sw-g2-openmls-0.9/<run-id>/.work/repo/`，容器只写本轮 run 目录。
 
@@ -188,7 +192,9 @@ git diff --check
 
 2026-08-30 实际结果：Python 自检、runner shell 语法、合成 shell deadline/受控子进程收口、schema 2 manifest 离线渲染、两个参数负例、仓库基线与 diff 检查均通过；deadline shell 探针在 `SECONDS=2` 进入清理、`SECONDS=3` 完成受控子进程收口。`artifacts/sw-g2-openmls-0.9/` 不存在，未启动或调用 Docker、Cargo 与网络。
 
-## L3 执行单元 B：一次 Phase A
+## 历史 L3 执行单元 B：一次 Phase A
+
+本节记录 2026-08-30 已执行两次的历史合同，不再是当前可执行入口。A4 后 runner 已拒绝不带 bundle ID 的旧命令；新的 bundle 构建与 Phase A 分别以本文后续单元 C、D 为准，二者均未获 L3 执行授权。
 
 ### 前置条件
 
@@ -206,6 +212,8 @@ B 只有在以下条件全部成立并获得当前任务明确授权后才可执
 ```bash
 ./scripts/run-sw-g2-openmls-0.9-spike.sh prepare
 ```
+
+该历史命令现在会在 artifact、Docker 和网络前以退出码 `2` 拒绝，不得作为新执行授权引用。
 
 一次授权只覆盖一次上述入口。外部服务失败、digest 不符、工具安装失败、解析漂移、许可证/advisory/source 拒绝或证据不完整都立即 `STOP`；不得自动重试。
 
@@ -340,16 +348,95 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 - monitor 记录的最终目录峰值为 `337380 KiB`，低于 5 GiB 预算；checksum 全部通过，精确容器残留为 `0`。仓库 `Cargo.lock` 仍不存在，工作区保持干净；fixed image 与三份 `SW-EXP-004` ignored evidence 按约定保留；
 - 本次授权已经消耗，不自动重试。再次执行前必须先评审 45 分钟内安装固定审计工具的可行方式、受控复用/固定工具产物的证据边界，或重新论证 deadline；不得直接复用未校验 `.work`、放宽工具版本、跳过审计门或仅延长时限掩盖根因。
 
+## 2026-08-30 运行资源单元 A4
+
+用户在获知 A4 只实施和离线验证、不会调用 Docker/Cargo/网络、不会构建 bundle 或重跑 Phase A 后明确授权。A4 选择“独立固定二进制 bundle”，不直接复用上一轮 `.work`，也不延长 Phase A 的 45 分钟 deadline。
+
+### 固定 bundle 合同
+
+新增入口：
+
+```bash
+./scripts/run-sw-g2-openmls-0.9-audit-tools.sh prepare
+```
+
+该命令属于尚未授权的 L3 单元 C。脚本在固定 Linux ARM64 Rust image 中以 `cargo install --locked` 构建 `cargo-audit 0.22.2` 与 `cargo-deny 0.20.2`，再于同一 fixed image 的 `--network none` 容器中执行两个 `--version`。构建单元使用独立 label、独立 Cargo home/target、4 CPU、4 GiB 内存、90 分钟 deadline 和 5 GiB 五秒周期目录监测；构建使用 Docker 默认出站网络且没有域名 allowlist，不映射端口。它不下载候选 crate、不生成候选 lockfile、不运行候选审计或 Phase B。
+
+成功 bundle 固定保留：
+
+```text
+artifacts/sw-g2-openmls-0.9-audit-tools/<bundle-id>/
+├── bundle/bin/
+│   ├── cargo-audit
+│   └── cargo-deny
+├── cargo-audit-version.txt
+├── cargo-deny-version.txt
+├── container-toolchain.txt
+├── git-status-before.txt
+├── git-status-after.txt
+├── image-index.txt
+├── image-inspect.json
+├── manifest.json
+├── runtime-control.json
+├── checksums.sha256
+├── run.log
+└── .work/                    # 仅保留，不是 bundle 信任或消费边界
+```
+
+schema 1 bundle manifest 固定 `sw-exp-004-audit-tools-v1` contract、image/index/platform、Rust/Cargo、请求与实报工具版本、二进制 SHA-256、输入脚本 SHA-256、运行控制、工作区和精确残留。`PASS` 只在两个二进制为唯一 `bundle/bin` 项、无 symlink、无网络运行验证成功、输入未变、工作区前后干净且残留为零时成立；finalizer 将二进制权限收紧为 `0555`。checksum 精确覆盖两个被消费的二进制和九个固定公共证据文件；不覆盖 `.work`、自身或持续写入的 `run.log`。
+
+### Phase A 只读消费与 partial evidence
+
+当前 Phase A 唯一入口变更为：
+
+```bash
+./scripts/run-sw-g2-openmls-0.9-spike.sh prepare <bundle-id>
+```
+
+runner 在创建 Phase A artifact、查询 Docker 或访问网络前完成下列核对：精确 ID 格式和路径、无 symlink payload、`bundle/bin` 只有两个不可写可执行文件、manifest 为固定 contract 的 `PASS`、image/platform/Rust/Cargo/工具版本/90 分钟 bundle 上限/5 GiB 上限/网络口径/clean 状态/残留均匹配、checksum 路径集合完全一致且全部通过、manifest 中的二进制摘要与实际文件一致。不得自动选择 `latest`、模糊匹配或降级到上一轮 `.work`。
+
+通过后，Phase A 只把 `bundle/bin` 挂载到 `/audit-tools/bin` 且为 `readonly`，以绝对路径执行两个工具；候选容器不再运行 `cargo install`，也不挂载 bundle `.work`。Phase A 自身仍保持 45 分钟与 5 GiB 监测、fixed image、默认出站网络无域名 allowlist、无端口、非 root、只读根文件系统和原有 source/license/advisory/feature 停止线。schema 3 Phase A manifest 新增 bundle contract、ID、manifest SHA-256、两个工具版本和二进制 SHA-256。
+
+此前 signal/deadline 在受控 Docker 子进程返回前会跳过 shell 后处理，使实际存在的 evidence lock 与 metadata 在 manifest 中显示为 `unavailable`。A4 cleanup 现在只回填已经安全落盘的 lock SHA-256、resolved package 数量、advisory DB revision 和已有 gate 退出码；不会在异常路径补跑 feature gate、伪造未执行门或提升仓库 lockfile。正常路径仍显式执行 feature gate 并写入统一退出码文件。
+
+### A4 验证与未执行边界
+
+A4 的离线验证入口为：
+
+```bash
+bash -n scripts/run-sw-g2-openmls-0.9-audit-tools.sh
+bash -n scripts/run-sw-g2-openmls-0.9-spike.sh
+./scripts/run-sw-g2-openmls-0.9-audit-tools.sh
+./scripts/run-sw-g2-openmls-0.9-audit-tools.sh run
+./scripts/run-sw-g2-openmls-0.9-spike.sh
+./scripts/run-sw-g2-openmls-0.9-spike.sh prepare
+./scripts/run-sw-g2-openmls-0.9-spike.sh prepare invalid-bundle
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/monitor-sw-g2-openmls-0.9-run.py self-test
+./scripts/check-repo.sh
+git diff --check
+```
+
+这些负例必须在 artifact、Docker、Cargo 和网络前以退出码 `2` 拒绝。A4 不创建成功 bundle、不执行 Phase A、不修改仓库 `Cargo.lock`、不安装或下载任何内容、不访问远程、不 push；只证明静态合同和离线收口已实现，不能证明工具二进制实际可构建或 Phase A 可通过。
+
+2026-08-30 实际结果：两个 shell 语法检查通过；builder 的无参数/`run` 与 Phase A 的无参数/缺 bundle/非法 bundle/格式正确但不存在的 bundle 共六个负例均返回 `2`，`artifacts/sw-g2-openmls-0.9-audit-tools/` 未创建；monitor 标准库自检通过。对既有 deadline evidence 的只读 partial-state 探针恢复出 lock SHA-256 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49` 和 `264` 个 package，与实际文件一致；同一 metadata 上的 feature 表达式离线返回零，但它只是 A4 逻辑探针，不追记为历史 Phase A 的正式 feature gate。仓库基线与 `git diff --check` 通过；未调用 Docker/Cargo/网络。
+
+## 尚未授权的 L3 单元 C 与 D
+
+单元 C 的精确目标是构建一次固定审计工具 bundle。执行前仍须基于 A4 clean revision 说明并获得明确授权：唯一命令、Docker 默认出站网络无域名 allowlist、最多 90 分钟、5 GiB 五秒周期监测、4 CPU/4 GiB、可能拉取 fixed image 和下载/编译工具 crate、保留 image/bundle/`.work`，以及只清理精确 label 容器的方式。失败不自动重试，`.work` 不成为可信 bundle，也不自动进入单元 D。
+
+单元 D 只有在某个 bundle `PASS` 且 manifest/checksum 人工复核后才可提出。授权必须写出精确 `<bundle-id>` 和唯一 Phase A 命令，并重新说明候选 crates/RustSec 网络、45 分钟、5 GiB、可能写入仓库 lockfile、证据与清理。D 不包含 bundle 重建、自动重试、Phase B、commit、push 或清理历史 evidence。
+
 ## 当前停止点与未来授权措辞
 
-本文精确方案已执行；A3 关闭了已知 SQLite 解析冲突，但新的 Phase A 在审计工具安装期间触发 45 分钟 deadline。当前存在三份 `SW-EXP-004` ignored evidence 和一份仅位于最新 evidence 的 partial lockfile；仓库没有候选 `Cargo.lock`，也没有来源、许可证/advisory、feature、候选构建或场景实证。Phase B 禁止，运行资源修订和再次 Phase A 均未授权。
+本文历史 Phase A 已执行；A3 关闭了已知 SQLite 解析冲突，A4 已离线实现固定审计工具 bundle 与 partial evidence 收口。当前尚无成功 bundle，单元 C/D 均未执行；存在三份 `SW-EXP-004` ignored evidence 和一份仅位于最新 evidence 的 partial lockfile，仓库没有候选 `Cargo.lock`，也没有来源、许可证/advisory、feature、候选构建或场景实证。Phase B 禁止。
 
 未来授权必须明确指出授权单元：
 
 - 单元 A：按本文文件清单实施最小骨架并运行列出的无网络静态验证；
 - 运行控制单元 A2：按本节文件清单实现并离线验证 deadline、磁盘 monitor、信号收口和证据；不包含 `prepare`、commit 或外部运行；
 - 静态修订单元 A3：把直接 `rusqlite` 精确对齐为 `=0.37.0`、保留 `bundled` 并同步证据口径；不包含 lockfile、Docker、Cargo、网络或外部运行；
-- 后续运行资源修订单元：先在无 Docker、无网络条件下评审固定审计工具准备、可验证 cache/产物复用、partial evidence 回填和 deadline 口径；不得直接复用 `.work`、安装工具、延长时限或执行容器；
-- 新的执行单元：只有运行资源修订另行接受并形成 clean revision 后，才可重新形成唯一命令、网络、依赖、证据、保留与清理边界并申请一次 Phase A 授权。
+- 运行资源单元 A4：实现独立固定 bundle、精确校验与只读消费、partial evidence 回填；不包含 Docker/Cargo/网络、bundle 构建、Phase A 或 Phase B；
+- L3 单元 C：在 clean revision 上构建一次固定 bundle；不包含候选 Phase A、失败重试或 `.work` 复用；
+- L3 单元 D：以一个已经复核的精确 bundle ID 执行一次 Phase A；不包含 bundle 重建、失败重试或 Phase B。
 
-任何只写“接受文档”“继续下一步”或此前只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。
+任何只写“接受文档”“继续下一步”或此前授权都不自动授权 C/D。C 的授权不包含 D，D 的授权不包含失败重试。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。
