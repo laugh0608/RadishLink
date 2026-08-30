@@ -19,7 +19,7 @@ image_ref="rust:1.96.1-bookworm@${image_digest}"
 expected_platform="linux/arm64"
 label_key="org.radishlink.sw-g2-openmls-0.9.run"
 scenario_id="phase-a-dependency-audit"
-audit_tool_bundle_contract="sw-exp-004-audit-tools-v1"
+audit_tool_bundle_contract="sw-exp-004-audit-tools-v2"
 cargo_audit_version="0.22.2"
 cargo_deny_version="0.20.2"
 minimum_disk_kib=5242880
@@ -122,7 +122,7 @@ if ! jq -e \
   --arg platform "${expected_platform}" \
   --arg audit_version "${cargo_audit_version}" \
   --arg deny_version "${cargo_deny_version}" '
-    .schema_version == 1
+    .schema_version == 2
     and .bundle_contract == $contract
     and .run_id == $run_id
     and .outcome == "PASS"
@@ -141,6 +141,7 @@ if ! jq -e \
     and .tools.cargo_deny.requested_version == $deny_version
     and .tools.cargo_audit.reported_version == ("cargo-audit " + $audit_version)
     and .tools.cargo_deny.reported_version == ("cargo-deny " + $deny_version)
+    and (.input_sha256.manifest_filter | test("^[0-9a-f]{64}$"))
     and .runtime_controls.termination_reason == "completed"
     and .runtime_controls.timeout_seconds == 5400
     and .runtime_controls.disk_budget_kib == 5242880

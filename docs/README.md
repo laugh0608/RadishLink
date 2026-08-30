@@ -31,8 +31,8 @@
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A lockfile、审计 `STOP` 与 Phase B 门禁。
 - [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：静态方案已接受；Phase A/Phase B 均未授权或执行。
-- [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：A3 已关闭原 SQLite 解析冲突；A4 已离线实现固定审计工具 bundle、只读消费与 partial evidence 收口，bundle 尚未构建。
-- [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：实施单元 A/A2/A3/A4 已完成；当前只有 evidence-only lockfile，无成功 bundle 或正式审计结论，Phase B 禁止。
+- [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：A3 已关闭原 SQLite 解析冲突；首次固定工具构建因 evidence finalizer 失败而无效，A5 已离线修正且尚未重跑。
+- [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：实施单元 A/A2/A3/A4/A5 已完成；当前只有 evidence-only lockfile 和无效 bundle run，无成功 bundle 或正式审计结论，Phase B 禁止。
 - [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：已接受的 profile、seed、数值、manifest 与 `PASS/FAIL/INVALID` 口径。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：实施与 Docker 运行已分别授权并完成，四个 profile 各三次通过；不构成重跑或后续 `SW-V*` 授权。
 - [技术证据](research/technology-evidence.md)

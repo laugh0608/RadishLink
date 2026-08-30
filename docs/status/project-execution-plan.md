@@ -45,7 +45,7 @@
 ## 当前项目位置
 
 - 产品成熟度：`D0`；
-- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划、覆盖层消息交付语义与验证设计已通过 `SW-G0/SW-G1/SW-G3`。OpenMLS 0.8.1 Phase A advisory/许可证门 `STOP`，prepared run 的 Phase B 禁止；`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 A3 后 partial graph 可解析，A4 已离线实现固定审计工具 bundle 与证据收口，但 bundle 构建和新 Phase A 尚未授权或执行，仍没有正式审计结论；`SW-G4/SW-V0` 已完成且 harness 自检通过；
+- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划、覆盖层消息交付语义与验证设计已通过 `SW-G0/SW-G1/SW-G3`。OpenMLS 0.8.1 Phase A advisory/许可证门 `STOP`，prepared run 的 Phase B 禁止；`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 A3 后 partial graph 可解析，首次固定工具构建因 evidence finalizer 失败而整体无效，A5 已离线修正；新的 bundle 构建和 Phase A 尚未授权或执行，仍没有正式审计结论；`SW-G4/SW-V0` 已完成且 harness 自检通过；
 - 硬件：尚未进入实体设备验证，低成本方案待 `HW-G0` 评审；
 - 射频：保持 `RF-R0` 无发射开发，HaLow 采购和发射暂停；
 - 密码：Signal/MLS 仍是候选，未形成 ADR，不存在已验证 E2EE；
