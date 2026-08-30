@@ -1,17 +1,18 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：Accepted（精确方案，2026-08-28；实施单元 A 已授权并完成；L3 执行单元 B 未授权、未执行，且须先关闭运行上限控制差距）
-- 日期：2026-08-28
+- 状态：Accepted（精确方案，2026-08-28；实施单元 A 与运行控制单元 A2 已授权、完成本地实现和离线验证并形成 clean revision；L3 执行单元 B 未授权、未执行）
+- 日期：2026-08-30
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
 
 ## 目的与结论边界
 
-本文把已接受的 OpenMLS 0.9.0 静态门禁转换为两个必须依次、分别授权的动作：
+本文把已接受的 OpenMLS 0.9.0 静态门禁转换为三个必须依次、分别授权的动作：
 
 1. **实施单元 A**：新增只支持依赖解析的最小 crate 与受限 runner，执行无网络静态验证；
-2. **L3 执行单元 B**：在 A 已提交、工作区干净且再次明确授权后，只运行一次 Phase A，生成新 lockfile 并执行来源、许可证和 advisory 门。
+2. **运行控制单元 A2**：在不执行 runner 的前提下补齐 45 分钟 deadline、5 GiB 定期监测、信号收口与停止证据；
+3. **L3 执行单元 B**：在 A/A2 已提交、工作区干净且再次明确授权后，只运行一次 Phase A，生成新 lockfile 并执行来源、许可证和 advisory 门。
 
 分段用于保证用户在任何联网、依赖下载、审计工具编译或 Docker 容器启动前，能够先审阅真实脚本。接受本文不授权 A 或 B；A 的授权不自动包含 B，B 的一次授权也不构成失败重试、Phase B、清理或其他候选的持续授权。
 
@@ -108,6 +109,7 @@ tools/spikes/sw-g2-openmls-0.9/
 | `Cargo.toml` | 逐字声明固定直接版本和已接受 feature；`publish = false` | 版本范围、git/path override、迁移 feature、debug/test feature |
 | `deny.toml` | 固定 target、来源拒绝、空 advisory ignore 和初始许可证 allowlist | 自动例外、许可证法律结论 |
 | `main.rs` | 显式说明 Phase B 未实现并拒绝所有场景命令 | MLS 状态机、provider 初始化、身份、加密、SQLite 或网络 |
+| 运行控制 monitor | 45 分钟 deadline、5 GiB 本轮目录定期监测、触发原因与离线自检 | 文件系统 quota、Docker 域名 allowlist、依赖或场景执行 |
 | runner | 参数门、隔离目录、镜像/平台核对、单次 Phase A、证据与精确残留处理 | Phase B、重试循环、容器网络/端口、主机 Cargo home、真实数据 |
 
 runner 只接受一个参数 `prepare`；无参数、多参数、`run`、未知 action 都必须在 Docker、artifact 或网络访问前以退出码 `2` 拒绝。脚本使用 `set -euo pipefail`、`umask 077`，拒绝 symlink 输入、artifact root 偏移、run 目录碰撞和 label 不匹配的容器清理。
@@ -147,13 +149,52 @@ A 完成后先审阅和提交新增文件，使 B 从 clean revision 运行；�
 - 依赖与审计容器使用 Docker 默认出站网络，不映射端口，但不提供域名 allowlist；Docker Hub、crates.io 与 GitHub RustSec 是预期访问范围，不是由 runner 技术强制的唯一目的地；
 - 因此单元 B 在 2026-08-28 收口时继续保持未授权、未执行。明日优先形成一个无 Docker/无网络的最小实施单元，为 45 分钟和 5 GiB 提供可验证的强制或监控机制，并把默认网络边界写入下一次 L3 授权；完成并提交 clean revision 前不申请或执行 B。
 
+### 2026-08-30 运行控制实施单元 A2
+
+用户在当前任务确认开始实施上一轮已经精确说明的无 Docker、无网络运行控制范围。A2 只修改或新增：
+
+```text
+scripts/run-sw-g2-openmls-0.9-spike.sh
+scripts/monitor-sw-g2-openmls-0.9-run.py
+docs/testing/sw-g2-openmls-0.9-phase-a-authorization.md
+docs/testing/sw-g2-openmls-0.9-spike-authorization.md
+docs/testing/sw-g2-openmls-spike-authorization.md
+docs/security/e2ee-candidate-review.md
+docs/security/e2ee-sw-g2-decision-package.md
+docs/status/current.md
+docs/status/d0-t0-p0-plan.md
+docs/status/project-execution-plan.md
+docs/README.md
+```
+
+- runner 固定 `2700 s` deadline 与 `5242880 KiB` 本轮目录预算；Python 标准库 monitor 每 `5 s` 统计一次 run 目录的 apparent size，达到任一边界先原子写入 `runtime-control-trigger.json`，再向父 runner 发送 `TERM`；
+- 外部 Docker 查询、镜像拉取和容器运行改为受控子进程。runner 在 deadline、磁盘触发或外部信号后先终止当前受控子进程，最多等待 `5 s` 后使用 `KILL` 收口该精确子进程，再进入原有 label 核对、容器清理、残留盘点和 evidence finalizer；
+- 5 GiB 是五秒周期监测和退出期 `du` 复核，不是文件系统 quota。单次采样间隔内可能短暂越过阈值，结论不得写成内核硬配额；达到或发现越界时本轮为 `STOP`，不得自动重试；
+- schema 2 manifest 新增 `runtime_controls`，记录 timeout、disk budget、采样值、峰值、monitor 状态、信号、终止原因，以及 `docker-default-network-no-domain-allowlist`；monitor、snapshot 和可选 trigger 进入 checksum；
+- 默认 Docker 出站网络仍没有域名 allowlist。A2 没有修改 Docker 网络、系统代理、防火墙或目标服务范围，只把该限制变成 manifest 和下一次 L3 授权的显式事实；
+- 离线自检以临时合成目录和子进程覆盖 deadline 边界、磁盘边界、monitor 向父进程发 `TERM`、runner 主动停止 monitor 和无触发正常停止；不执行 `prepare`、Docker、Cargo、网络、依赖下载或 lockfile 生成；
+- A2 已完成本地实现与离线验证，并与 runner、monitor 和状态文档一并形成 clean revision；未执行 push。单元 B 继续未授权。
+
+A2 的精确离线验证入口为：
+
+```bash
+bash -n scripts/run-sw-g2-openmls-0.9-spike.sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/monitor-sw-g2-openmls-0.9-run.py self-test
+./scripts/run-sw-g2-openmls-0.9-spike.sh
+./scripts/run-sw-g2-openmls-0.9-spike.sh run
+./scripts/check-repo.sh
+git diff --check
+```
+
+2026-08-30 实际结果：Python 自检、runner shell 语法、合成 shell deadline/受控子进程收口、schema 2 manifest 离线渲染、两个参数负例、仓库基线与 diff 检查均通过；deadline shell 探针在 `SECONDS=2` 进入清理、`SECONDS=3` 完成受控子进程收口。`artifacts/sw-g2-openmls-0.9/` 不存在，未启动或调用 Docker、Cargo 与网络。
+
 ## L3 执行单元 B：一次 Phase A
 
 ### 前置条件
 
 B 只有在以下条件全部成立并获得当前任务明确授权后才可执行：
 
-1. 单元 A 已通过上述静态验证并提交，工作区干净，runner 与新 crate 位于同一 HEAD；
+1. 单元 A 与运行控制单元 A2 已通过上述离线验证并提交，工作区干净，runner、monitor 与新 crate 位于同一 HEAD；
 2. 新候选目录首次执行前不存在 `Cargo.lock`；若未来已存在，runner 只能重生成并逐字比较，不得更新；
 3. `SW-EXP-002` 的源码、lockfile、artifact、`.work` cache、advisory DB 和授权均不复用；
 4. Docker daemon 可用，artifact root、输入和目标 lockfile 均不是 symlink；
@@ -172,14 +213,14 @@ B 只有在以下条件全部成立并获得当前任务明确授权后才可执
 
 runner 必须按顺序执行：
 
-1. 创建唯一私有 run 目录，记录 HEAD、clean 状态、host/daemon architecture、磁盘前置和 fixed image 是否已存在；
+1. 创建唯一私有 run 目录，启动固定 45 分钟与 5 GiB 定期 monitor，记录 HEAD、clean 状态、host/daemon architecture、磁盘前置和 fixed image 是否已存在；
 2. 若 exact-digest 镜像存在，只用 `docker image inspect` 保存 image ID、`RepoDigests` 与平台；不存在时先用 `docker buildx imagetools inspect` 核对 index digest，再执行一次固定的 `docker pull --platform linux/arm64`；
 3. 在 `--network none --read-only` 的短生命周期容器内保存 `uname -sm`、`rustc -vV` 与 `cargo -vV`；任一平台或版本不符立即停止；
 4. 在新的联网容器和本轮专用 `CARGO_HOME` / `CARGO_TARGET_DIR` 中运行 `cargo generate-lockfile`、`cargo fetch --locked --target aarch64-unknown-linux-gnu`，并把实际 `Cargo.lock` 与 SHA-256 保存到 artifact；
 5. 安装固定审计工具，生成 `cargo metadata --locked --format-version 1`、普通 tree、feature tree 与 duplicate tree；显式核对 `hpke-rs 0.7.*` 解析节点包含 `experimental` feature；
 6. 分别运行 source gate、`cargo audit --json` 与许可证/advisory gate，保存每个命令的退出码；主 `openmls` crate、crypto provider 与 storage backend 分别保留结论，不相互继承；
 7. 只有 source gate 与固定 feature gate 均为零、输入和 HEAD 未变且目标不是 symlink 时，才把 Cargo 生成的 lockfile 原子写入 `tools/spikes/sw-g2-openmls-0.9/Cargo.lock`；写入后要求工作区只出现这一个预期路径。许可证或 advisory 拒绝时仍保留这份真实负向图，但不得进入 Phase B；
-8. 删除本轮精确容器，生成 schema 2 manifest，再为所有已完成的固定输入与证据生成 checksum；报告 outcome、stage、退出码和残留，不执行任何场景。
+8. 删除本轮精确容器，停止 monitor，以退出期 `du` 再复核本轮目录，生成包含运行控制事实的 schema 2 manifest，再为所有已完成的固定输入与证据生成 checksum；报告 outcome、stage、退出码和残留，不执行任何场景。
 
 若仓库已有 `Cargo.lock`，第 4 步必须在隔离副本重新生成并与其 SHA-256 完全一致；漂移立即停止且不得覆盖。runner 不执行 `cargo build`、`cargo test`、候选 build script、SQLite 构建或 OpenMLS 二进制；编译执行的第三方代码仅限固定 `cargo-audit` / `cargo-deny` 及其工具依赖，并被限制在容器和本轮 `.work`。
 
@@ -193,9 +234,9 @@ runner 必须按顺序执行：
 
 ## 预计副作用与上限
 
-- 预计持续 15–45 分钟；达到 45 分钟仍未完成时中断同一次进程并保留 `STOP` 证据，不自动重试。当前 runner 没有内建总超时，须在 B 前补齐经复核的强制或监控机制；
+- 预计持续 15–45 分钟；monitor 从 runner 启动时累计耗时，每 5 秒复核并在达到 45 分钟时写入触发证据、终止受控子进程并进入精确清理，不自动重试。它是用户态 deadline 与信号收口，不是操作系统作业调度硬时限；
 - 网络下载约 0.8–2.5 GiB，包含可能缺失的固定 Rust image、候选 crates、固定审计工具和当次 advisory DB；
-- `artifacts/sw-g2-openmls-0.9/<run-id>/.work/` 与证据磁盘预算不超过 5 GiB。当前 runner 只验证启动前至少有 5 GiB 可用空间，不实施运行期硬配额，须在 B 前补齐经复核的强制或监控机制；
+- `artifacts/sw-g2-openmls-0.9/<run-id>/.work/` 与证据磁盘预算为 5 GiB。runner 继续要求启动前至少有 5 GiB 可用空间，并每 5 秒统计本轮目录 apparent size、在退出期以 `du` 复核；达到阈值即 `STOP`。该机制不是文件系统 quota，采样间隔内可能短暂越界；
 - 可能新增由 Cargo 生成的 `tools/spikes/sw-g2-openmls-0.9/Cargo.lock`，但只在 source gate 通过后发生；不自动 `git add`、commit 或 push；
 - fixed Rust image、本轮 crates/audit cache 和 evidence 默认保留；不清理 Docker 全局 cache；
 - 不创建 Docker network、volume、端口、长期容器或服务，不修改系统配置，不读取真实用户数据。
@@ -238,12 +279,14 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 ├── cargo-deny.txt
 ├── audit-exit-codes.json
 ├── advisory-db-revision.txt
+├── runtime-control.json
+├── runtime-control-trigger.json    # 仅 deadline、磁盘或 monitor 错误触发时存在
 ├── checksums.sha256
 ├── run.log
 └── .work/
 ```
 
-schema 2 manifest 至少记录 evidence/run ID、开始/结束时间、HEAD、前置 dirty、固定输入哈希、镜像 index digest 与本地 platform image ID、host/daemon/container architecture、Rust/Cargo 版本、直接依赖与 feature、resolved package 数量、lockfile SHA-256、advisory DB revision、各门退出码、stage、outcome、总退出码、lockfile 是否写入仓库和精确残留。
+schema 2 manifest 至少记录 evidence/run ID、开始/结束时间、HEAD、前置 dirty、固定输入哈希、镜像 index digest 与本地 platform image ID、host/daemon/container architecture、Rust/Cargo 版本、直接依赖与 feature、resolved package 数量、lockfile SHA-256、advisory DB revision、各门退出码、运行 deadline、磁盘预算/当前值/峰值、monitor 状态、终止原因、默认网络不具备域名 allowlist、stage、outcome、总退出码、lockfile 是否写入仓库和精确残留。
 
 `checksums.sha256` 覆盖所有已完成且不会再变化的固定输入与证据；它不包含自身和持续写入的 `run.log`。早期失败无法取得的 manifest 字段使用 `null` 或明确 `unavailable`，不得填默认成功值。证据不得包含 token、credential、私钥、完整 host 路径、真实身份/消息、endpoint database 或环境变量转储。
 
@@ -263,11 +306,12 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 
 ## 当前停止点与未来授权措辞
 
-本文精确方案已接受，单元 A 已完成。当前没有执行 Docker，没有网络访问、依赖下载、lockfile、审计结果或 `SW-EXP-004` artifact；单元 B 仍未授权，且在 45 分钟总时限与 5 GiB 运行期预算的控制机制关闭前不申请执行。
+本文精确方案已接受，单元 A 与运行控制单元 A2 已完成本地实现、离线验证并形成 clean revision。当前没有执行 Docker，没有网络访问、依赖下载、lockfile、审计结果或 `SW-EXP-004` artifact；单元 B 仍未授权且不得执行。
 
 未来授权必须明确指出授权单元：
 
 - 单元 A：按本文文件清单实施最小骨架并运行列出的无网络静态验证；
-- 单元 B：在 A 与运行上限控制改进均已提交、工作区干净后，执行一次 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare`，接受本文列出的 Docker、默认出站网络不具备域名 allowlist、第三方审计工具编译、最多 5 GiB 保留数据、可能新增 Cargo 生成的 lockfile，以及 45 分钟上限。
+- 运行控制单元 A2：按本节文件清单实现并离线验证 deadline、磁盘 monitor、信号收口和证据；不包含 `prepare`、commit 或外部运行；
+- 单元 B：在 A 与 A2 均已提交、工作区干净后，执行一次 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare`，接受本文列出的 Docker、默认出站网络不具备域名 allowlist、第三方审计工具编译、5 GiB 用户态定期监测而非硬配额、可能新增 Cargo 生成的 lockfile，以及 45 分钟用户态 deadline。
 
 任何只写“接受文档”“继续下一步”或此前只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。

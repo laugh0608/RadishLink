@@ -2,9 +2,11 @@
 set -euo pipefail
 
 umask 077
+SECONDS=0
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 repo_root="$(CDPATH= cd -- "${script_dir}/.." && pwd -P)"
+runtime_control_helper="${repo_root}/scripts/monitor-sw-g2-openmls-0.9-run.py"
 spike_relative="tools/spikes/sw-g2-openmls-0.9"
 spike_root="${repo_root}/${spike_relative}"
 lock_relative="${spike_relative}/Cargo.lock"
@@ -17,6 +19,9 @@ expected_platform="linux/arm64"
 label_key="org.radishlink.sw-g2-openmls-0.9.run"
 scenario_id="phase-a-dependency-audit"
 minimum_disk_kib=5242880
+runtime_timeout_seconds=2700
+runtime_disk_budget_kib=5242880
+runtime_poll_interval_seconds=5
 
 usage() {
   echo "usage: $0 prepare" >&2
@@ -33,7 +38,7 @@ if [ "${action}" != "prepare" ]; then
   exit 2
 fi
 
-for command_name in awk basename chmod cp date df docker find git id jq ln mkdir mktemp mv pwd rg rm shasum tee uname; do
+for command_name in awk basename chmod cp date df docker du find git id jq ln mkdir mktemp mv pwd python3 rg rm shasum sleep tee uname; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "required command is unavailable: ${command_name}" >&2
     exit 1
@@ -45,6 +50,7 @@ required_inputs=(
   "${spike_root}/Cargo.toml"
   "${spike_root}/deny.toml"
   "${spike_root}/src/main.rs"
+  "${runtime_control_helper}"
   "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh"
 )
 for required_input in "${required_inputs[@]}"; do
@@ -125,17 +131,22 @@ lockfile_preexisting=false
 lockfile_written=false
 container_residual_count="unavailable"
 disk_available_kib="unavailable"
-license_sha="$(shasum -a 256 "${repo_root}/LICENSE" | awk '{print $1}')"
-cargo_toml_sha="$(shasum -a 256 "${spike_root}/Cargo.toml" | awk '{print $1}')"
-deny_toml_sha="$(shasum -a 256 "${spike_root}/deny.toml" | awk '{print $1}')"
-main_rs_sha="$(shasum -a 256 "${spike_root}/src/main.rs" | awk '{print $1}')"
-runner_sha="$(shasum -a 256 "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" | awk '{print $1}')"
+license_sha="unavailable"
+cargo_toml_sha="unavailable"
+deny_toml_sha="unavailable"
+main_rs_sha="unavailable"
+runtime_control_helper_sha="unavailable"
+runner_sha="unavailable"
 expected_lock_sha="unavailable"
-
-if [ -f "${repo_lock}" ]; then
-  lockfile_preexisting=true
-  expected_lock_sha="$(shasum -a 256 "${repo_lock}" | awk '{print $1}')"
-fi
+runner_pid="${BASHPID:-$$}"
+runtime_monitor_pid=""
+controlled_child_pid=""
+received_signal=""
+runtime_control_status="unavailable"
+runtime_termination_reason="unavailable"
+runtime_elapsed_milliseconds="unavailable"
+runtime_disk_current_kib="unavailable"
+runtime_disk_peak_kib="unavailable"
 
 mkdir -p \
   "${work_dir}/cargo-home" \
@@ -187,10 +198,20 @@ write_manifest() {
     --arg lockfile_written "${lockfile_written}" \
     --arg container_residual_count "${container_residual_count}" \
     --arg disk_available_kib "${disk_available_kib}" \
+    --arg runtime_control_status "${runtime_control_status}" \
+    --arg runtime_termination_reason "${runtime_termination_reason}" \
+    --arg runtime_elapsed_milliseconds "${runtime_elapsed_milliseconds}" \
+    --arg runtime_timeout_seconds "${runtime_timeout_seconds}" \
+    --arg runtime_disk_current_kib "${runtime_disk_current_kib}" \
+    --arg runtime_disk_peak_kib "${runtime_disk_peak_kib}" \
+    --arg runtime_disk_budget_kib "${runtime_disk_budget_kib}" \
+    --arg runtime_poll_interval_seconds "${runtime_poll_interval_seconds}" \
+    --arg received_signal "${received_signal}" \
     --arg license_sha256 "${license_sha}" \
     --arg cargo_toml_sha256 "${cargo_toml_sha}" \
     --arg deny_toml_sha256 "${deny_toml_sha}" \
     --arg main_rs_sha256 "${main_rs_sha}" \
+    --arg runtime_control_helper_sha256 "${runtime_control_helper_sha}" \
     --arg runner_sha256 "${runner_sha}" \
     --arg exit_code "${manifest_exit_code}" \
     "${number_or_null_jq}
@@ -245,11 +266,26 @@ write_manifest() {
         cargo_toml: \$cargo_toml_sha256,
         deny_toml: \$deny_toml_sha256,
         main_rs: \$main_rs_sha256,
+        runtime_control_helper: \$runtime_control_helper_sha256,
         runner: \$runner_sha256
       },
       lockfile_preexisting: (\$lockfile_preexisting == \"true\"),
       lockfile_written: (\$lockfile_written == \"true\"),
       disk_available_kib: number_or_null(\$disk_available_kib),
+      runtime_controls: {
+        monitor_status: \$runtime_control_status,
+        termination_reason: \$runtime_termination_reason,
+        received_signal: (if \$received_signal == \"\" then null else \$received_signal end),
+        elapsed_milliseconds: number_or_null(\$runtime_elapsed_milliseconds),
+        timeout_seconds: (\$runtime_timeout_seconds | tonumber),
+        deadline_enforcement: \"periodic-monitor-and-parent-signal\",
+        disk_current_kib: number_or_null(\$runtime_disk_current_kib),
+        disk_peak_kib: number_or_null(\$runtime_disk_peak_kib),
+        disk_budget_kib: (\$runtime_disk_budget_kib | tonumber),
+        disk_enforcement: \"periodic-apparent-size-monitor\",
+        poll_interval_seconds: (\$runtime_poll_interval_seconds | tonumber),
+        network_egress_enforcement: \"docker-default-network-no-domain-allowlist\"
+      },
       container_residual_count: number_or_null(\$container_residual_count),
       exit_code: (\$exit_code | tonumber)
     }" > "${manifest_tmp}"
@@ -278,6 +314,10 @@ write_checksums() {
   append_checksum "${spike_root}/deny.toml" "${spike_relative}/deny.toml" "${checksums_tmp}"
   append_checksum "${spike_root}/src/main.rs" "${spike_relative}/src/main.rs" "${checksums_tmp}"
   append_checksum \
+    "${runtime_control_helper}" \
+    "scripts/monitor-sw-g2-openmls-0.9-run.py" \
+    "${checksums_tmp}"
+  append_checksum \
     "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" \
     "scripts/run-sw-g2-openmls-0.9-spike.sh" \
     "${checksums_tmp}"
@@ -300,7 +340,9 @@ write_checksums() {
     git-status-before.txt \
     image-index.txt \
     image-inspect.json \
-    manifest.json; do
+    manifest.json \
+    runtime-control-trigger.json \
+    runtime-control.json; do
     append_checksum \
       "${run_dir}/${evidence_name}" \
       "artifacts/sw-g2-openmls-0.9/${run_id}/${evidence_name}" \
@@ -316,6 +358,7 @@ inputs_unchanged() {
     [ "$(shasum -a 256 "${spike_root}/Cargo.toml" | awk '{print $1}')" = "${cargo_toml_sha}" ] &&
     [ "$(shasum -a 256 "${spike_root}/deny.toml" | awk '{print $1}')" = "${deny_toml_sha}" ] &&
     [ "$(shasum -a 256 "${spike_root}/src/main.rs" | awk '{print $1}')" = "${main_rs_sha}" ] &&
+    [ "$(shasum -a 256 "${runtime_control_helper}" | awk '{print $1}')" = "${runtime_control_helper_sha}" ] &&
     [ "$(shasum -a 256 "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" | awk '{print $1}')" = "${runner_sha}" ]
 }
 
@@ -369,6 +412,114 @@ promote_lockfile() {
   fi
 }
 
+run_controlled() {
+  local command_status
+
+  "$@" &
+  controlled_child_pid=$!
+  if wait "${controlled_child_pid}"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  controlled_child_pid=""
+  return "${command_status}"
+}
+
+terminate_controlled_child() {
+  local attempt
+
+  if ! [[ "${controlled_child_pid}" =~ ^[0-9]+$ ]]; then
+    controlled_child_pid=""
+    return 0
+  fi
+  if kill -0 "${controlled_child_pid}" >/dev/null 2>&1; then
+    kill -TERM "${controlled_child_pid}" >/dev/null 2>&1 || true
+    for attempt in 1 2 3 4 5; do
+      if ! kill -0 "${controlled_child_pid}" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+    if kill -0 "${controlled_child_pid}" >/dev/null 2>&1; then
+      kill -KILL "${controlled_child_pid}" >/dev/null 2>&1 || true
+    fi
+  fi
+  wait "${controlled_child_pid}" >/dev/null 2>&1 || true
+  controlled_child_pid=""
+}
+
+start_runtime_monitor() {
+  local attempt
+  local elapsed_offset_seconds=${SECONDS}
+
+  python3 "${runtime_control_helper}" monitor \
+    --run-dir "${run_dir}" \
+    --runner-pid "${runner_pid}" \
+    --timeout-seconds "${runtime_timeout_seconds}" \
+    --disk-budget-kib "${runtime_disk_budget_kib}" \
+    --poll-interval-seconds "${runtime_poll_interval_seconds}" \
+    --elapsed-offset-seconds "${elapsed_offset_seconds}" &
+  runtime_monitor_pid=$!
+
+  for attempt in 1 2 3 4 5; do
+    if [ -f "${run_dir}/runtime-control.json" ]; then
+      return 0
+    fi
+    if ! kill -0 "${runtime_monitor_pid}" >/dev/null 2>&1; then
+      wait "${runtime_monitor_pid}" || true
+      runtime_monitor_pid=""
+      echo "STOP: runtime control monitor exited during startup" >&2
+      return 1
+    fi
+    sleep 1
+  done
+
+  echo "STOP: runtime control monitor did not produce its startup snapshot" >&2
+  return 1
+}
+
+stop_runtime_monitor() {
+  if [[ "${runtime_monitor_pid}" =~ ^[0-9]+$ ]]; then
+    if kill -0 "${runtime_monitor_pid}" >/dev/null 2>&1; then
+      kill -TERM "${runtime_monitor_pid}" >/dev/null 2>&1 || true
+    fi
+    wait "${runtime_monitor_pid}" >/dev/null 2>&1 || true
+  fi
+  runtime_monitor_pid=""
+}
+
+load_runtime_control_state() {
+  local runtime_state_path="${run_dir}/runtime-control.json"
+
+  if [ -f "${run_dir}/runtime-control-trigger.json" ] &&
+    [ ! -L "${run_dir}/runtime-control-trigger.json" ]; then
+    runtime_state_path="${run_dir}/runtime-control-trigger.json"
+  fi
+  if [ ! -f "${runtime_state_path}" ] || [ -L "${runtime_state_path}" ] ||
+    ! jq -e . "${runtime_state_path}" >/dev/null 2>&1; then
+    runtime_control_status="unavailable"
+    runtime_termination_reason="monitor_error"
+    return 1
+  fi
+
+  runtime_control_status="$(jq -r '.status // "unavailable"' "${runtime_state_path}")"
+  runtime_termination_reason="$(jq -r '.stop_reason // "unavailable"' "${runtime_state_path}")"
+  runtime_elapsed_milliseconds="$(jq -r '.elapsed_milliseconds // "unavailable"' "${runtime_state_path}")"
+  runtime_disk_current_kib="$(jq -r '.disk_current_kib // "unavailable"' "${runtime_state_path}")"
+  runtime_disk_peak_kib="$(jq -r '.disk_peak_kib // "unavailable"' "${runtime_state_path}")"
+}
+
+handle_int() {
+  received_signal="INT"
+  exit 130
+}
+
+handle_term() {
+  received_signal="TERM"
+  exit 143
+}
+
 cleanup() {
   local workflow_exit_code=$?
   local manifest_outcome
@@ -376,8 +527,36 @@ cleanup() {
   local container_label=""
   local residual_output=""
   local expected_status=""
+  local final_disk_kib="unavailable"
+  local runtime_triggered=false
   trap - EXIT INT TERM
   set +e
+
+  terminate_controlled_child
+  stop_runtime_monitor
+  if ! load_runtime_control_state; then
+    workflow_exit_code=126
+    final_stage="runtime-control"
+    runtime_triggered=true
+  else
+    case "${runtime_termination_reason}" in
+      deadline_exceeded)
+        workflow_exit_code=124
+        final_stage="runtime-deadline"
+        runtime_triggered=true
+        ;;
+      disk_budget_exceeded)
+        workflow_exit_code=125
+        final_stage="runtime-disk-budget"
+        runtime_triggered=true
+        ;;
+      monitor_error)
+        workflow_exit_code=126
+        final_stage="runtime-control"
+        runtime_triggered=true
+        ;;
+    esac
+  fi
 
   if [ -e "${promotion_temp}" ] && [ -f "${promotion_temp}" ] && [ ! -L "${promotion_temp}" ]; then
     rm -f -- "${promotion_temp}"
@@ -417,6 +596,44 @@ cleanup() {
     final_stage="workspace-finalize"
   fi
 
+  final_disk_kib="$(du -sk "${run_dir}" 2>/dev/null | awk 'NR == 1 { print $1; exit }')"
+  if [[ "${final_disk_kib}" =~ ^[0-9]+$ ]]; then
+    runtime_disk_current_kib="${final_disk_kib}"
+    if ! [[ "${runtime_disk_peak_kib}" =~ ^[0-9]+$ ]] ||
+      [ "${final_disk_kib}" -gt "${runtime_disk_peak_kib}" ]; then
+      runtime_disk_peak_kib="${final_disk_kib}"
+    fi
+    if [ "${final_disk_kib}" -ge "${runtime_disk_budget_kib}" ]; then
+      workflow_exit_code=125
+      final_stage="runtime-disk-budget"
+      runtime_termination_reason="disk_budget_exceeded"
+      runtime_triggered=true
+    fi
+  else
+    workflow_exit_code=126
+    final_stage="runtime-control"
+    runtime_termination_reason="monitor_error"
+    runtime_triggered=true
+  fi
+
+  if [ "${runtime_triggered}" = false ]; then
+    case "${received_signal}" in
+      INT)
+        runtime_termination_reason="external_interrupt"
+        ;;
+      TERM)
+        runtime_termination_reason="external_termination"
+        ;;
+      *)
+        if [ "${workflow_exit_code}" -eq 0 ]; then
+          runtime_termination_reason="completed"
+        else
+          runtime_termination_reason="workflow_stop"
+        fi
+        ;;
+    esac
+  fi
+
   end_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [ "${workflow_exit_code}" -eq 0 ]; then
     manifest_outcome="PASS"
@@ -443,14 +660,29 @@ cleanup() {
   echo "Prepared cache retained under the run .work directory."
   exit "${workflow_exit_code}"
 }
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap handle_int INT
+trap handle_term TERM
 trap cleanup EXIT
+
+if ! start_runtime_monitor; then
+  final_stage="runtime-control"
+  exit 126
+fi
 
 exec > >(tee -a "${run_log}") 2>&1
 
 echo "[1/8] record repository, host, daemon, disk, and image pre-state"
 current_stage="record-state"
+license_sha="$(shasum -a 256 "${repo_root}/LICENSE" | awk '{print $1}')"
+cargo_toml_sha="$(shasum -a 256 "${spike_root}/Cargo.toml" | awk '{print $1}')"
+deny_toml_sha="$(shasum -a 256 "${spike_root}/deny.toml" | awk '{print $1}')"
+main_rs_sha="$(shasum -a 256 "${spike_root}/src/main.rs" | awk '{print $1}')"
+runtime_control_helper_sha="$(shasum -a 256 "${runtime_control_helper}" | awk '{print $1}')"
+runner_sha="$(shasum -a 256 "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" | awk '{print $1}')"
+if [ -f "${repo_lock}" ]; then
+  lockfile_preexisting=true
+  expected_lock_sha="$(shasum -a 256 "${repo_lock}" | awk '{print $1}')"
+fi
 git_revision="$(git -C "${repo_root}" rev-parse HEAD)"
 git_status_before="$(git -C "${repo_root}" status --short --untracked-files=all)"
 printf '%s\n' "${git_status_before}" > "${run_dir}/git-status-before.txt"
@@ -464,17 +696,23 @@ if ! [[ "${disk_available_kib}" =~ ^[0-9]+$ ]] || [ "${disk_available_kib}" -lt 
   echo "STOP: less than 5 GiB is available for the isolated Phase A run" >&2
   exit 10
 fi
-if ! docker info >/dev/null 2>&1; then
+if ! run_controlled docker info --format '{{.Architecture}}' > "${work_dir}/daemon-architecture.txt"; then
   echo "STOP: Docker daemon is unavailable" >&2
   exit 10
 fi
-daemon_arch="$(docker info --format '{{.Architecture}}')"
-if docker image inspect "${image_ref}" >/dev/null 2>&1; then
+daemon_arch="$(awk 'NF { print; exit }' "${work_dir}/daemon-architecture.txt")"
+if run_controlled docker image inspect "${image_ref}" >/dev/null 2>&1; then
   image_preexisting=true
 else
   image_preexisting=false
 fi
-if [ -n "$(docker ps -a --filter "label=${label_key}=${run_id}" --format '{{.ID}}')" ]; then
+if ! run_controlled docker ps -a \
+  --filter "label=${label_key}=${run_id}" \
+  --format '{{.ID}}' > "${work_dir}/preexisting-containers.txt"; then
+  echo "STOP: could not inspect exact run label residuals" >&2
+  exit 10
+fi
+if [ -s "${work_dir}/preexisting-containers.txt" ]; then
   echo "STOP: exact run label already has residual containers" >&2
   exit 10
 fi
@@ -491,7 +729,7 @@ fi
 echo "[3/8] verify immutable Docker image identity"
 current_stage="image-index-inspect"
 if [ "${image_preexisting}" = true ]; then
-  docker image inspect "${image_ref}" > "${run_dir}/image-inspect.json"
+  run_controlled docker image inspect "${image_ref}" > "${run_dir}/image-inspect.json"
   if ! jq -e --arg digest "${image_digest}" \
     'any(.[0].RepoDigests[]?; endswith("@" + $digest))' \
     "${run_dir}/image-inspect.json" >/dev/null; then
@@ -502,11 +740,12 @@ if [ "${image_preexisting}" = true ]; then
   {
     echo "Source: local exact-digest image"
     echo "Digest: ${resolved_index_digest}"
-    docker image inspect "${image_ref}" \
-      --format 'Image-ID: {{.Id}}\nOS/Architecture: {{.Os}}/{{.Architecture}}\nRepoDigests: {{json .RepoDigests}}'
+    jq -r \
+      '.[0] | "Image-ID: \(.Id)\nOS/Architecture: \(.Os)/\(.Architecture)\nRepoDigests: \(.RepoDigests | tojson)"' \
+      "${run_dir}/image-inspect.json"
   } > "${run_dir}/image-index.txt"
 else
-  docker buildx imagetools inspect "${image_ref}" > "${run_dir}/image-index.txt"
+  run_controlled docker buildx imagetools inspect "${image_ref}" > "${run_dir}/image-index.txt"
   resolved_index_digest="$(awk '$1 == "Digest:" { print $2; exit }' "${run_dir}/image-index.txt")"
   if [ "${resolved_index_digest}" != "${image_digest}" ]; then
     echo "STOP: resolved image index digest does not match the fixed digest" >&2
@@ -517,16 +756,16 @@ fi
 echo "[4/8] ensure the fixed Linux ARM64 Rust image"
 current_stage="image-pull"
 if [ "${image_preexisting}" = false ]; then
-  docker pull --platform "${expected_platform}" "${image_ref}"
+  run_controlled docker pull --platform "${expected_platform}" "${image_ref}"
 fi
-docker image inspect "${image_ref}" > "${run_dir}/image-inspect.json"
+run_controlled docker image inspect "${image_ref}" > "${run_dir}/image-inspect.json"
 if ! jq -e --arg digest "${image_digest}" \
   'any(.[0].RepoDigests[]?; endswith("@" + $digest))' \
   "${run_dir}/image-inspect.json" >/dev/null; then
   echo "STOP: prepared image RepoDigests do not contain the fixed digest" >&2
   exit 11
 fi
-if [ "$(docker image inspect "${image_ref}" --format '{{.Os}}/{{.Architecture}}')" != "${expected_platform}" ]; then
+if [ "$(jq -r '.[0] | "\(.Os)/\(.Architecture)"' "${run_dir}/image-inspect.json")" != "${expected_platform}" ]; then
   echo "STOP: prepared image is not ${expected_platform}" >&2
   exit 11
 fi
@@ -536,7 +775,7 @@ host_user="$(id -u):$(id -g)"
 
 echo "[5/8] verify container architecture and Rust toolchain without network"
 current_stage="toolchain-verify"
-docker run --rm \
+run_controlled docker run --rm \
   --name "${container_name}" \
   --label "${label_key}=${run_id}" \
   --platform "${expected_platform}" \
@@ -573,7 +812,7 @@ cargo_version="$(awk '/^cargo / { print; exit }' "${run_dir}/container-toolchain
 echo "[6/8] generate the independent lockfile and run source, license, and advisory gates"
 current_stage="dependency-audit"
 set +e
-docker run --rm \
+run_controlled docker run --rm \
   --name "${container_name}" \
   --label "${label_key}=${run_id}" \
   --platform "${expected_platform}" \

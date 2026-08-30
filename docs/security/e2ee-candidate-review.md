@@ -45,7 +45,7 @@ Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端
 当前阻塞项：
 
 - `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 的固定图已在 Phase A 命中 advisory 与许可证停止线：实际检查图含 3 个未获准的 `MPL-2.0` `hpke-rs*` crate，并包含与 AArch64 直接相关的 `RUSTSEC-2026-0212`；该 prepared run 禁止进入 Phase B；
-- `OpenMLS 0.9.0` 的稳定发布只解除 prerelease 停止线，不能证明旧 advisory、许可证和持久化风险已经关闭；[`SW-EXP-004` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)已接受，实施骨架已完成但 Phase A 尚未执行，且须先关闭 L3 运行上限控制差距；官方安全策略只覆盖主 `openmls` crate，crypto provider 与 storage backend 必须独立审计；
+- `OpenMLS 0.9.0` 的稳定发布只解除 prerelease 停止线，不能证明旧 advisory、许可证和持久化风险已经关闭；[`SW-EXP-004` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)已接受，实施骨架与运行控制 A2 已完成本地实现、离线验证并形成 clean revision，但 Phase A 尚未执行；官方安全策略只覆盖主 `openmls` crate，crypto provider 与 storage backend 必须独立审计；
 - 两成员组的离线并发 commit、乱序 epoch、分区合并和设备恢复复杂度必须以三节点故障矩阵验证；
 - Authentication Service、KeyPackage 发布/过期、Delivery Service 和联系人验证如何去中心化仍需设计；
 - 必须固定 provider、cipher suite、credential、extension、持久化事务和敏感 debug feature 策略；

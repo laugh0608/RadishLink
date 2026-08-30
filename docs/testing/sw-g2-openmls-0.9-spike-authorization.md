@@ -7,7 +7,7 @@
 
 ## 目的与结论边界
 
-本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)已另行接受并完成实施单元 A，但仍未授权或执行 Phase A，也不把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
+本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)已另行接受并完成实施单元 A/A2 的本地实现、离线验证及 clean revision，仍未授权或执行 Phase A，也不把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
 
 `SW-EXP-002` 的源码、lockfile、prepared cache、审计结果和运行授权不得复用。新候选必须生成自己的 lockfile、完整传递图和证据编号；任何“版本更新后应该已修复”的推断都不能替代审计。
 
@@ -24,7 +24,7 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：固定候选版本与 feature、Phase A/Phase B 分段、许可证与 advisory 停止线、自描述 JSON storage、新建 SQLite 基线、Linux ARM64 目标、证据和清理边界；
-- 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已接受并完成实施单元 A；代码—授权包复核又发现 45 分钟总时限和 5 GiB 运行期磁盘预算尚无 runner 内建控制，L3 单元 B 仍未授权且须先关闭该差距，不得联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
+- 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已接受并完成实施单元 A/A2 的本地实现、离线验证及 clean revision；A2 提供 45 分钟用户态 deadline 与 5 GiB 定期监测，L3 单元 B 仍未授权，不得联网、下载、安装、生成 lockfile、构建、容器运行或迁移；
 - 结论限制：当前没有实际解析图、许可证结论、安全公告结论或运行证据；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
 
 ## 官方基线与新增停止线
@@ -98,9 +98,9 @@
 
 以下只是未来授权前的保守估计，不是已发生事实：
 
-- 首次耗时约 15–45 分钟，取决于镜像、crates 和 advisory DB cache；当前 runner 尚未内建 45 分钟总超时，执行前须先关闭该控制差距；
+- 首次耗时约 15–45 分钟，取决于镜像、crates 和 advisory DB cache；运行控制 A2 已在 clean revision 中实现 45 分钟用户态 deadline，执行仍须另获当次授权；
 - 网络下载约 0.8–2.5 GiB；
-- 忽略目录磁盘预算不超过 5 GiB；当前 runner 仅验证启动前可用空间，尚未内建运行期上限，执行前须先关闭该控制差距；
+- 忽略目录磁盘预算为 5 GiB；运行控制 A2 已在 clean revision 中实现每 5 秒 apparent-size 监测和退出复核，但不是文件系统硬配额，执行前须明确接受该边界并另获当次授权；
 - 会编译审计工具与 bundled SQLite 的后续 Phase B 可能增加 CPU/磁盘占用；
 - 不创建长期容器、Docker network、端口、服务，不访问项目远程或提交任何内容；
 - fixed Rust image 和本轮 `.work` cache 默认保留，清理需要精确目标与独立授权。
@@ -154,4 +154,4 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 5. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
 6. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-当前静态门禁和精确方案已接受，实施单元 A 已完成。`SW-EXP-004` Phase A 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；L3 单元 B 与 Phase B 均未授权，`SW-G2` 继续保持未通过。
+当前静态门禁和精确方案已接受，实施单元 A/A2 已完成本地实现、离线验证并形成 clean revision。`SW-EXP-004` Phase A 尚未发生，不存在新 lockfile、依赖许可证结论、构建、运行、迁移或平台实证；L3 单元 B 与 Phase B 均未授权，`SW-G2` 继续保持未通过。
