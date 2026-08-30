@@ -31,8 +31,8 @@
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A lockfile、审计 `STOP` 与 Phase B 门禁。
 - [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：静态方案已接受；Phase A/Phase B 均未授权或执行。
-- [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：独立依赖、存储迁移、许可证与 advisory 静态门禁已接受；实施骨架已由后续精确包完成，Phase A/Phase B 均未授权或执行。
-- [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：实施单元 A/A2 已完成；Phase A 在固定 `rusqlite` 与 storage backend 的 `sqlite3` links 冲突处 `STOP`，未生成 lockfile 或进入审计门，Phase B 禁止。
+- [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：Phase A 已在原固定 SQLite 依赖冲突处 `STOP`；A3 已把直接 `rusqlite` 静态对齐为 `=0.37.0`，再次 Phase A 未授权。
+- [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：实施单元 A/A2/A3 已完成；当前无 lockfile 或审计结论，Phase B 禁止。
 - [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：已接受的 profile、seed、数值、manifest 与 `PASS/FAIL/INVALID` 口径。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：实施与 Docker 运行已分别授权并完成，四个 profile 各三次通过；不构成重跑或后续 `SW-V*` 授权。
 - [技术证据](research/technology-evidence.md)

@@ -245,7 +245,7 @@ write_manifest() {
         openmls_rust_crypto: { version: \"=0.6.0\", features: [] },
         openmls_sqlite_storage: { version: \"=0.3.0\", features: [] },
         openmls_traits: { version: \"=0.6.0\", features: [] },
-        rusqlite: { version: \"=0.32.1\", features: [\"bundled\"] },
+        rusqlite: { version: \"=0.37.0\", features: [\"bundled\"] },
         serde: { version: \"=1.0.229\", features: [\"derive\"] },
         serde_json: { version: \"=1.0.151\", features: [] },
         tls_codec: { version: \"=0.5.0\", features: [\"derive\", \"serde\", \"mls\"] },

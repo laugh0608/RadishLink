@@ -1,6 +1,6 @@
 # SW-G2 OpenMLS 0.9.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Executed / STOP（静态门禁 2026-08-28；Phase A 依赖解析停止 2026-08-30）
+- 状态：Executed / STOP（Phase A 依赖解析停止 2026-08-30；A3 静态基线修订已接受并实施，再次 Phase A 未授权）
 - 资料核对日期：2026-08-30
 - 计划证据编号：`SW-EXP-004`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
@@ -25,6 +25,7 @@
 - 日期：2026-08-28；
 - 接受范围：固定候选版本与 feature、Phase A/Phase B 分段、许可证与 advisory 停止线、自描述 JSON storage、新建 SQLite 基线、Linux ARM64 目标、证据和清理边界；
 - 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已执行；A2 的 45 分钟 deadline 与 5 GiB 定期监测正常收口，但依赖解析因固定 `rusqlite =0.32.1` 与 storage backend 所需 `rusqlite 0.37.0` 的 `sqlite3` links 冲突而 `STOP`，未生成 lockfile 或进入来源、许可证、advisory、feature 门；
+- A3 修订结果：用户在 2026-08-30 明确授权无 Docker、无网络的静态修订；直接 `rusqlite` 对齐为精确 `=0.37.0` 并保留 `bundled`，与 `openmls_sqlite_storage 0.3.0` 的 `rusqlite ^0.37 + bundled` 约束一致；不生成 lockfile、不解析完整传递图，也不形成许可证/advisory 结论；
 - 结论限制：当前没有实际解析图、许可证结论、安全公告结论或运行证据；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
 
 ## 官方基线与新增停止线
@@ -54,7 +55,7 @@
 | `openmls_rust_crypto` | `=0.6.0` | 不启用可选 draft/test feature；其固定 manifest 会向 `hpke-rs 0.7` 传递 `experimental` feature，必须在解析图中显式保留并审计 |
 | `openmls_sqlite_storage` | `=0.3.0` | 合成 endpoint 安全状态持久化 |
 | `openmls_traits` | `=0.6.0` | 组合 RustCrypto、随机源与 SQLite storage provider |
-| `rusqlite` | `=0.32.1` | 只启用 `bundled`，固定 SQLite 构建来源；必须与 provider 解析范围兼容 |
+| `rusqlite` | `=0.37.0` | 只启用 `bundled`；与 provider 的 `^0.37 + bundled` 对齐，并精确固定 Phase A 直接证据口径 |
 | `serde` | `=1.0.229` | `derive`；自描述 JSON storage codec 与脱敏证据 |
 | `serde_json` | `=1.0.151` | JSON storage codec、manifest 和 summary |
 | `tls_codec` | `=0.5.0` | MLS 对象编码；启用 `derive`、`serde`、`mls` |
@@ -69,7 +70,7 @@
 - `migration-import`、`0-8-1-storage-format` 或旧版 `migration-export`；迁移验证另建双版本依赖图和授权，不混入新建状态基线；
 - WASM、Android/iOS、FFI、SQLCipher 或系统 SQLite；这些平台与分发边界后续独立评审。
 
-若 crates.io manifest 显示任一直接版本、feature 或 `rusqlite =0.32.1` 不兼容，Phase A 在生成 lockfile 前停止并回到本文修订；不得放宽为版本范围或运行 `cargo update` 猜测可用组合。
+若 crates.io manifest 显示任一直接版本、feature 或 `rusqlite =0.37.0` 不兼容，Phase A 在生成 lockfile 前停止并回到本文修订；不得放宽为版本范围或运行 `cargo update` 猜测可用组合。
 
 ## Phase A：独立 lockfile、来源、许可证与 advisory 门
 

@@ -1,6 +1,6 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：Executed / STOP（2026-08-30；固定 SQLite 依赖图在 lockfile 生成前冲突，Phase B 禁止）
+- 状态：Executed / STOP（2026-08-30；A3 已将直接 `rusqlite` 静态对齐为 `=0.37.0`，再次 Phase A 未授权，Phase B 禁止）
 - 日期：2026-08-30
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
@@ -22,7 +22,7 @@
 
 执行单元只能使用静态门禁已接受的基线：
 
-- crate：`openmls =0.9.0`、`openmls_basic_credential =0.6.0`、`openmls_rust_crypto =0.6.0`、`openmls_sqlite_storage =0.3.0`、`openmls_traits =0.6.0`、`rusqlite =0.32.1`、`serde =1.0.229`、`serde_json =1.0.151`、`tls_codec =0.5.0` 与 dev dependency `tempfile =3.27.0`；
+- crate：`openmls =0.9.0`、`openmls_basic_credential =0.6.0`、`openmls_rust_crypto =0.6.0`、`openmls_sqlite_storage =0.3.0`、`openmls_traits =0.6.0`、`rusqlite =0.37.0`、`serde =1.0.229`、`serde_json =1.0.151`、`tls_codec =0.5.0` 与 dev dependency `tempfile =3.27.0`；
 - 镜像：`rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663`；
 - 平台：`linux/arm64`，容器内必须为 Linux `aarch64`、`rustc 1.96.1`、`cargo 1.96.1`；
 - 审计工具：`cargo-audit =0.22.2`、`cargo-deny =0.20.2`，均使用 `cargo install --locked` 安装到本轮 `.work`；
@@ -47,7 +47,7 @@ openmls_basic_credential = "=0.6.0"
 openmls_rust_crypto = "=0.6.0"
 openmls_sqlite_storage = "=0.3.0"
 openmls_traits = "=0.6.0"
-rusqlite = { version = "=0.32.1", features = ["bundled"] }
+rusqlite = { version = "=0.37.0", features = ["bundled"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 tls_codec = { version = "=0.5.0", features = ["derive", "serde", "mls"] }
@@ -316,15 +316,26 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 - monitor 正常停止，耗时 `15029 ms`，本轮目录峰值 `4428 KiB`，未触发 45 分钟或 5 GiB 边界；checksum 全部通过，精确容器残留为 `0`，fixed image 和两份 ignored evidence 按约定保留；
 - 本次不构建或运行 OpenMLS 候选，不进入 Phase B，不修改产品代码，不生成迁移证据，不重跑。修订 `rusqlite` 固定版本或移除直接依赖都会改变已接受基线，必须先形成新的静态差异评审和精确授权，不能在本包内直接修补。
 
+## 2026-08-30 A3 固定 SQLite 依赖静态修订
+
+用户明确授权继续执行无 Docker、无网络的静态修订单元。A3 的证据与边界为：
+
+- 有效 Phase A 获取的 crates.io sparse index metadata 显示，`openmls_sqlite_storage 0.3.0`（checksum `e7a48acaffbed1bbed61c5030193e374ff4914331ed5f4a604bd5a4692c0a713`）直接要求 `rusqlite ^0.37`、启用 `bundled`，MSRV 为 Rust 1.91；
+- `rusqlite 0.37.0`（checksum `165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f`）要求 `libsqlite3-sys ^0.35.0`；其 `bundled` feature 继续映射到 `libsqlite3-sys/bundled` 与 `modern_sqlite`；
+- spike 源码当前不直接调用 `rusqlite` API。保留直接依赖不是为了建立第二套 SQLite 入口，而是把 storage backend 的关键 native 依赖精确钉在 `=0.37.0`，并在 manifest 中显式记录 `bundled` 来源边界；
+- A3 只把 `tools/spikes/sw-g2-openmls-0.9/Cargo.toml` 与 runner manifest 的 `rusqlite` 从 `=0.32.1` 对齐为 `=0.37.0`，同步当前专题与状态文档；不修改其他 crate、provider、feature、allowlist、镜像、审计工具、运行控制或 Phase B 拒绝入口；
+- A3 不调用 Docker、Cargo 或网络，不生成 lockfile，不下载或安装依赖，不证明完整解析图可生成，也不形成许可证、advisory、构建、运行、迁移或产品能力结论；
+- 再次执行 Phase A 仍是新的 L3 单元，必须基于 A3 clean revision 重新说明唯一命令、默认网络无域名 allowlist、预计时长/下载、45 分钟 deadline、5 GiB 定期监测、保留与精确清理，并取得当次明确授权。
+
 ## 当前停止点与未来授权措辞
 
-本文精确方案已执行并在依赖解析门 `STOP`。当前存在两份 `SW-EXP-004` ignored evidence，但没有新 lockfile、许可证/advisory 结果、候选构建或场景实证；Phase B 禁止，固定依赖修订和再次 Phase A 均未授权。
+本文精确方案已执行并在依赖解析门 `STOP`；A3 静态修订已接受并实施。当前存在两份 `SW-EXP-004` ignored evidence，但没有新 lockfile、许可证/advisory 结果、候选构建或场景实证；Phase B 禁止，再次 Phase A 未授权。
 
 未来授权必须明确指出授权单元：
 
 - 单元 A：按本文文件清单实施最小骨架并运行列出的无网络静态验证；
 - 运行控制单元 A2：按本节文件清单实现并离线验证 deadline、磁盘 monitor、信号收口和证据；不包含 `prepare`、commit 或外部运行；
-- 后续静态修订单元：只评审 `openmls_sqlite_storage 0.3.0` 与直接 `rusqlite` 的版本/feature 边界、迁移覆盖和相应来源；不得下载、生成 lockfile 或执行容器；
-- 新的执行单元：只有静态修订另行接受并提交为 clean revision 后，才可重新形成唯一命令、网络、依赖、证据、保留与清理边界并申请一次 Phase A 授权。
+- 静态修订单元 A3：把直接 `rusqlite` 精确对齐为 `=0.37.0`、保留 `bundled` 并同步证据口径；不包含 lockfile、Docker、Cargo、网络或外部运行；
+- 新的执行单元：只有 A3 提交为 clean revision 后，才可重新形成唯一命令、网络、依赖、证据、保留与清理边界并申请一次 Phase A 授权。
 
 任何只写“接受文档”“继续下一步”或此前只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。
