@@ -1,6 +1,6 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：Executed / STOP（2026-08-30；A3 已将直接 `rusqlite` 静态对齐为 `=0.37.0`，再次 Phase A 未授权，Phase B 禁止）
+- 状态：Executed / STOP（2026-08-30；A3 后依赖图可解析，但 Phase A 在审计工具安装期间触发 45 分钟 deadline，Phase B 禁止）
 - 日期：2026-08-30
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
@@ -234,7 +234,7 @@ runner 必须按顺序执行：
 
 ## 预计副作用与上限
 
-- 预计持续 15–45 分钟；monitor 从 runner 启动时累计耗时，每 5 秒复核并在达到 45 分钟时写入触发证据、终止受控子进程并进入精确清理，不自动重试。它是用户态 deadline 与信号收口，不是操作系统作业调度硬时限；
+- 原预计持续 15–45 分钟；A3 后实测在 45 分钟内仍未完成固定审计工具准备，因此该估计已失效。monitor 当前仍从 runner 启动时累计耗时，每 5 秒复核并在达到 45 分钟时写入触发证据、终止受控子进程并进入精确清理，不自动重试。它是用户态 deadline 与信号收口，不是操作系统作业调度硬时限；
 - 网络下载约 0.8–2.5 GiB，包含可能缺失的固定 Rust image、候选 crates、固定审计工具和当次 advisory DB；
 - `artifacts/sw-g2-openmls-0.9/<run-id>/.work/` 与证据磁盘预算为 5 GiB。runner 继续要求启动前至少有 5 GiB 可用空间，并每 5 秒统计本轮目录 apparent size、在退出期以 `du` 复核；达到阈值即 `STOP`。该机制不是文件系统 quota，采样间隔内可能短暂越界；
 - 可能新增由 Cargo 生成的 `tools/spikes/sw-g2-openmls-0.9/Cargo.lock`，但只在 source gate 通过后发生；不自动 `git add`、commit 或 push；
@@ -327,15 +327,29 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 - A3 不调用 Docker、Cargo 或网络，不生成 lockfile，不下载或安装依赖，不证明完整解析图可生成，也不形成许可证、advisory、构建、运行、迁移或产品能力结论；
 - 再次执行 Phase A 仍是新的 L3 单元，必须基于 A3 clean revision 重新说明唯一命令、默认网络无域名 allowlist、预计时长/下载、45 分钟 deadline、5 GiB 定期监测、保留与精确清理，并取得当次明确授权。
 
+## 2026-08-30 A3 后 Phase A 执行结果
+
+用户在获知 A3 clean revision `851f3bb8e9c7e844d9f2c1c84abf64dfcf092388`、唯一命令、Docker/网络、预计资源、deadline、磁盘监测、保留和清理边界后，明确授权执行一次新的 Phase A。有效 run ID 为 `20260830-091344-87309.iyw1Dm`。
+
+- fixed image 已存在，host、daemon 与容器架构分别为 `arm64`、`aarch64`、`aarch64`，容器内为 `rustc/cargo 1.96.1`；运行前工作区干净，仓库没有候选 `Cargo.lock`；
+- Cargo 已成功锁定候选解析图。partial metadata 包含 264 个 package（含 workspace root），evidence `Cargo.lock` SHA-256 为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；图中只有 `rusqlite 0.37.0` 与 `libsqlite3-sys 0.35.0`，并显式启用 `bundled`，因此 A3 已关闭此前的双 `links = "sqlite3"` 解析冲突；
+- 该 lockfile 只存在于 ignored evidence，未原子写入仓库。runner 在受控容器返回前没有取得 `resolved_package_count` 或 `cargo_lock_sha256` shell 状态，因此 manifest 对应字段仍为 `null` / `unavailable`；checksum 已覆盖实际 evidence lock、metadata 和三份 tree 文件，不能把 manifest 缺省值误写成“没有生成 partial graph”；
+- `cargo-audit 0.22.2` 已开始下载和安装，但 crates.io 传输多次出现 OpenSSL EOF / send failure，并由同一 Cargo 命令使用默认内部重试；runner 没有重启本轮。`cargo-deny 0.20.2` 尚未开始，RustSec advisory DB revision 不可用；
+- source、audit、deny、feature 四个正式门均未返回退出码，不得推导来源、许可证、advisory 或 feature 通过；没有候选构建、运行、迁移或产品能力证据；
+- monitor 在 `2704774 ms` 触发 `deadline_exceeded`，runner 收到 `TERM`、终止受控子进程并完成精确清理；最终为 `STOP/runtime-deadline`、退出码 `124`，结束时间距开始约 45 分 11 秒；
+- monitor 记录的最终目录峰值为 `337380 KiB`，低于 5 GiB 预算；checksum 全部通过，精确容器残留为 `0`。仓库 `Cargo.lock` 仍不存在，工作区保持干净；fixed image 与三份 `SW-EXP-004` ignored evidence 按约定保留；
+- 本次授权已经消耗，不自动重试。再次执行前必须先评审 45 分钟内安装固定审计工具的可行方式、受控复用/固定工具产物的证据边界，或重新论证 deadline；不得直接复用未校验 `.work`、放宽工具版本、跳过审计门或仅延长时限掩盖根因。
+
 ## 当前停止点与未来授权措辞
 
-本文精确方案已执行并在依赖解析门 `STOP`；A3 静态修订已接受并实施。当前存在两份 `SW-EXP-004` ignored evidence，但没有新 lockfile、许可证/advisory 结果、候选构建或场景实证；Phase B 禁止，再次 Phase A 未授权。
+本文精确方案已执行；A3 关闭了已知 SQLite 解析冲突，但新的 Phase A 在审计工具安装期间触发 45 分钟 deadline。当前存在三份 `SW-EXP-004` ignored evidence 和一份仅位于最新 evidence 的 partial lockfile；仓库没有候选 `Cargo.lock`，也没有来源、许可证/advisory、feature、候选构建或场景实证。Phase B 禁止，运行资源修订和再次 Phase A 均未授权。
 
 未来授权必须明确指出授权单元：
 
 - 单元 A：按本文文件清单实施最小骨架并运行列出的无网络静态验证；
 - 运行控制单元 A2：按本节文件清单实现并离线验证 deadline、磁盘 monitor、信号收口和证据；不包含 `prepare`、commit 或外部运行；
 - 静态修订单元 A3：把直接 `rusqlite` 精确对齐为 `=0.37.0`、保留 `bundled` 并同步证据口径；不包含 lockfile、Docker、Cargo、网络或外部运行；
-- 新的执行单元：只有 A3 提交为 clean revision 后，才可重新形成唯一命令、网络、依赖、证据、保留与清理边界并申请一次 Phase A 授权。
+- 后续运行资源修订单元：先在无 Docker、无网络条件下评审固定审计工具准备、可验证 cache/产物复用、partial evidence 回填和 deadline 口径；不得直接复用 `.work`、安装工具、延长时限或执行容器；
+- 新的执行单元：只有运行资源修订另行接受并形成 clean revision 后，才可重新形成唯一命令、网络、依赖、证据、保留与清理边界并申请一次 Phase A 授权。
 
 任何只写“接受文档”“继续下一步”或此前只授权 A 的表述都不自动授权 B。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。

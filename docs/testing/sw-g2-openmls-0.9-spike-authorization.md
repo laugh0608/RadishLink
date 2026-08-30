@@ -1,13 +1,13 @@
 # SW-G2 OpenMLS 0.9.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Executed / STOP（Phase A 依赖解析停止 2026-08-30；A3 静态基线修订已接受并实施，再次 Phase A 未授权）
+- 状态：Executed / STOP（A3 后依赖图可解析；Phase A 在审计工具安装期间触发 45 分钟 deadline，2026-08-30）
 - 资料核对日期：2026-08-30
 - 计划证据编号：`SW-EXP-004`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
 
 ## 目的与结论边界
 
-本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)已另行接受并执行，Phase A 在固定 SQLite 依赖图冲突处 `STOP`，也不把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
+本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)已另行接受并执行。首轮 Phase A 在固定 SQLite 依赖图冲突处 `STOP`；A3 对齐后依赖图可解析，但新一轮在审计工具安装期间触发 deadline。两轮都不能把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
 
 `SW-EXP-002` 的源码、lockfile、prepared cache、审计结果和运行授权不得复用。新候选必须生成自己的 lockfile、完整传递图和证据编号；任何“版本更新后应该已修复”的推断都不能替代审计。
 
@@ -26,7 +26,8 @@
 - 接受范围：固定候选版本与 feature、Phase A/Phase B 分段、许可证与 advisory 停止线、自描述 JSON storage、新建 SQLite 基线、Linux ARM64 目标、证据和清理边界；
 - 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已执行；A2 的 45 分钟 deadline 与 5 GiB 定期监测正常收口，但依赖解析因固定 `rusqlite =0.32.1` 与 storage backend 所需 `rusqlite 0.37.0` 的 `sqlite3` links 冲突而 `STOP`，未生成 lockfile 或进入来源、许可证、advisory、feature 门；
 - A3 修订结果：用户在 2026-08-30 明确授权无 Docker、无网络的静态修订；直接 `rusqlite` 对齐为精确 `=0.37.0` 并保留 `bundled`，与 `openmls_sqlite_storage 0.3.0` 的 `rusqlite ^0.37 + bundled` 约束一致；不生成 lockfile、不解析完整传递图，也不形成许可证/advisory 结论；
-- 结论限制：当前没有实际解析图、许可证结论、安全公告结论或运行证据；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
+- A3 后执行结果：证据 `20260830-091344-87309.iyw1Dm` 已生成 264-package partial graph 和仅位于 evidence 的 lockfile，确认只有 `rusqlite 0.37.0` / `libsqlite3-sys 0.35.0`；在 `cargo-audit 0.22.2` 安装期间触发 45 分钟 deadline，四类正式门均未返回结果，仓库 lockfile 未写入；
+- 结论限制：当前没有来源、许可证、安全公告、feature 或候选运行结论；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
 
 ## 官方基线与新增停止线
 
@@ -99,7 +100,7 @@
 
 以下只是未来授权前的保守估计，不是已发生事实：
 
-- 首次耗时约 15–45 分钟，取决于镜像、crates 和 advisory DB cache；运行控制 A2 已在 clean revision 中实现 45 分钟用户态 deadline，执行仍须另获当次授权；
+- 原预计首次耗时 15–45 分钟；A3 后实测在 45 分钟内仍未完成固定审计工具准备，该估计已失效。runner 当前仍实施 45 分钟用户态 deadline；未来必须先重新评审工具准备、cache/产物复用与总时限，再另获当次执行授权；
 - 网络下载约 0.8–2.5 GiB；
 - 忽略目录磁盘预算为 5 GiB；运行控制 A2 已在 clean revision 中实现每 5 秒 apparent-size 监测和退出复核，但不是文件系统硬配额，执行前须明确接受该边界并另获当次授权；
 - 会编译审计工具与 bundled SQLite 的后续 Phase B 可能增加 CPU/磁盘占用；
@@ -155,4 +156,4 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 5. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
 6. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-当前静态门禁和精确方案已接受，实施单元 A/A2 已完成。`SW-EXP-004` Phase A 已在依赖解析门 `STOP`，不存在新 lockfile、依赖许可证/advisory 结论、候选构建、场景运行、迁移或平台能力实证；固定依赖基线修订、再次 Phase A 与 Phase B 均未授权，`SW-G2` 继续保持未通过。
+当前静态门禁和精确方案已接受，实施单元 A/A2/A3 已完成。A3 后的 `SW-EXP-004` Phase A 已生成 partial graph 和 evidence-only lockfile，但在审计工具安装期间触发 runtime deadline；不存在来源、许可证/advisory、feature、候选构建、场景运行、迁移或平台能力结论。运行资源修订、再次 Phase A 与 Phase B 均未授权，`SW-G2` 继续保持未通过。

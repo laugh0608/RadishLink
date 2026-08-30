@@ -158,7 +158,7 @@ Phase A 允许容器访问 Docker Hub、crates.io index/download 和 GitHub Rust
 - 该 run 的原始 manifest 因生成顺序把 `stage` 记为 `evidence-finalize`，但 `prepare_exit_code=20`、审计退出码和报告内容完整；不回写原 artifact，脚本已修正为后续审计失败明确记录 `dependency-audit`。
 - 所有登记在 `checksums.sha256` 的 manifest、lockfile、metadata、tree 和审计报告均复核通过；没有残留容器或后台进程。固定镜像保留；忽略目录保留约 1.5 GiB 的审计工具/cache 与证据，未获清理授权不删除。
 
-以上结果是 `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定候选图的负向 Phase A 证据。它不证明 MLS 路线整体不可用，但明确禁止以该 prepared run 进入 Phase B。`mls-rs 0.56.0` 与[OpenMLS 0.9.0](sw-g2-openmls-0.9-spike-authorization.md)静态门禁均已于 2026-08-28 接受；OpenMLS 0.9.0 的[Phase A](sw-g2-openmls-0.9-phase-a-authorization.md)随后在独立固定 SQLite 依赖图冲突处 `STOP`，A3 只完成静态版本对齐，仍没有可复用的 lockfile 或许可证/advisory 结论。不得直接复用任一 prepared run、采用未经审计的候选、手改 lockfile 或绕过 advisory/许可证停止线。
+以上结果是 `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定候选图的负向 Phase A 证据。它不证明 MLS 路线整体不可用，但明确禁止以该 prepared run 进入 Phase B。`mls-rs 0.56.0` 与[OpenMLS 0.9.0](sw-g2-openmls-0.9-spike-authorization.md)静态门禁均已于 2026-08-28 接受；OpenMLS 0.9.0 的[Phase A](sw-g2-openmls-0.9-phase-a-authorization.md)在 A3 后已生成可解析 partial graph，但在审计工具安装期间 deadline `STOP`，仍没有可复用的仓库 lockfile 或许可证/advisory 结论。不得直接复用任一 prepared run、采用未经审计的候选、手改 lockfile 或绕过 advisory/许可证停止线。
 
 ### 2026-08-28 实现静态收口
 
@@ -248,4 +248,4 @@ docker image inspect rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde2
 2. **Phase B**：在 Phase A 人工复核通过后，运行无网络 Linux ARM64 场景；
 3. **可选清理镜像**：只在满足精确前置条件时执行，不包含在前两项默认授权中。
 
-隔离 spike 骨架与 lockfile 已形成；Phase A 最终在许可证和 advisory 门 `STOP`，来源检查通过但安全与许可证条件未关闭。Phase B 不再是“待授权即可执行”，而是被本轮负向证据阻断；镜像与 1.5 GiB 忽略 cache 的清理也未授权。OpenMLS 0.9.0 的独立 Phase A 随后在原固定 SQLite 依赖图冲突处 `STOP`；A3 已静态对齐版本但未重跑，仍不得复用任一 prepared run 进入场景。
+隔离 spike 骨架与 lockfile 已形成；Phase A 最终在许可证和 advisory 门 `STOP`，来源检查通过但安全与许可证条件未关闭。Phase B 不再是“待授权即可执行”，而是被本轮负向证据阻断；镜像与 1.5 GiB 忽略 cache 的清理也未授权。OpenMLS 0.9.0 A3 后的独立 Phase A 已生成 partial graph，但在审计工具安装期间 deadline `STOP`，仍不得复用任一 prepared run 进入场景。

@@ -1,6 +1,6 @@
 # SW-G2 E2EE 与身份候选决策包
 
-- 状态：Draft（OpenMLS 0.8.1 与 0.9.0 Phase A 均已 `STOP`；0.9.0 A3 静态修订已完成但未重跑；mls-rs 0.56.0 静态门未执行）
+- 状态：Draft（OpenMLS 0.8.1 Phase A 负向 `STOP`；0.9.0 A3 后 Phase A 在审计工具安装期间 deadline `STOP`；mls-rs 静态门未执行）
 - 资料核对日期：2026-08-30
 - 适用 gate：`SW-G2`
 - 前置决策：`SW-G0/SW-G1` 已接受
@@ -12,7 +12,7 @@
 当前执行顺序为：
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
-2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已完成 A/A2；获单次授权的 Phase A 在原固定 SQLite 依赖冲突处 `STOP`，A3 已把直接 `rusqlite` 对齐为 `=0.37.0 + bundled`，但没有新 lockfile 或许可证/advisory 结论，不能继承 0.8.1 lockfile、cache 或授权；
+2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已完成 A/A2/A3；A3 后 partial graph 可解析且 SQLite 版本唯一，但 Phase A 在安装固定审计工具期间触发 deadline，没有来源、许可证/advisory 或 feature 结论，不能继承 0.8.1 lockfile、cache 或授权；
 3. 以[`mls-rs 0.56.0` 静态门禁与执行授权包](../testing/sw-g2-mls-rs-spike-authorization.md)对照许可证、advisory、存储、互操作与平台边界；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
@@ -23,7 +23,7 @@
 | 候选 | 固定评估基线 | 适配优势 | 当前停止线 | 当前定位 |
 | --- | --- | --- | --- | --- |
 | `OpenMLS` 旧基线 | `openmls-v0.8.1` / `47dbede` | MIT；Rust；可插拔 crypto/storage；MLS 两成员组与未来群组共用标准语义 | 固定图命中活跃 RustSec advisory，其中包含 AArch64 相关密码错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 未通过初始 allowlist | Phase A 负向基线；prepared run 禁止进入 Phase B |
-| `OpenMLS` 稳定刷新 | `openmls 0.9.0`（2026-08-25） | 官方列出 Linux AArch64 构建与测试；provider/storage 版本线已更新 | 原固定 SQLite 依赖冲突；A3 已对齐为 `rusqlite =0.37.0 + bundled`，但完整传递图、许可证、advisory、迁移与 0.8 行为差异仍无结论 | Phase A 依赖解析 `STOP`；A3 后重跑未授权 |
+| `OpenMLS` 稳定刷新 | `openmls 0.9.0`（2026-08-25） | 官方列出 Linux AArch64 构建与测试；provider/storage 版本线已更新 | A3 后 partial graph 可解析；固定审计工具未在 45 分钟内准备完成，许可证、advisory、迁移与 0.8 行为差异仍无结论 | Phase A runtime deadline `STOP`；先评审运行资源与证据边界 |
 | `mls-rs` | `0.56.0` | Apache-2.0 OR MIT；Rust；提供 storage traits、SQLite provider、互操作与 FFI/UniFFI 路径 | 官方未给出完整 Linux ARM64 支持矩阵，并明确没有完整第三方安全审计 | 对照候选，不是后备默认值 |
 | `libsignal` | `v0.101.0` / `b056faa` | 一对一异步初始协商、逐消息 ratchet 与多设备会话语义最直接 | AGPL-3.0 与本仓库、分发和商店渠道的义务尚未独立确认；官方 native artifact 列表未列 Debian/Linux ARM64；公开 bridge 不是稳定 API 承诺 | 静态核对，未过停止线不进入运行 |
 
