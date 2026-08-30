@@ -1,6 +1,6 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：A5 implemented / new L3 bundle pending（2026-08-30；首次单元 C 已构建固定二进制，但 evidence finalizer 失败，run 无效；A5 已离线修正，尚无成功 bundle，Phase A 未重跑，Phase B 禁止）
+- 状态：bundle `PASS` / L3 D pending（2026-08-30；A5 后固定审计工具 bundle `20260830-112214-39636.GpERrj` 已构建并复核，精确 Phase A 授权包已形成但未获执行授权，Phase B 禁止）
 - 日期：2026-08-30
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
@@ -14,9 +14,10 @@
 2. **运行控制单元 A2**：在不执行 runner 的前提下补齐 45 分钟 deadline、5 GiB 定期监测、信号收口与停止证据；
 3. **L3 执行单元 B**：在 A/A2 已提交、工作区干净且再次明确授权后，只运行一次 Phase A，生成新 lockfile 并执行来源、许可证和 advisory 门。
 4. **运行资源单元 A4**：离线实现固定、可验证的审计工具 bundle，Phase A 只读消费精确 bundle ID，并在 deadline/signal 下回填已经落盘的 partial evidence；
-5. **L3 审计工具 bundle 构建单元 C**：已获授权执行一次；固定二进制构建与无网络版本验证成功，但 evidence finalizer 失败，因此整体为 `INVALID`，不构成成功 bundle；
+5. **首次 L3 审计工具 bundle 构建单元 C**：固定二进制构建与无网络版本验证成功，但 evidence finalizer 失败，因此整体为 `INVALID`，不构成成功 bundle；
 6. **证据终结单元 A5**：不重跑 bundle，离线修正 manifest/checksum 原子终结、失败传播和 `PASS` 时序；
-7. **L3 Phase A 执行单元 D**：只有未来新 bundle `PASS`、人工复核且再次单独授权后，才以精确 bundle ID 重跑一次 Phase A。
+7. **A5 后 L3 bundle 构建单元 C2**：已在 clean revision 上执行一次，固定 bundle `20260830-112214-39636.GpERrj` 通过 v2 finalizer 与独立复核；
+8. **L3 Phase A 执行单元 D**：已写入精确 bundle ID 与唯一命令，但只有再次单独授权后才可执行一次 Phase A。
 
 分段用于保证用户在任何联网、依赖下载、审计工具编译或 Docker 容器启动前，能够先审阅真实脚本。接受本文不授权 A 或 B；A 的授权不自动包含 B，B 的一次授权也不构成失败重试、Phase B、清理或其他候选的持续授权。
 
@@ -195,7 +196,7 @@ git diff --check
 
 ## 历史 L3 执行单元 B：一次 Phase A
 
-本节记录 2026-08-30 已执行两次的历史合同，不再是当前可执行入口。A4 后 runner 已拒绝不带 bundle ID 的旧命令；新的 bundle 构建与 Phase A 分别以本文后续单元 C、D 为准，二者均未获 L3 执行授权。
+本节记录 2026-08-30 已执行两次的历史合同，不再是当前可执行入口。A4 后 runner 已拒绝不带 bundle ID 的旧命令；A5 后 bundle 构建单元 C2 已完成，新的 Phase A 只以本文后续精确单元 D 为准且尚未获 L3 执行授权。
 
 ### 前置条件
 
@@ -431,13 +432,44 @@ git diff --check
 
 A5 新增 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh self-test`，只在系统临时目录使用合成状态，覆盖有效 manifest/checksum、固定字符串与 null/boolean、renderer 失败不留 final/tmp、空 manifest 和无效 JSON 均拒绝 checksum。shell 语法、独立 jq filter 渲染、自检、既有无效 run 前后文件大小/mtime 比对、仓库基线和 `git diff --check` 均通过；未调用 Docker/Cargo/网络，未创建或重跑 bundle，未修改历史 artifact。
 
-未来新的单元 C 仍须基于 A5 clean revision 重新说明并获得一次精确 L3 授权：唯一命令、Docker 默认出站网络无域名 allowlist、最多 90 分钟、5 GiB 五秒周期监测、4 CPU/4 GiB、可能复用 fixed image 并重新下载/编译工具 crate、保留新 bundle/`.work`，以及只清理精确 label 容器的方式。此前授权已经消费，失败不自动重试，无效 run 的 `.work` 不成为可信输入，也不自动进入单元 D。
+### A5 后 L3 bundle 构建单元 C2 结果
 
-单元 D 只有在某个 bundle `PASS` 且 manifest/checksum 人工复核后才可提出。授权必须写出精确 `<bundle-id>` 和唯一 Phase A 命令，并重新说明候选 crates/RustSec 网络、45 分钟、5 GiB、可能写入仓库 lockfile、证据与清理。D 不包含 bundle 重建、自动重试、Phase B、commit、push 或清理历史 evidence。
+用户在看到精确命令、Docker 默认出站网络无域名 allowlist、90 分钟/5 GiB/4 CPU/4 GiB 上限、保留与精确清理边界后，明确授权在 A5 clean revision `cf340d39d3ceba8b5d61b915ecc5eb01fa37ffc5` 上执行一次新的单元 C。唯一 run `20260830-112214-39636.GpERrj` 最终退出 `0`：
+
+- fixed image/index/platform、Linux `aarch64` 与 Rust/Cargo `1.96.1` 匹配；`cargo-audit 0.22.2` 和 `cargo-deny 0.20.2` 均构建完成，并在同一 fixed image 的 `--network none` 容器报告固定版本；
+- crates.io 期间出现 TLS EOF、DNS、超时与 SSL syscall 告警，但 Cargo 只在同一进程内使用默认内部重试；runner 没有重启 run 或发起第二次构建；
+- 两个 `0555` 二进制 SHA-256 分别为 `3f1eec4519d67df8d48c02ff366528155a664702b360388a69ae484549b6cb87` 与 `9ea2b1019a52961af71fcd589a8dd5e640169b8c02a9ab1d3d44d7ac0204fd45`；bundle/bin 没有其他条目或 symlink；
+- schema 2 / `sw-exp-004-audit-tools-v2` manifest 为 `PASS/audit-tools-bundle-ready`，11 项 checksum 独立复核全部通过；builder、manifest filter、runtime monitor 摘要与 clean revision 输入一致；
+- monitor 以 `completed` 在 `1844010 ms` 正常停止，记录目录峰值 `1366495 KiB`，低于 5 GiB；工作区前后干净，精确 Docker label 残留为零，不存在 finalizer tmp 或 trigger；
+- fixed image、成功 bundle、日志和 `.work` 按约定保留；`.work` 不属于信任边界且不得由 Phase A 挂载。首次无效 run 继续原样保留，也不得消费。
+
+该结果只接受固定审计工具 bundle 的构建和证据合同，不是 OpenMLS 候选审计、许可证/advisory 结论或 Phase A/Phase B 授权。
+
+## 待授权的 L3 单元 D：精确 bundle Phase A
+
+单元 D 的唯一允许入口固定为：
+
+```bash
+./scripts/run-sw-g2-openmls-0.9-spike.sh prepare 20260830-112214-39636.GpERrj
+```
+
+本文与状态文档的提交只形成可审阅授权包，不授权执行该命令。执行前仍须基于本次 clean revision 重新向用户说明并取得当前任务明确授权；一次授权只覆盖一次上述入口，不包含失败重试、bundle 重建、Phase B、commit、push 或 evidence 清理。
+
+### D 的固定动作与副作用
+
+1. runner 在创建 Phase A artifact、查询 Docker 或访问网络前，复核精确 bundle ID、v2 manifest、11 项 checksum、fixed image/platform、工具版本/摘要、输入、clean 状态和零残留；不自动选择 latest，不挂载 bundle `.work`；
+2. 创建新的私有 `artifacts/sw-g2-openmls-0.9/<run-id>/`，启动 45 分钟与 5 GiB 五秒周期 monitor；fixed image 若仍存在则只核对，缺失时可能访问 Docker Hub 并按完整 digest 拉取；
+3. 工具链容器使用 `--network none`；候选依赖与审计容器使用 Docker 默认出站网络且无域名 allowlist，预期访问 crates.io index/download 与 GitHub RustSec advisory DB，不映射端口；
+4. 使用本轮独立 Cargo home/target 生成候选 lockfile、下载固定候选 crates、保存 metadata/tree，并只读挂载成功 bundle 的两个二进制执行 source、`cargo audit`、license/advisory 与 feature 门；Phase A 不安装或编译审计工具，也不构建或运行 OpenMLS/SQLite 候选；
+5. 容器保持非 root、只读根、4 CPU/4 GiB、`pids-limit 512`、drop capabilities 与 no-new-privileges；不挂载 Docker socket、真实 home、Git credential、SSH agent、用户数据或密钥；
+6. source 与固定 feature 门通过、输入/HEAD 未变且目标安全时，可能原子新增 `tools/spikes/sw-g2-openmls-0.9/Cargo.lock`；不会自动暂存、提交或 push；
+7. fixed image、本轮 evidence、候选 `.work`/cache 与可能生成的仓库 lockfile 默认保留。trap 只清理名称和 `org.radishlink.sw-g2-openmls-0.9.run=<run-id>` 同时匹配的本轮容器，并在退出后复核精确残留；不执行全局 Docker 清理或宽泛 artifact 删除。
+
+预计持续 15–45 分钟，目录预算 5 GiB，网络量取决于 fixed candidate crates 与当次 RustSec DB；45 分钟和 5 GiB 是五秒周期用户态监测，不是内核 quota，采样间隔内可能短暂越界。任一网络失败、deadline/磁盘触发、digest/平台/版本不符、lockfile 漂移、未知来源、feature 不符、advisory、许可证拒绝、证据/finalizer 不完整或精确残留都会 `STOP`，保留真实负向/partial evidence，不自动重试或绕过门禁。
 
 ## 当前停止点与未来授权措辞
 
-本文历史 Phase A 已执行；A3 关闭了已知 SQLite 解析冲突，A4 已离线实现固定审计工具 bundle 与 partial evidence 收口。首次单元 C 的工具二进制构建成功但证据终结失败，整体 run 无效；A5 已离线修正根因，但没有重跑。当前仍无成功 bundle；存在三份 Phase A `SW-EXP-004` ignored evidence、一份无效 bundle run 和一份仅位于最新 Phase A evidence 的 partial lockfile，仓库没有候选 `Cargo.lock`，也没有来源、许可证/advisory、feature、候选构建或场景实证。Phase A 单元 D 与 Phase B 禁止。
+本文历史 Phase A 已执行；A3 关闭了已知 SQLite 解析冲突，A4/A5 完成独立工具 bundle 与 evidence finalizer。A5 后单元 C2 已生成并复核成功 bundle `20260830-112214-39636.GpERrj`；精确单元 D 授权包已经形成，但尚未获执行授权。当前存在三份 Phase A `SW-EXP-004` ignored evidence、一份无效 bundle run、一份成功 bundle 和一份仅位于最新历史 Phase A evidence 的 partial lockfile；仓库没有候选 `Cargo.lock`，仍没有来源、许可证/advisory、feature、候选构建或场景实证。Phase B 禁止。
 
 未来授权必须明确指出授权单元：
 
@@ -447,7 +479,7 @@ A5 新增 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh self-test`，只在系
 - 运行资源单元 A4：实现独立固定 bundle、精确校验与只读消费、partial evidence 回填；不包含 Docker/Cargo/网络、bundle 构建、Phase A 或 Phase B；
 - 首次 L3 单元 C：已经消费的一次固定 bundle 构建授权；结果无效，不包含候选 Phase A、失败重试或 `.work` 复用；
 - 证据终结单元 A5：离线修正 finalizer 并提交；不包含 Docker/Cargo/网络、bundle 重跑或历史 artifact 修补；
-- 新 L3 单元 C：在 A5 clean revision 上重新构建一次固定 bundle；必须另行授权，不包含候选 Phase A、自动重试或旧 `.work` 复用；
-- L3 单元 D：以一个已经复核的精确 bundle ID 执行一次 Phase A；不包含 bundle 重建、失败重试或 Phase B。
+- A5 后 L3 单元 C2：已经消费的一次固定 bundle 构建授权；结果 `PASS`，不包含候选 Phase A 或旧 `.work` 复用；
+- L3 单元 D：以 `20260830-112214-39636.GpERrj` 执行一次精确 Phase A；授权包已形成但未授权执行，不包含 bundle 重建、失败重试或 Phase B。
 
-任何只写“接受文档”“继续下一步”或此前授权都不自动授权新的 C/D。此前 C 授权不构成重试授权，新 C 的授权不包含 D，D 的授权不包含失败重试。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。
+任何只写“接受文档”“继续下一步”或此前授权都不自动授权 D。C2 的授权不包含 D，D 的授权不包含失败重试。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。

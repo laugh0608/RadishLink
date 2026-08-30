@@ -1,13 +1,13 @@
 # SW-G2 OpenMLS 0.9.0 受限 spike 静态门禁与执行授权包
 
-- 状态：A5 implemented / new L3 bundle pending（首次固定工具构建的 evidence finalizer 失败，run 无效；A5 已离线修正，尚无成功 bundle，Phase A 未重跑，2026-08-30）
+- 状态：bundle `PASS` / L3 Phase A pending（固定审计工具 bundle `20260830-112214-39636.GpERrj` 已构建并复核；精确 Phase A 授权包已形成但未获执行授权，2026-08-30）
 - 资料核对日期：2026-08-30
 - 计划证据编号：`SW-EXP-004`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
 
 ## 目的与结论边界
 
-本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)记录实际单元。首轮 Phase A 在固定 SQLite 依赖图冲突处 `STOP`；A3 对齐后依赖图可解析，但新一轮在审计工具安装期间触发 deadline。A4 已把工具构建拆为独立固定 bundle 并实现只读消费；首次 L3 构建虽生成并验证固定二进制，却因 evidence finalizer 失败而整体无效。A5 已离线修正根因但没有重跑，仍无成功 bundle 或新 Phase A。任何一轮都不能把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
+本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)记录实际单元。首轮 Phase A 在固定 SQLite 依赖图冲突处 `STOP`；A3 对齐后依赖图可解析，但新一轮在审计工具安装期间触发 deadline。A4/A5 已把工具构建拆为独立固定 bundle、实现只读消费并修正 evidence finalizer；A5 后单元 C2 已生成并复核成功 bundle `20260830-112214-39636.GpERrj`，但精确 Phase A 尚未授权或执行。任何一轮都不能把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
 
 `SW-EXP-002` 的源码、lockfile、prepared cache、审计结果和运行授权不得复用。新候选必须生成自己的 lockfile、完整传递图和证据编号；任何“版本更新后应该已修复”的推断都不能替代审计。
 
@@ -27,7 +27,7 @@
 - 直接结果：[`SW-EXP-004` 实施骨架与 Phase A 精确授权包](sw-g2-openmls-0.9-phase-a-authorization.md)已执行；A2 的 45 分钟 deadline 与 5 GiB 定期监测正常收口，但依赖解析因固定 `rusqlite =0.32.1` 与 storage backend 所需 `rusqlite 0.37.0` 的 `sqlite3` links 冲突而 `STOP`，未生成 lockfile 或进入来源、许可证、advisory、feature 门；
 - A3 修订结果：用户在 2026-08-30 明确授权无 Docker、无网络的静态修订；直接 `rusqlite` 对齐为精确 `=0.37.0` 并保留 `bundled`，与 `openmls_sqlite_storage 0.3.0` 的 `rusqlite ^0.37 + bundled` 约束一致；不生成 lockfile、不解析完整传递图，也不形成许可证/advisory 结论；
 - A3 后执行结果：证据 `20260830-091344-87309.iyw1Dm` 已生成 264-package partial graph 和仅位于 evidence 的 lockfile，确认只有 `rusqlite 0.37.0` / `libsqlite3-sys 0.35.0`；在 `cargo-audit 0.22.2` 安装期间触发 45 分钟 deadline，四类正式门均未返回结果，仓库 lockfile 未写入；
-- A4/A5 运行资源结果：A4 新增独立 fixed-image bundle builder，Phase A 改为精确 bundle ID、完整 checksum/manifest/摘要核对和只读挂载，并在异常退出时回填已落盘 partial evidence。首次 L3 构建的固定工具二进制成功，但 `manifest.json` 因 jq shell quoting 为 0 字节，脚本错误返回 `0`；该 run 已被 consumer 拒绝并登记为无效。A5 在不调用 Docker/Cargo/网络、不重跑 bundle 的边界内修正 finalizer、失败传播与 `PASS` 时序；
+- A4/A5/C2 运行资源结果：A4 新增独立 fixed-image bundle builder，Phase A 改为精确 bundle ID、完整 checksum/manifest/摘要核对和只读挂载，并在异常退出时回填已落盘 partial evidence。首次 L3 构建的固定工具二进制成功，但 `manifest.json` 因 jq shell quoting 为 0 字节，脚本错误返回 `0`；该 run 已被 consumer 拒绝并登记为无效。A5 在不调用 Docker/Cargo/网络、不重跑 bundle 的边界内修正 finalizer、失败传播与 `PASS` 时序；随后 C2 在 clean revision `cf340d3` 生成 schema 2/v2 `PASS` bundle `20260830-112214-39636.GpERrj`，11 项 checksum、工具版本/摘要、输入摘要、运行控制和零残留均已复核；
 - 结论限制：当前没有来源、许可证、安全公告、feature 或候选运行结论；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
 
 ## 官方基线与新增停止线
@@ -81,10 +81,10 @@
 只有实施范围与 L3 副作用另行明确授权后，才允许新增并执行：
 
 ```bash
-./scripts/run-sw-g2-openmls-0.9-spike.sh prepare <bundle-id>
+./scripts/run-sw-g2-openmls-0.9-spike.sh prepare 20260830-112214-39636.GpERrj
 ```
 
-`<bundle-id>` 必须来自另行授权并通过复核的 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh prepare` 成功结果；不得自动选取 latest、复用旧 `.work` 或在 Phase A 内安装工具。
+该精确 bundle ID 来自另行授权并通过复核的 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh prepare` 成功结果；不得替换为 latest、其他 run、旧 `.work`，也不得在 Phase A 内安装工具。本文提交不授权执行该命令。
 
 计划沿用 `SW-EXP-002` 已收口的安全结构，但必须使用新的目录、label、evidence ID 和 lockfile：
 
@@ -104,9 +104,9 @@
 以下只是未来授权前的保守估计，不是已发生事实：
 
 - 固定审计工具 bundle 构建是独立 L3 单元，最多 90 分钟、5 GiB、4 CPU/4 GiB；Phase A 仍实施 45 分钟用户态 deadline，不把 bundle 构建时间混入候选审计，也不直接延长该 deadline；
-- 网络下载约 0.8–2.5 GiB；
+- 网络下载取决于固定候选 crates 与当次 RustSec advisory DB；fixed image 已存在但仍以执行前只读核对为准，缺失时可能访问 Docker Hub；
 - 忽略目录磁盘预算为 5 GiB；运行控制 A2 已在 clean revision 中实现每 5 秒 apparent-size 监测和退出复核，但不是文件系统硬配额，执行前须明确接受该边界并另获当次授权；
-- 会编译审计工具与 bundled SQLite 的后续 Phase B 可能增加 CPU/磁盘占用；
+- Phase A 不编译审计工具或 OpenMLS/SQLite 候选；只生成/fetch lockfile、metadata/tree 并执行成功 bundle 中的审计二进制。候选构建只属于未来 Phase B；
 - 不创建长期容器、Docker network、端口、服务，不访问项目远程或提交任何内容；
 - fixed Rust image 和本轮 `.work` cache 默认保留，清理需要精确目标与独立授权。
 
@@ -156,11 +156,11 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 2. **运行资源 A4**：离线实现固定 bundle、只读消费与 partial evidence 收口；
 3. **首次审计工具 bundle**：A4 clean revision 上的一次授权已消费；二进制构建成功、evidence finalizer 失败，整体无效；
 4. **证据终结 A5**：离线修正 manifest/checksum 与 `PASS` 时序，不包含 bundle 重跑；
-5. **新审计工具 bundle**：A5 clean revision 后另行授权一次固定工具构建，不复用无效 run 的 `.work`；
-6. **Phase A**：成功 bundle 人工复核后，以精确 bundle ID 另行授权一次依赖下载、lockfile 生成与审计；
+5. **新审计工具 bundle C2**：A5 clean revision 后的一次授权已消费；`20260830-112214-39636.GpERrj` 为已复核 `PASS` bundle，不复用无效 run 的 `.work`；
+6. **Phase A 单元 D**：以该精确 bundle ID 的唯一命令另行授权一次依赖下载、lockfile 生成与审计；当前只形成授权包，尚未授权执行；
 7. **Phase B**：Phase A 通过后构建并运行无网络 Linux ARM64 新建状态场景；
 8. **0.8.1→0.9.0 迁移包**：只有存在产品迁移需求时另行设计，不包含在前述单元；
 9. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
 10. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-当前静态门禁和精确方案已接受，实施单元 A/A2/A3/A4/A5 已完成。A3 后的 `SW-EXP-004` Phase A 已生成 partial graph 和 evidence-only lockfile，但在审计工具安装期间触发 runtime deadline；首次独立 bundle 构建的工具二进制成功、证据终结失败，整体无效，A5 只离线修正 finalizer 且没有重跑。不存在成功 bundle、来源、许可证/advisory、feature、候选构建、场景运行、迁移或平台能力结论。新的 bundle 构建、再次 Phase A 与 Phase B 均未授权，`SW-G2` 继续保持未通过。
+当前静态门禁和精确方案已接受，实施单元 A/A2/A3/A4/A5 与 bundle 构建 C2 已完成。`20260830-112214-39636.GpERrj` 只证明固定审计工具 bundle 和 v2 evidence contract 通过，不构成候选审计结论。A3 后历史 Phase A 的 partial graph/evidence-only lockfile 仍有效，但 source、许可证/advisory、feature、候选构建、场景运行、迁移和平台能力均无结论。精确 Phase A 单元 D 已形成授权包但未获执行授权，Phase B 禁止，`SW-G2` 继续保持未通过。

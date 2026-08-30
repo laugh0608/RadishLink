@@ -1,6 +1,6 @@
 # SW-G2 E2EE 与身份候选决策包
 
-- 状态：Draft（OpenMLS 0.8.1 Phase A 负向 `STOP`；0.9.0 首次固定工具构建因 evidence finalizer 失败而无效，A5 已离线修正且尚无新 bundle/Phase A；mls-rs 静态门未执行）
+- 状态：Draft（OpenMLS 0.8.1 Phase A 负向 `STOP`；0.9.0 固定审计工具 bundle 已 `PASS`，精确 Phase A 单元 D 待授权；mls-rs 静态门未执行）
 - 资料核对日期：2026-08-30
 - 适用 gate：`SW-G2`
 - 前置决策：`SW-G0/SW-G1` 已接受
@@ -12,7 +12,7 @@
 当前执行顺序为：
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
-2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已完成 A/A2/A3/A4/A5；A3 后 partial graph 可解析且 SQLite 版本唯一，但 Phase A 在安装固定审计工具期间触发 deadline。首次独立工具构建的固定二进制成功而 evidence finalizer 失败，整个 run 无效；A5 已离线修正但未重跑。仍没有成功 bundle、来源、许可证/advisory 或 feature 结论，也不能继承 0.8.1 lockfile、cache 或授权；
+2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已完成 A/A2/A3/A4/A5/C2；A3 后 partial graph 可解析且 SQLite 版本唯一，但历史 Phase A 在安装固定审计工具期间触发 deadline。A5 后 bundle `20260830-112214-39636.GpERrj` 已构建并复核 `PASS`；精确 Phase A 单元 D 授权包已形成但未获执行授权。仍没有来源、许可证/advisory 或 feature 结论，也不能继承 0.8.1 lockfile、cache 或授权；
 3. 以[`mls-rs 0.56.0` 静态门禁与执行授权包](../testing/sw-g2-mls-rs-spike-authorization.md)对照许可证、advisory、存储、互操作与平台边界；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
@@ -23,7 +23,7 @@
 | 候选 | 固定评估基线 | 适配优势 | 当前停止线 | 当前定位 |
 | --- | --- | --- | --- | --- |
 | `OpenMLS` 旧基线 | `openmls-v0.8.1` / `47dbede` | MIT；Rust；可插拔 crypto/storage；MLS 两成员组与未来群组共用标准语义 | 固定图命中活跃 RustSec advisory，其中包含 AArch64 相关密码错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 未通过初始 allowlist | Phase A 负向基线；prepared run 禁止进入 Phase B |
-| `OpenMLS` 稳定刷新 | `openmls 0.9.0`（2026-08-25） | 官方列出 Linux AArch64 构建与测试；provider/storage 版本线已更新 | A3 后 partial graph 可解析；首次 bundle run 因 evidence finalizer 失败而无效，A5 已离线修正；许可证、advisory、迁移与 0.8 行为差异仍无结论 | 新 bundle 构建与新 Phase A 分别等待 L3 授权；Phase B 禁止 |
+| `OpenMLS` 稳定刷新 | `openmls 0.9.0`（2026-08-25） | 官方列出 Linux AArch64 构建与测试；provider/storage 版本线已更新 | A3 后 partial graph 可解析；固定审计工具 bundle 已 `PASS`，许可证、advisory、迁移与 0.8 行为差异仍无结论 | 精确 Phase A 等待 L3 授权；Phase B 禁止 |
 | `mls-rs` | `0.56.0` | Apache-2.0 OR MIT；Rust；提供 storage traits、SQLite provider、互操作与 FFI/UniFFI 路径 | 官方未给出完整 Linux ARM64 支持矩阵，并明确没有完整第三方安全审计 | 对照候选，不是后备默认值 |
 | `libsignal` | `v0.101.0` / `b056faa` | 一对一异步初始协商、逐消息 ratchet 与多设备会话语义最直接 | AGPL-3.0 与本仓库、分发和商店渠道的义务尚未独立确认；官方 native artifact 列表未列 Debian/Linux ARM64；公开 bridge 不是稳定 API 承诺 | 静态核对，未过停止线不进入运行 |
 
@@ -110,7 +110,7 @@
 
 ## 运行授权包要求
 
-本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)与[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的静态方案均已接受；OpenMLS 的[实施骨架与 Phase A 精确包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)在 A3 后生成 evidence-only lockfile 和 partial graph，但于审计工具安装期间 deadline `STOP`。首次固定工具构建因 evidence finalizer 失败而无效，A5 已离线修正；新的 bundle 构建和 Phase A 必须分别另行授权。mls-rs 的任何依赖下载、审计和运行也须另行授权。进入后续 spike 前必须满足：
+本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`mls-rs 0.56.0` 包](../testing/sw-g2-mls-rs-spike-authorization.md)与[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的静态方案均已接受；OpenMLS 的[实施骨架与 Phase A 精确包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)在 A3 后生成 evidence-only lockfile 和 partial graph，但于审计工具安装期间 deadline `STOP`。A5 后固定审计工具 bundle 已 `PASS`；新的 Phase A 必须以文中精确 bundle ID 另行授权。mls-rs 的任何依赖下载、审计和运行也须另行授权。进入后续 spike 前必须满足：
 
 - 精确依赖版本、commit、校验值、来源、许可证和 lockfile 变更；
 - 精确命令、目标平台、网络访问、临时目录、预计时长和最大资源占用；
@@ -134,4 +134,4 @@
 8. 篡改、重放、乱序、耗尽、旧 epoch、fork 与失败恢复结果可复现；
 9. 独立复核完成并以 Accepted ADR 冻结选择、限制和迁移边界。
 
-当前已完成决策包、上游证据收敛和 OpenMLS 0.8.1 Phase A。最终 run `20260824-215104-90006` 生成了 229 个 crates.io package 的 lockfile，来源检查通过；许可证检查拒绝实际检查图中的 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 对完整 lockfile 共报告 6 个 vulnerability。该 Phase A 保持 `STOP`，Phase B 禁止执行。2026-08-28 已接受 `mls-rs 0.56.0` 与 OpenMLS 0.9.0 两份独立静态门禁；mls-rs 未执行。OpenMLS 0.9.0 已生成 264-package partial graph，但没有正式 source/license/advisory/feature 结果；首次固定工具构建的 evidence finalizer 失败，A5 已离线修正而尚未重跑。尚无成功 bundle、候选许可证结论、运行实证或 ADR，`SW-G2` 保持未通过。
+当前已完成决策包、上游证据收敛和 OpenMLS 0.8.1 Phase A。最终 run `20260824-215104-90006` 生成了 229 个 crates.io package 的 lockfile，来源检查通过；许可证检查拒绝实际检查图中的 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 对完整 lockfile 共报告 6 个 vulnerability。该 Phase A 保持 `STOP`，Phase B 禁止执行。2026-08-28 已接受 `mls-rs 0.56.0` 与 OpenMLS 0.9.0 两份独立静态门禁；mls-rs 未执行。OpenMLS 0.9.0 已生成 264-package partial graph，A5 后固定审计工具 bundle 已 `PASS`；但新的 Phase A 尚未执行，仍没有正式 source/license/advisory/feature 结果、候选许可证结论、运行实证或 ADR，`SW-G2` 保持未通过。
