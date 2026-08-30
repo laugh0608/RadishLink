@@ -103,7 +103,7 @@
 
 以下只是未来授权前的保守估计，不是已发生事实：
 
-- 固定审计工具 bundle 构建是独立 L3 单元，最多 90 分钟、5 GiB、4 CPU/4 GiB；Phase A 仍实施 45 分钟用户态 deadline，不把 bundle 构建时间混入候选审计，也不直接延长该 deadline；
+- 固定审计工具 bundle 构建是独立 L3 单元，最多 90 分钟、5 GiB、4 CPU/4 GiB；Phase A 仍实施 45 分钟用户态 deadline，工具链预检限制为 `1 CPU/512 MiB`，依赖审计限制为 `4 CPU/4 GiB`，不把 bundle 构建时间混入候选审计，也不直接延长该 deadline；
 - 网络下载取决于固定候选 crates 与当次 RustSec advisory DB；fixed image 已存在但仍以执行前只读核对为准，缺失时可能访问 Docker Hub；
 - 忽略目录磁盘预算为 5 GiB；运行控制 A2 已在 clean revision 中实现每 5 秒 apparent-size 监测和退出复核，但不是文件系统硬配额，执行前须明确接受该边界并另获当次授权；
 - Phase A 不编译审计工具或 OpenMLS/SQLite 候选；只生成/fetch lockfile、metadata/tree 并执行成功 bundle 中的审计二进制。候选构建只属于未来 Phase B；

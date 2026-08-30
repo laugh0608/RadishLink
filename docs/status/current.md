@@ -44,7 +44,7 @@
 - 下一步只评审 E2EE/身份候选、`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
 - 无射频软件计划不能替代首个测试地区的法规核对，二者可以并行研究但分别关门。
 
-## 决策门状态与下一步
+## 决策门状态
 
 已通过：
 
@@ -54,17 +54,9 @@
 4. `SW-G3`：接受 profile schema、固定 seed、单变量故障矩阵、D0 数值、观察窗、证据和 `PASS/FAIL/INVALID` 判定。
 5. `SW-G4/SW-V0`：授权清单内实现、无依赖单元门禁和 Docker harness 自检完成；四个 profile 各三次 canonical run 均通过且归一化一致。
 
-下一步：
-
-1. 基于成功 bundle `20260830-112214-39636.GpERrj` 与本授权包提交后的 clean revision，为 `SW-EXP-004` Phase A 单元 D 申请一次当前任务 L3 执行授权；只执行精确命令一次，不重建 bundle、不复用 `.work`、不自动重试或进入 Phase B；
-2. 基于已通过的 `SW-V0` 评审 `SW-V1/V2` 最小实现与运行授权边界；当前不新增 profile、不重跑 Docker，且 `SW-G2` 未通过前不执行 `SW-V3`；
-3. `SW-G2` 继续比较 mls-rs 0.56.0 与 OpenMLS 0.9.0 的 lockfile、许可证、advisory、状态安全与 Linux ARM64 实证；
-4. 接受硬件分层路线并完成已有设备/BSP 的只读预检（`HW-G0/HW-G1`）；
-5. 再分别提交软件运行、硬件采购/执行和射频实验的精确清单与授权；继续独立推进地区、SKU、频段、功率、带宽和天线核对。
-
 ## 今日推进（2026-08-30）
 
-1. **运行控制单元 A2 已提交**：`af14ef9` 新增 Python 标准库 monitor 并接入 OpenMLS 0.9 runner；固定 45 分钟用户态 deadline、5 GiB 每 5 秒 apparent-size 监测、受控子进程终止、退出复核和 schema 2 证据。
+1. **运行控制单元 A2 已提交**：`af14ef9` 新增 Python 标准库 monitor 并接入 OpenMLS 0.9 runner；固定 45 分钟用户态 deadline、5 GiB 每 5 秒 apparent-size 监测、受控子进程终止和退出复核。当时的 Phase A manifest 为 schema 2；monitor 的独立 runtime-control JSON 为 schema 1，A4 后当前 Phase A manifest 已升级为 schema 3。
 2. **离线门禁已通过**：deadline、磁盘越界、信号收口、shell 语法、参数拒绝、manifest 渲染、仓库基线和 diff 检查均通过。
 3. **受限环境前置尝试已停止**：`20260830-085136-79099.fY2Gf7` 在 Docker/Cargo/网络前因 `/dev/fd` process substitution 被环境拒绝，以 `STOP/preflight` 结束；该尝试不是候选证据。
 4. **获批准的 Phase A 已在依赖解析门停止**：clean revision `af14ef9` 的 `20260830-085316-79789.Pc2ZKb` 验证固定 ARM64 image 与 Rust/Cargo 1.96.1 后，Cargo 因两套不兼容 `libsqlite3-sys` 的 `links = "sqlite3"` 冲突退出 `101`；未生成 lockfile，未进入来源、许可证/advisory 或 feature 门。
@@ -79,6 +71,7 @@
 13. **首次 L3 bundle run 无效**：clean revision `39641eb` 的 `20260830-103454-21213.oL36gJ` 已在固定 Linux ARM64 image 中构建并无网络验证 `cargo-audit 0.22.2` / `cargo-deny 0.20.2`；运行 `1472554 ms`，目录峰值 `1358445 KiB`，工作区前后干净且容器残留为零。但 jq shell quoting 使 manifest finalizer 失败并留下 0 字节 `manifest.json`，旧脚本错误打印 `PASS`、生成空 manifest checksum 且返回 `0`；Phase A consumer 以退出码 `2` 拒绝该 ID。整个 run 登记为 `INVALID`，原样保留且不得消费，不自动重试或进入 Phase A。
 14. **A5 evidence finalizer 已离线修正**：jq contract 移入独立固定 filter 并记录摘要；因新增 consumer 必需字段，未来成功合同升级为 schema 2 / `sw-exp-004-audit-tools-v2`，不兼容的无效 v1 不得消费。manifest/checksum 只有在非空有效 JSON、核心字段和精确摘要复核后才可原子完成，失败传播为非零并不得提前打印 `PASS`。新增无 Docker `self-test` 覆盖正向渲染、renderer 失败、空/无效 manifest 拒绝；既有无效 run 前后文件大小与 mtime 一致。语法、filter 渲染、自检、仓库基线和 diff 检查通过；没有调用 Docker/Cargo/网络、重跑 bundle、修改历史 artifact 或 push。
 15. **A5 后固定审计工具 bundle 已 `PASS`**：clean revision `cf340d3` 的 C2 run `20260830-112214-39636.GpERrj` 在同一获授权命令内经历可恢复的 crates.io TLS/DNS/timeout 告警后完成 `cargo-audit 0.22.2` / `cargo-deny 0.20.2` 构建与无网络版本验证。schema 2/v2 manifest、11 项 checksum、两个 `0555` 二进制/摘要、三个固定输入摘要均独立复核通过；monitor 以 `completed` 在 `1844010 ms` 停止，峰值 `1366495 KiB`，工作区前后干净且精确容器残留为零。该结果不构成候选 Phase A 结论；没有自动重试、运行 Phase A/Phase B、commit 或 push。
+16. **今日代码—文档收口复核完成**：逐项审阅 `af14ef9`、`29fce44`、`851f3bb`、`8f9c2af`、`39641eb`、`cf340d3` 与 `c1810cf`，并以当前 monitor、runner、bundle builder、manifest filter 和 `Cargo.toml` 为准复核相关文档。45/90 分钟监测、5 GiB 周期预算、schema 3 Phase A、v2 bundle/11 项 checksum、精确只读消费、source/feature lockfile 提升门、默认出站网络无域名 allowlist、精确残留清理和 Phase B 硬阻断均一致；本次只修正文档中的历史时态、前置顺序与容器资源拆分，不修改代码或历史 evidence。
 
 ## 上一批次（2026-08-28）
 
@@ -90,14 +83,15 @@
 6. **保持暂停线**：今天未安装或构建密码依赖，除获授权的 `SW-V0` 外未重跑其他容器或三节点场景；不采购/刷写硬件、不发射射频，`SW-V0 PASS` 不升级为产品或 P0 能力。
 7. **保留历史证据**：约 1.5 GiB `SW-EXP-002` ignored cache、三份本轮 `SW-V0` artifact 与其他历史 artifact 默认保留；未获单独清理授权不删除。
 8. **`SW-EXP-004` 单元 A 已完成**：`8e5bd7b` 形成精确授权包，`bc9a6ff` 新增固定 `Cargo.toml`、`deny.toml`、拒绝 Phase B 的 `main.rs` 与受限 runner，`05c7337` 同步专题状态；首次 executable mode 负例以 `126` 暴露并修正，最终无参数/`run` 均以 `2` 拒绝，未创建 artifact、运行 Docker/Cargo 或联网。L3 单元 B 未授权。
-9. **完成 11 个既有提交的代码—文档复核**：`SW-V0` 的 profile、seed、权限修复、证据口径与相关文档一致；`SW-EXP-004` 的依赖、镜像、容器权限、证据和清理边界与精确包一致，但 45 分钟与 5 GiB 当前仅为人工停止线，runner 没有内建总超时或运行期磁盘硬上限，默认出站网络也不实施域名 allowlist。该差距不改写今天未执行 Phase A 的事实，并进入明日第一事项。
+9. **完成 11 个既有提交的代码—文档复核**：`SW-V0` 的 profile、seed、权限修复、证据口径与相关文档一致；`SW-EXP-004` 的依赖、镜像、容器权限、证据和清理边界与精确包一致。当时发现 45 分钟与 5 GiB 只有人工停止线且 runner 没有内建运行监控；该历史缺口已由 2026-08-30 的 A2 关闭为用户态周期监测。默认出站网络仍不实施域名 allowlist，已作为单元 D 的显式 L3 边界保留。
 
-## 下一事项
+## 明日事项（2026-08-31）
 
-1. **为精确 Phase A 申请 L3 授权**：唯一入口固定为 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare 20260830-112214-39636.GpERrj`；执行前说明候选 crates/RustSec 默认出站网络无域名 allowlist、45 分钟、5 GiB、4 CPU/4 GiB、可能新增仓库 lockfile、证据保留与精确容器清理。本文提交不授权执行。
-2. **保持 bundle 信任边界**：只读消费两个固定二进制；不得自动选择 latest、替换 ID、重建 bundle、修补历史 evidence 或挂载任一 bundle `.work`。
-3. **一次授权只执行一次**：任一网络、source、license/advisory、feature、deadline、磁盘、证据或清理失败均 `STOP` 并保留真实 partial evidence；不自动重试、不进入 Phase B。
-4. **并行低风险事项**：若不修订 OpenMLS，可只做 `SW-V1/V2` 最小授权边界或 `HW-G0/HW-G1` 已有设备/BSP 的只读评审；继续不重跑容器、不安装依赖、不采购/刷写硬件、不产生射频发射。
+1. **优先申请精确 Phase A 单元 D 的 L3 授权**：唯一入口固定为 `./scripts/run-sw-g2-openmls-0.9-spike.sh prepare 20260830-112214-39636.GpERrj`。执行前再次说明候选 crates/RustSec 默认出站网络无域名 allowlist、45 分钟与 5 GiB 五秒周期监测、工具链预检 `1 CPU/512 MiB`、依赖审计 `4 CPU/4 GiB`、可能新增仓库 lockfile、证据保留与精确容器清理；本次收口提交不授权执行。
+2. **保持 bundle 信任与一次性授权边界**：只读消费两个固定二进制；不得自动选择 latest、替换 ID、重建 bundle、修补历史 evidence 或挂载任一 bundle `.work`。一次授权只执行一次，任一网络、source、license/advisory、feature、deadline、磁盘、证据或清理失败均 `STOP` 并保留真实 partial evidence，不自动重试。
+3. **先复核 Phase A 再决定后续**：若单元 D `STOP`，只记录实际停止项并重新评审，不以换版本、放宽许可证、添加 advisory ignore 或延长时限绕过；若 `PASS`，也只接受 source/license/advisory/feature 门，Phase B 仍须形成新的精确授权包。
+4. **保留并行低风险选项**：若明日不执行 OpenMLS，可评审 `SW-V1/V2` 最小实现与运行授权边界，或完成 `HW-G0/HW-G1` 已有设备/BSP 的只读预检；不新增 profile、不重跑容器、不安装依赖、不采购或刷写硬件、不产生射频发射。
+5. **继续长期决策而不越级**：`SW-G2` 继续比较 mls-rs 0.56.0 与 OpenMLS 0.9.0 的 lockfile、许可证、advisory、状态安全和 Linux ARM64 实证；软件运行、硬件采购/执行与射频实验继续分别形成精确清单并单独授权。
 
 ## 尚未冻结
 

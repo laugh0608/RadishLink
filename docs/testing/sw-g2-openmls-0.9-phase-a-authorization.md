@@ -150,10 +150,10 @@ A 完成后先审阅和提交新增文件，使 B 从 clean revision 运行；�
 ### 2026-08-28 代码—授权包一致性复核
 
 - 固定依赖、镜像 digest、平台、CPU/内存/PID/capability 限制、私有 `.work`、source/feature gate、lockfile 原子写入、schema 2 manifest、checksum 和精确 label 清理均已落实到 runner；
-- runner 在启动前要求 artifact 所在卷至少有 5 GiB 可用空间，但当前没有运行期 `du`/quota 监测，因此“最多 5 GiB”仍是人工停止线，不是脚本内硬上限；
-- runner 当前没有内建 45 分钟总超时；`INT`/`TERM` 可进入精确清理，但达到时限仍依赖外部监督触发；
+- runner 在启动前要求 artifact 所在卷至少有 5 GiB 可用空间，但当时没有运行期 `du`/quota 监测，因此“最多 5 GiB”仍是人工停止线，不是脚本内硬上限；
+- runner 当时没有内建 45 分钟总超时；`INT`/`TERM` 可进入精确清理，但达到时限仍依赖外部监督触发；
 - 依赖与审计容器使用 Docker 默认出站网络，不映射端口，但不提供域名 allowlist；Docker Hub、crates.io 与 GitHub RustSec 是预期访问范围，不是由 runner 技术强制的唯一目的地；
-- 因此单元 B 在 2026-08-28 收口时继续保持未授权、未执行。明日优先形成一个无 Docker/无网络的最小实施单元，为 45 分钟和 5 GiB 提供可验证的强制或监控机制，并把默认网络边界写入下一次 L3 授权；完成并提交 clean revision 前不申请或执行 B。
+- 因此单元 B 在 2026-08-28 收口时继续保持未授权、未执行；当时确定的下一步是形成一个无 Docker/无网络的最小实施单元，为 45 分钟和 5 GiB 提供可验证的强制或监控机制，并把默认网络边界写入下一次 L3 授权。该历史缺口已由 2026-08-30 的 A2 关闭为用户态周期监测；默认出站网络无域名 allowlist 的限制仍保留并进入当前单元 D 授权边界。
 
 ### 2026-08-30 运行控制实施单元 A2
 
@@ -176,7 +176,7 @@ docs/README.md
 - runner 固定 `2700 s` deadline 与 `5242880 KiB` 本轮目录预算；Python 标准库 monitor 每 `5 s` 统计一次 run 目录的 apparent size，达到任一边界先原子写入 `runtime-control-trigger.json`，再向父 runner 发送 `TERM`；
 - 外部 Docker 查询、镜像拉取和容器运行改为受控子进程。runner 在 deadline、磁盘触发或外部信号后先终止当前受控子进程，最多等待 `5 s` 后使用 `KILL` 收口该精确子进程，再进入原有 label 核对、容器清理、残留盘点和 evidence finalizer；
 - 5 GiB 是五秒周期监测和退出期 `du` 复核，不是文件系统 quota。单次采样间隔内可能短暂越过阈值，结论不得写成内核硬配额；达到或发现越界时本轮为 `STOP`，不得自动重试；
-- schema 2 manifest 新增 `runtime_controls`，记录 timeout、disk budget、采样值、峰值、monitor 状态、信号、终止原因，以及 `docker-default-network-no-domain-allowlist`；monitor、snapshot 和可选 trigger 进入 checksum；
+- 当时的 schema 2 Phase A manifest 新增 `runtime_controls`，记录 timeout、disk budget、采样值、峰值、monitor 状态、信号、终止原因，以及 `docker-default-network-no-domain-allowlist`；monitor、snapshot 和可选 trigger 进入 checksum。monitor 自身的 runtime-control JSON 使用独立 schema 1，A4 后当前 Phase A manifest 已升级为 schema 3；
 - 默认 Docker 出站网络仍没有域名 allowlist。A2 没有修改 Docker 网络、系统代理、防火墙或目标服务范围，只把该限制变成 manifest 和下一次 L3 授权的显式事实；
 - 离线自检以临时合成目录和子进程覆盖 deadline 边界、磁盘边界、monitor 向父进程发 `TERM`、runner 主动停止 monitor 和无触发正常停止；不执行 `prepare`、Docker、Cargo、网络、依赖下载或 lockfile 生成；
 - A2 已完成本地实现与离线验证，并与 runner、monitor 和状态文档一并形成 clean revision；未执行 push。单元 B 继续未授权。
@@ -192,7 +192,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/monitor-sw-g2-openmls-0.9-run.py self-
 git diff --check
 ```
 
-2026-08-30 实际结果：Python 自检、runner shell 语法、合成 shell deadline/受控子进程收口、schema 2 manifest 离线渲染、两个参数负例、仓库基线与 diff 检查均通过；deadline shell 探针在 `SECONDS=2` 进入清理、`SECONDS=3` 完成受控子进程收口。`artifacts/sw-g2-openmls-0.9/` 不存在，未启动或调用 Docker、Cargo 与网络。
+2026-08-30 实际结果：Python 自检、runner shell 语法、合成 shell deadline/受控子进程收口、当时的 schema 2 Phase A manifest 离线渲染、两个参数负例、仓库基线与 diff 检查均通过；deadline shell 探针在 `SECONDS=2` 进入清理、`SECONDS=3` 完成受控子进程收口。`artifacts/sw-g2-openmls-0.9/` 不存在，未启动或调用 Docker、Cargo 与网络。
 
 ## 历史 L3 执行单元 B：一次 Phase A
 
@@ -457,11 +457,11 @@ A5 新增 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh self-test`，只在系
 
 ### D 的固定动作与副作用
 
-1. runner 在创建 Phase A artifact、查询 Docker 或访问网络前，复核精确 bundle ID、v2 manifest、11 项 checksum、fixed image/platform、工具版本/摘要、输入、clean 状态和零残留；不自动选择 latest，不挂载 bundle `.work`；
-2. 创建新的私有 `artifacts/sw-g2-openmls-0.9/<run-id>/`，启动 45 分钟与 5 GiB 五秒周期 monitor；fixed image 若仍存在则只核对，缺失时可能访问 Docker Hub 并按完整 digest 拉取；
+1. runner 在创建 Phase A artifact、查询 Docker 或访问网络前，复核精确 bundle ID/路径、无 symlink payload、v2 manifest、11 项 checksum、fixed image/platform、工具版本/摘要，以及 bundle 自身记录的 clean 状态和零残留；不自动选择 latest，不挂载 bundle `.work`；
+2. 随后创建新的私有 `artifacts/sw-g2-openmls-0.9/<run-id>/` 并启动 45 分钟与 5 GiB 五秒周期 monitor；在候选网络访问前记录当前输入摘要、HEAD、工作区、可用磁盘、Docker daemon 与精确 Phase A label 残留。fixed image 若仍存在则只核对，缺失时可能访问 Docker Hub 并按完整 digest 拉取；
 3. 工具链容器使用 `--network none`；候选依赖与审计容器使用 Docker 默认出站网络且无域名 allowlist，预期访问 crates.io index/download 与 GitHub RustSec advisory DB，不映射端口；
 4. 使用本轮独立 Cargo home/target 生成候选 lockfile、下载固定候选 crates、保存 metadata/tree，并只读挂载成功 bundle 的两个二进制执行 source、`cargo audit`、license/advisory 与 feature 门；Phase A 不安装或编译审计工具，也不构建或运行 OpenMLS/SQLite 候选；
-5. 容器保持非 root、只读根、4 CPU/4 GiB、`pids-limit 512`、drop capabilities 与 no-new-privileges；不挂载 Docker socket、真实 home、Git credential、SSH agent、用户数据或密钥；
+5. 两类容器均保持非 root、只读根、`pids-limit 512`、drop capabilities 与 no-new-privileges；无网络工具链预检限制为 `1 CPU/512 MiB`，候选依赖与审计容器限制为 `4 CPU/4 GiB`。两者都不挂载 Docker socket、真实 home、Git credential、SSH agent、用户数据或密钥；
 6. source 与固定 feature 门通过、输入/HEAD 未变且目标安全时，可能原子新增 `tools/spikes/sw-g2-openmls-0.9/Cargo.lock`；不会自动暂存、提交或 push；
 7. fixed image、本轮 evidence、候选 `.work`/cache 与可能生成的仓库 lockfile 默认保留。trap 只清理名称和 `org.radishlink.sw-g2-openmls-0.9.run=<run-id>` 同时匹配的本轮容器，并在退出后复核精确残留；不执行全局 Docker 清理或宽泛 artifact 删除。
 
