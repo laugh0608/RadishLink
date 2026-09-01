@@ -1,0 +1,22 @@
+[package]
+name = "radishlink-sw-g2-mls-rs-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license-file = "../../../LICENSE"
+
+[package.metadata.radishlink]
+candidate = "mls-rs-0.56.0"
+phase = "phase-a-only"
+phase-b-implemented = false
+
+[dependencies]
+mls-rs = { version = "=0.56.0", default-features = false, features = ["std", "private_message", "out_of_order", "prior_epoch", "tree_index"] }
+mls-rs-codec = "=0.7.0"
+mls-rs-crypto-awslc = { version = "=0.25.0", default-features = false, features = ["non-fips"] }
+mls-rs-provider-sqlite = { version = "=0.23.0", default-features = false, features = ["sqlite-bundled"] }
+serde = "=1.0.229"
+serde_json = "=1.0.151"
+
+[dev-dependencies]
+tempfile = "=3.27.0"

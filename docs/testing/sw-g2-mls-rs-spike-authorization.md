@@ -1,6 +1,6 @@
 # SW-G2 mls-rs 0.56.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Accepted（静态门禁，2026-08-28；2026-09-01 [精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受且 A0 已离线实施；候选未下载、构建或运行）
+- 状态：Accepted（静态门禁，2026-08-28；2026-09-01 [精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受且 A0/A1 已离线实施；候选未下载、构建或运行）
 - 资料核对日期：2026-08-28
 - 计划证据编号：`SW-EXP-003`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
@@ -24,7 +24,7 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：`mls-rs 0.56.0`、AWS-LC/SQLite provider、直接 feature、许可证/advisory/source 停止线、证据与分段授权边界；
-- 直接结果：该候选的[精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受，拆分共享运行资源 A0、候选骨架 A1、L3 通用 bundle C 与 L3 Phase A D；A0 已另行授权并离线实施，A1/C/D 未授权；
+- 直接结果：该候选的[精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受，拆分共享运行资源 A0、候选骨架 A1、L3 通用 bundle C 与 L3 Phase A D；A0/A1 已分别授权并离线实施，C/D 未授权；
 - 保留边界：候选未形成 lockfile、完整许可证结论、Linux ARM64 实证或 ADR，不能成为默认后备路线；
 - 授权边界：本次接受只冻结静态方案，不授权 Phase A、Phase B、FFI/移动、容器、网络或清理操作。
 
@@ -39,7 +39,7 @@
 5. manifest 只要求达到旧 `SW-EXP-002` schema 2，缺少独立固定 renderer、原子 finalizer、失败传播、输入摘要、运行控制、gate exit code 与 checksum 自校验合同；
 6. 2026-08-28 的直接依赖、feature、provider/storage 组合与上游元数据尚未形成 lockfile；任何版本或 feature 调整都必须先回到静态差异评审，不能在首次 L3 run 中边解析边放宽。
 
-上述差异已由接受后的精确包关闭到可分段实施状态；A0 已新增候选无关运行资源、通过离线门禁并形成 clean revision。它没有创建 mls-rs spike 文件、调用 Docker/Cargo/网络、下载依赖或复用 OpenMLS `.work`；A1 仍须独立授权，外部 C/D 仍须逐单元明确授权。
+上述差异已由接受后的精确包关闭到可分段实施状态；A0 已形成 clean revision，A1 已新增固定候选输入、runner/renderer/checker 并通过离线门禁。A1 没有生成 lockfile、调用 Docker/Cargo/网络、下载依赖或复用 OpenMLS `.work`；外部 C/D 仍须逐单元明确授权。
 
 ## 官方基线与适用限制
 
@@ -80,7 +80,7 @@
 
 ## Phase A：lockfile、来源、许可证与 advisory 门
 
-本节保留 2026-08-28 静态门禁的候选输入与停止线，不再作为当前可执行合同。授权拆分、候选无关 audit bundle、runtime controls、manifest/finalizer、真实 bundle ID 与唯一命令以已接受的[精确包](sw-g2-mls-rs-phase-a-authorization.md)为准；A0 已离线实施，A1/C/D 未授权。
+本节保留 2026-08-28 静态门禁的候选输入与停止线，不再作为当前可执行合同。授权拆分、候选无关 audit bundle、runtime controls、manifest/finalizer、真实 bundle ID 与唯一命令以已接受的[精确包](sw-g2-mls-rs-phase-a-authorization.md)为准；A0/A1 已离线实施，C/D 未授权。
 
 ### 计划入口
 
@@ -151,4 +151,4 @@ Phase B 获准后才增加 scenario summary、B inventory 与各节点脱敏时�
 
 授权必须按[精确包](sw-g2-mls-rs-phase-a-authorization.md)拆分为共享运行资源 A0、候选骨架 A1、L3 通用 bundle C、L3 Phase A D；Phase B、FFI/移动与可选清理继续分别形成新包。任一单元不得继承相邻授权。
 
-本文静态候选方向已接受，Draft 精确包已形成但尚未评审接受。`SW-EXP-003` 尚未发生，不存在 lockfile、依赖许可证结论、构建、运行或平台实证；下一步仅限评审精确包，`SW-G2` 继续保持未通过。
+本文静态候选方向与精确包均已接受，A0/A1 已分别形成 clean revision。`SW-EXP-003` Phase A 尚未发生，不存在 lockfile、依赖许可证结论、构建、运行或平台实证；下一步逐单元评审 C/D，`SW-G2` 继续保持未通过。

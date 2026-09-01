@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 实施与 Phase A 精确授权包
 
-- 状态：Accepted（2026-09-01；精确包已接受，共享运行资源单元 A0 已离线实施并形成 clean revision；A1/C/D、Docker、Cargo、网络与候选运行均未授权）
+- 状态：Accepted（2026-09-01；A0/A1 已分别离线实施并形成 clean revision；C/D、Docker、Cargo、网络与候选运行均未授权）
 - 日期：2026-09-01
 - 证据编号：`SW-EXP-003`
 - 前置门禁：[mls-rs 0.56.0 静态门禁](sw-g2-mls-rs-spike-authorization.md)已接受候选方向，执行就绪差异待本包关闭
@@ -18,7 +18,7 @@
 4. **L3 mls-rs Phase A 单元 D**：在 A1 clean revision 上只读消费一个精确、已复核的通用 bundle，生成独立 lockfile 并执行完整 gates；
 5. **Phase B**：只有 D 完整 `PASS`、许可证人工复核与非实现者证据复核都通过后，才另建精确包；当前不存在实现或执行授权。
 
-本文的接受只冻结精确方案，不自动授权任何实施单元。本次另行明确授权只覆盖 A0；A0 不包含 A1，A0/A1 不包含 commit，C 不包含 D，任一 L3 授权不包含失败重试、Phase B、清理、push 或其他候选。
+本文的接受只冻结精确方案，不自动授权任何实施单元。A0 与 A1 已分别获得一次明确授权并离线实施；A0 不包含 A1，A0/A1 不包含 commit，C 不包含 D，任一 L3 授权不包含失败重试、Phase B、清理、push 或其他候选。
 
 ## 固定基线
 
@@ -98,7 +98,7 @@ git diff --check
 
 离线验证覆盖 deadline、磁盘边界、父进程信号、正常停止、无参数/未知 action/`run` 的退出码 `2` 与零副作用、renderer 失败、空/无效 JSON、既有 final/tmp 拒绝、checksum 篡改检测、唯一 post-finalization `PASS`、容器限制和 OpenMLS 历史脚本摘要不变。A0 没有执行 `prepare`，没有创建 `artifacts/sw-g2-rust-audit-tools/`，没有查询 Docker、调用 Cargo/网络、修改历史 evidence、构建 bundle、提交或 push。
 
-A0 已随本批次提交形成 C 要求的 clean revision；没有 push。A1、C、D 与 Phase B 继续保持未授权。
+A0 已随独立批次提交形成 C 要求的 clean revision；没有 push。A1 随后另行授权实施；C、D 与 Phase B 继续保持未授权。
 
 ## 单元 A1：mls-rs Phase A 骨架离线实施
 
@@ -127,6 +127,14 @@ git diff --check
 ```
 
 runner 无参数、缺 bundle ID、未知 action、`run`、`phase-b`、latest/路径型 bundle selector 均必须在 artifact、Docker、Cargo 与网络前以 `2` 拒绝。A1 通过后须独立审阅并形成 clean revision；commit 是独立 Git 动作，不由 A1 实施授权自动包含。
+
+### A1 实施结果
+
+2026-09-01 已按单次明确授权完成 A1：新增精确 crate manifest、无 advisory/license/source 例外的 `deny.toml`、始终以 `2` 拒绝场景命令的 `main.rs`、只允许 `prepare <bundle-id>` 的 Phase A runner、schema 1 / `sw-g2-candidate-phase-a-v1` renderer 与综合离线 checker。
+
+runner 固定只读消费 `sw-g2-rust-audit-tools-v1`，在 future D 中只允许生成/下载/审计依赖图，不编译或运行 MLS/AWS-LC/SQLite；source 与 feature 均为零后才原子提升 lockfile，任何 gate、运行控制、finalizer 或精确残留异常都保留真实 `STOP/INVALID`。离线 checker 已覆盖精确 TOML/feature/allowlist、唯一文件集、Phase B 硬拒绝、bundle contract、容器限制、manifest renderer、无参数/缺 bundle/未知 action/`run`/`phase-b`/latest/路径选择器，以及 `fips`、第二 crypto provider、git source 三类负例。
+
+A1 没有新增 `Cargo.lock`，没有执行 runner `prepare`，没有创建 `artifacts/sw-g2-mls-rs/`，没有调用 Docker、Cargo 或网络，也没有构建/运行候选或修改 OpenMLS 历史实现。A1 实施授权本身不包含 commit；提交动作随后另获明确授权并形成 D 要求的 A1 clean revision，没有 push。
 
 ## 单元 C：通用固定审计工具 bundle
 
@@ -226,8 +234,8 @@ manifest 使用 schema 1 / `sw-g2-candidate-phase-a-v1`，至少记录：candida
 
 ## 当前停止点与后续授权
 
-精确包已接受，A0 已完成离线实施并形成 clean revision；尚未调用 Docker/Cargo/网络，未构建通用 bundle，未创建 mls-rs crate 或 lockfile，也未执行 Phase A/Phase B。
+精确包已接受；A0/A1 已分别完成离线实施并形成 clean revision。尚未调用 Docker/Cargo/网络，未构建通用 bundle，未生成 mls-rs lockfile，也未执行 Phase A/Phase B。
 
-下一步是独立评审并明确授权 `mls-rs Phase A 骨架单元 A1`。C/D 在执行前必须重新展示唯一命令、A0/A1 clean revision、真实 bundle ID、网络、资源、保留与清理边界并逐次授权。
+下一步是 L3 通用 bundle 单元 C。C/D 在执行前必须重新展示唯一命令、A0/A1 clean revision、真实 bundle ID、网络、资源、保留与清理边界并逐次授权。
 
-笼统的“继续”“按计划做”或接受本文不授权 A1/C/D。Phase B、失败重试、清理、commit、push、版本/provider/allowlist 变化和其他候选始终是独立动作。
+笼统的“继续”“按计划做”或接受本文不授权 C/D。Phase B、失败重试、清理、commit、push、版本/provider/allowlist 变化和其他候选始终是独立动作。
