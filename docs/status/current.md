@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 静态门已接受但未执行。OpenMLS 0.9.0 固定审计工具 bundle `20260830-112214-39636.GpERrj` 已复核；2026-09-01 单元 D 生成 264-package 仓库 lockfile，source/feature 返回零且许可证门拒绝三个 `MPL-2.0`，但 `cargo-audit` 调用与 Phase A manifest finalizer 失败，整体 `INVALID`。A6 已离线修复 schema 4/v4 consumer，未来重跑待新授权，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 静态候选方向已接受，但执行包需先离线刷新且尚未实施。OpenMLS 0.9.0 的 A6 已由 `ac01b4d` 收口；2026-09-01 单元 E 在固定 264-package 图上形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，`cargo-audit` 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。OpenMLS 0.9.0 不进入 Phase B，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -31,14 +31,14 @@
 5. **媒体复杂度风险**：实时语音、视频、路由切换、拥塞控制和端到端加密必须联合验证，单独跑通 `iperf3` 不等于产品可用。
 6. **设计漂移风险**：`SW-EXP-001` 探针早于已接受的消息语义、故障模型和证据格式；后续实现若直接继承探针 JSON、摘要 ACK 或 snapshot，会偏离 `SW-G1` 并把测试技术栈误当成产品协议。
 7. **低成本硬件捷径风险**：直接用三块 MCU 重写 Core 会偏离嵌入式 Linux 基线，也无法覆盖目标媒体、持久化和升级边界；MCU 只进入交互与低功耗辅助域。
-8. **E2EE 候选依赖风险**：`OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定图已命中活跃 RustSec advisory，其中包含 AArch64 constant-time 错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 也未通过初始许可证门。OpenMLS 0.9.0 的 partial 门再次拒绝 `hpke-rs* 0.7.0` 的 `MPL-2.0`，且完整独立 advisory 结果仍未取得；`mls-rs 0.56.0` 也没有完整第三方安全审计，二者均不能直接进入场景验证。
+8. **E2EE 候选依赖风险**：`OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定图已命中活跃 RustSec advisory，其中包含 AArch64 constant-time 错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 也未通过初始许可证门。OpenMLS 0.9.0 单元 E 的独立 audit 未发现 vulnerability，但报告 `proc-macro-error2 2.0.1` 的 `RUSTSEC-2026-0173` unmaintained 信息项，且当前许可证门正式拒绝 `hpke-rs* 0.7.0` 的 `MPL-2.0`；`mls-rs 0.56.0` 也没有完整第三方安全审计，二者均不能直接进入场景验证。
 
 ## 当前优先级与暂停线
 
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
 - [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0`、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 与[确定性故障设计](../testing/sw-g3-deterministic-validation-design.md)的 `SW-G3` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)仍为 Draft；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
-- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受但未执行；OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)记录历史单元与 2026-09-01 单元 D/A6。仓库 lockfile SHA-256 为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；单元 D 的 source/feature 返回零和 `MPL-2.0` 拒绝只能作为 partial evidence，因独立 audit 未运行且 manifest 无效，不能形成正式 Phase A。A6 已离线修复并获本轮独立 commit 授权；未来单元 E、Phase B、bundle 重建、失败重试和 evidence 清理均未授权；
+- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)的候选方向已接受，但 2026-08-28 执行合同缺少当前运行控制与 evidence finalizer 约束，需先离线刷新且尚未执行；OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)记录历史单元与 2026-09-01 单元 E。仓库与 evidence lockfile SHA-256 均为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；单元 E run `20260901-123158-75973.3gVtsH` 的 schema 4/v4 manifest、26 项 checksum、独立 audit 与零容器残留已复核，正式结论为许可证门 `STOP`。OpenMLS 0.9.0 的重跑、Phase B、allowlist/advisory ignore 变更、bundle 重建和 evidence 清理均未授权；
 - [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
 - 下一步只评审 E2EE/身份候选、`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件；获相应明确确认后才实施；
@@ -62,9 +62,14 @@
 4. **独立 audit 未执行**：固定 `cargo-audit 0.22.2` 需要 `audit` 子命令，runner 的直接 `cargo-audit --json` 被 Cargo CLI 拒绝，audit 退出 `2` 且报告为空；不得形成完整 advisory 结论。
 5. **Phase A finalizer 使 run 无效**：内联 jq 的 `read-only` 引号被 shell 剥离，manifest 为 0 字节；后续 `mv` 遮蔽 renderer 失败并生成空 manifest checksum。正式 evidence contract 不完整，单元 D 整体登记为 `INVALID`。
 6. **运行与清理事实闭合**：monitor 在 `36323 ms` 正常停止，记录峰值 `192079 KiB`；25 项 checksum 从仓库根复核匹配，精确 Docker label 残留为零。约 218 MiB 本轮 evidence/cache、fixed image 与成功 bundle 默认保留。
-7. **A6 离线修复已实施**：调用改为 `cargo-audit audit --json`；新增独立 Phase A manifest filter 与 self-test，未来证据升级为 schema 4 / `sw-exp-004-phase-a-v4`，记录 filter 摘要与固定 audit invocation。
+7. **A6 离线修复已实施**：调用改为 `cargo-audit audit --json`；新增独立 Phase A manifest filter 与 self-test，单元 E 证据使用 schema 4 / `sw-exp-004-phase-a-v4`，记录 filter 摘要与固定 audit invocation。
 8. **证据终结重新收紧**：renderer 失败、空/无效 manifest、既有 final/tmp 路径和 checksum 自校验失败均传播非零；只有非空有效 manifest 原子完成、checksum 自校验且 264-package/四门/运行控制/零残留 `PASS` contract 全部复核后才打印唯一 `PASS`，失败 fallback 不留下可误认的 final evidence。
 9. **离线精准验证通过**：两个 shell 语法检查与 `./scripts/check-sw-g2-openmls-0.9-phase-a.sh` 通过，覆盖固定 invocation、唯一 post-finalization `PASS`、schema 4/v4 渲染、`read-only` 字符串、filter 摘要和 renderer/空/无效 JSON 拒绝；没有调用 Docker、Cargo 或网络，也未修改历史 evidence。
+10. **A6 已形成 clean revision**：`ac01b4d` 提交 runner、schema 4/v4 filter、offline self-test、固定仓库 lockfile 与单元 D 结果文档；提交前门禁通过，未 push。
+11. **单元 E 授权已消费**：在 clean revision `ac01b4d` 上只读消费同一固定 bundle，唯一 run `20260901-123158-75973.3gVtsH` 退出 `20`；全新 Cargo home/target 重新生成的 264-package lockfile 与仓库版本逐字一致，source/audit/feature 为 `0`、deny 为 `4`。
+12. **独立 advisory 结果已取得**：`cargo-audit 0.22.2` 以固定 `audit --json` 调用成功执行，基于 RustSec revision `72f8b23d78ea6c4c9ded301a4c6ec4260e8b4c27` 未发现 vulnerability；同时报告 `proc-macro-error2 2.0.1` 的 `RUSTSEC-2026-0173` unmaintained 信息项。该零漏洞结果只覆盖本轮固定图与数据库 revision，不构成安全审计或候选通过。
+13. **许可证门形成正式 `STOP`**：`cargo-deny` 的 sources/advisories 为 `ok`，当前 allowlist 正式拒绝 `hpke-rs`、`hpke-rs-crypto`、`hpke-rs-rust-crypto` 0.7.0 的 `MPL-2.0`。不放宽 allowlist、不添加 ignore、不自动更换 provider 或版本，OpenMLS 0.9.0 禁止进入 Phase B。
+14. **单元 E 证据闭合**：非空 schema 4 / `sw-exp-004-phase-a-v4` manifest、26 项 checksum、固定输入/工具摘要、`35452 ms` 运行控制和 `268724 KiB` 峰值均复核通过；工作区前后干净，精确 Docker label 残留为零。约 262 MiB evidence/cache、fixed image 与 bundle 保留，未重试、commit、push 或清理。
 
 ## 上一批次（2026-08-30）
 
@@ -99,11 +104,11 @@
 
 ## 下一步事项
 
-1. **形成 A6 clean revision**：runner、schema 4/v4 filter、offline self-test、仓库 lockfile 与本文口径已通过仓库门禁并获本轮独立 commit 授权；提交后以该 clean revision 作为未来单元 E 的唯一代码基线，不包含 push 或任何远程写入。
-2. **未来单元 E 必须重新授权**：仍只读消费 bundle `20260830-112214-39636.GpERrj`，使用全新 Cargo home/target 重新生成并逐字比较已评审 lockfile；不得复用单元 D `.work`、自动重试、重建 bundle 或修补历史 evidence。
-3. **重跑前重述 L3 边界**：Docker 默认出站网络无域名 allowlist、45 分钟/5 GiB 五秒周期监测、工具链 `1 CPU/512 MiB`、审计 `4 CPU/4 GiB`、fixed image/evidence/cache 保留和精确容器清理；单元 E 即使 `PASS` 也不授权 Phase B。
-4. **保持许可证与 advisory 停止线**：不放宽 `MPL-2.0` allowlist、不添加 advisory ignore、不换 provider/版本；未来结果必须同时包含有效 schema 4 manifest、独立 `cargo-audit`、`cargo-deny` 与完整 checksum 才能接受。
-5. **保留并行低风险选项**：在未获单元 E 授权时，可评审 `SW-V1/V2` 最小实现边界或完成 `HW-G0/HW-G1` 只读预检；不重跑容器、不采购/刷写硬件、不产生射频发射。
+1. **形成单元 E 文档 clean revision**：本轮仅文档差异与证据口径已通过 `./scripts/check-repo.sh` 和 `git diff --check`，并获当前任务的独立 commit 授权；提交后作为后续候选评审基线，不包含 push 或远程写入。
+2. **关闭 OpenMLS 0.9.0 当前执行线**：单元 E 已给出正式许可证 `STOP`；不重跑 Phase A，不进入 Phase B，不放宽 `MPL-2.0` allowlist、不添加 advisory ignore，也不以“零 vulnerability”升级为安全结论。
+3. **离线复核下一对照候选**：以已接受但未执行的 `mls-rs 0.56.0` 静态门禁为起点，先核对固定版本、依赖、许可证、provider/storage、Linux ARM64、证据合同与精确命令是否仍完整；该复核不授权下载、Docker/Cargo/网络或运行。
+4. **外部执行继续逐单元授权**：只有 mls-rs 方案完成当前离线差异复核、形成 clean revision，并重新说明网络、资源、产物、清理和停止线后，才申请一次 L3 Phase A；OpenMLS 的 bundle、lockfile、cache 与授权不得复用。
+5. **保留并行低风险选项**：可评审 `SW-V1/V2` 最小实现边界或完成 `HW-G0/HW-G1` 只读预检；不重跑容器、不采购/刷写硬件、不产生射频发射。
 
 ## 尚未冻结
 

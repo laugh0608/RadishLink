@@ -117,7 +117,7 @@
 
 ### SW-G2：E2EE 与身份候选
 
-按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件。OpenMLS 0.8.1 Phase A 已生成 lockfile，但 advisory/许可证停止线触发，prepared run 的 Phase B 禁止；[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受但未执行；OpenMLS 0.9.0 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已完成固定工具 bundle 与单元 D。D 生成 264-package 仓库 lockfile，source/feature 返回零且许可证门拒绝三个 `MPL-2.0`，但 audit invocation 与 manifest finalizer 失败，整体 `INVALID`；A6 已离线修复 schema 4/v4 consumer，未来重跑待新 L3 授权。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
+按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件。OpenMLS 0.8.1 Phase A 已在 advisory/许可证门正式 `STOP`；OpenMLS 0.9.0 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)也已由单元 E 对 264-package 固定图形成正式 `STOP`：独立 audit 漏洞为零但有 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。两者 Phase B 均禁止。[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)已接受但未执行，下一步先做离线差异复核。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
 
 ### SW-G3：验证设计
 
@@ -137,7 +137,7 @@
 | --- | --- | --- | --- |
 | 1 | 证据归档与计划纠偏 | 本计划、探索性探针边界 | `SW-G0` 已接受 |
 | 2 | 消息交付语义 | [覆盖层消息交付语义](../protocol/message-delivery-semantics.md) | `SW-G1` 已接受 |
-| 3 | E2EE/身份决策 | [`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)、[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)、[`mls-rs` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)、[`OpenMLS 0.9.0` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)、[`SW-EXP-004` Phase A 精确包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)与 ADR | OpenMLS 0.8.1 Phase A advisory/许可证 `STOP`；OpenMLS 0.9.0 单元 D 因 runner/evidence 缺陷 `INVALID`，partial 许可证拒绝已保留，A6 已离线修复但未授权重跑；无正式完整审计结论或 ADR；mls-rs 静态门未执行 |
+| 3 | E2EE/身份决策 | [`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)、[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)、[`mls-rs` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)、[`OpenMLS 0.9.0` 静态门禁](../testing/sw-g2-openmls-0.9-spike-authorization.md)、[`SW-EXP-004` Phase A 精确包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)与 ADR | OpenMLS 0.8.1 与 0.9.0 固定图均为正式 Phase A `STOP`，Phase B 禁止；mls-rs 静态门未执行，待离线复核后另行授权；无候选运行实证或 ADR |
 | 4 | 故障与证据设计 | [`SW-G3`](../testing/sw-g3-deterministic-validation-design.md) | `SW-G3` 已接受 |
 | 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | `SW-V0` 已完成并通过；无重跑或后续 `SW-V*` 授权 |
 | 6 | 三节点矩阵 | 可复现结果与限制 | 暂停 |
@@ -149,4 +149,4 @@
 - 修改测试实现需要明确范围；运行容器前再次说明命令、目标、副作用、时长和清理；
 - 依赖安装、VM 启动、系统网络、`NET_ADMIN`、射频、硬件、真实密钥和外部状态分别授权；
 - 任一设计缺失会影响安全、兼容、数据或结论时，停止实现并回到相应决策门；
-- `SW-G2` 未完成前，下一步仍只限以已复核 bundle `20260830-112214-39636.GpERrj` 形成并申请 Phase A 单次 L3 授权、`SW-V1/V2` 授权边界评审及只读核对；不得替换 bundle ID、复用 `.work`、由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。
+- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；下一步只限离线复核 mls-rs 固定方案、`SW-V1/V2` 授权边界评审及只读核对。mls-rs 的任何下载、Docker/Cargo/网络或运行须另行精确授权，不得复用 OpenMLS bundle/lockfile/cache，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。

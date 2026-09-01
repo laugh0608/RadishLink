@@ -1,13 +1,13 @@
 # SW-G2 OpenMLS 0.9.0 受限 spike 静态门禁与执行授权包
 
-- 状态：L3 Phase A `INVALID` / A6 implemented（单元 D 已于 2026-09-01 执行一次；离线 runner/finalizer 修复已完成，重跑与 Phase B 禁止）
+- 状态：L3 Phase A `STOP`（单元 E 已于 2026-09-01 形成 schema 4/v4 正式许可证负向证据；当前基线不重跑，Phase B 禁止）
 - 资料核对日期：2026-09-01
 - 计划证据编号：`SW-EXP-004`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
 
 ## 目的与结论边界
 
-本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)记录实际单元。首轮 Phase A 在固定 SQLite 依赖图冲突处 `STOP`；A3 对齐后依赖图可解析，但新一轮在审计工具安装期间触发 deadline。A4/A5 已把工具构建拆为独立固定 bundle、实现只读消费并修正 bundle evidence finalizer；A5 后单元 C2 已生成并复核成功 bundle `20260830-112214-39636.GpERrj`。2026-09-01 的单元 D 成功生成仓库 lockfile，并取得 source/feature 与许可证 partial 结果，但因 `cargo-audit` 调用和 Phase A manifest finalizer 缺陷整体 `INVALID`；A6 已离线修正，重跑仍需新授权。任何一轮都不能把 0.9.0 写成 0.8.1 advisory、许可证或持久化问题的已验证修复。
+本文为稳定 `OpenMLS 0.9.0` 建立独立于 `SW-EXP-002` 的依赖、provider、feature、许可证、advisory、存储格式和 Linux ARM64 门禁。本文本身只允许在运行前评审精确方案，不构成实施或执行授权；后续[精确包](sw-g2-openmls-0.9-phase-a-authorization.md)记录实际单元。首轮 Phase A 在固定 SQLite 依赖图冲突处 `STOP`；A3 对齐后依赖图可解析，但新一轮在审计工具安装期间触发 deadline。A4/A5/C2 已形成可复核固定 bundle，单元 D 暴露 audit invocation 与 Phase A finalizer 缺陷，A6 完成离线修复。2026-09-01 的单元 E 最终对 264-package 固定图形成正式 Phase A `STOP`：独立 audit 漏洞为零但有 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。任何一轮都不能把 0.9.0 写成 0.8.1 风险的全面修复或安全审计通过。
 
 `SW-EXP-002` 的源码、lockfile、prepared cache、审计结果和运行授权不得复用。新候选必须生成自己的 lockfile、完整传递图和证据编号；任何“版本更新后应该已修复”的推断都不能替代审计。
 
@@ -28,16 +28,17 @@
 - A3 修订结果：用户在 2026-08-30 明确授权无 Docker、无网络的静态修订；直接 `rusqlite` 对齐为精确 `=0.37.0` 并保留 `bundled`，与 `openmls_sqlite_storage 0.3.0` 的 `rusqlite ^0.37 + bundled` 约束一致；不生成 lockfile、不解析完整传递图，也不形成许可证/advisory 结论；
 - A3 后执行结果：证据 `20260830-091344-87309.iyw1Dm` 已生成 264-package partial graph 和仅位于 evidence 的 lockfile，确认只有 `rusqlite 0.37.0` / `libsqlite3-sys 0.35.0`；在 `cargo-audit 0.22.2` 安装期间触发 45 分钟 deadline，四类正式门均未返回结果，仓库 lockfile 未写入；
 - A4/A5/C2 运行资源结果：A4 新增独立 fixed-image bundle builder，Phase A 改为精确 bundle ID、完整 checksum/manifest/摘要核对和只读挂载，并在异常退出时回填已落盘 partial evidence。首次 L3 构建的固定工具二进制成功，但 `manifest.json` 因 jq shell quoting 为 0 字节，脚本错误返回 `0`；该 run 已被 consumer 拒绝并登记为无效。A5 在不调用 Docker/Cargo/网络、不重跑 bundle 的边界内修正 finalizer、失败传播与 `PASS` 时序；随后 C2 在 clean revision `cf340d3` 生成 schema 2/v2 `PASS` bundle `20260830-112214-39636.GpERrj`，11 项 checksum、工具版本/摘要、输入摘要、运行控制和零残留均已复核；
-- D/A6 结果：单元 D 的 264-package lock SHA-256 为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`，source/feature 返回零；`cargo-deny` 拒绝三个 `hpke-rs* 0.7.0` 的 `MPL-2.0`，但固定 `cargo-audit` 因缺失 `audit` 子命令未运行，Phase A 内联 jq 又留下 0 字节 manifest，故 run 整体 `INVALID`。A6 将调用改为 `cargo-audit audit --json`，把 future manifest 升为 schema 4/v4 独立 filter，并增加离线 finalizer self-test；
-- 结论限制：当前只有可复核的 partial source/feature 与许可证拒绝结果，没有完整独立 advisory 或正式 Phase A 结论；`OpenMLS 0.9.0` 仍只是待独立验证的候选，不能接入 `SW-V3/P0`。
+- D/A6 结果：单元 D 的 264-package lock SHA-256 为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`，source/feature 返回零；`cargo-deny` 拒绝三个 `hpke-rs* 0.7.0` 的 `MPL-2.0`，但固定 `cargo-audit` 因缺失 `audit` 子命令未运行，Phase A 内联 jq 又留下 0 字节 manifest，故 run 整体 `INVALID`。A6 将调用改为 `cargo-audit audit --json`，把后续 manifest 升为 schema 4/v4 独立 filter，并增加离线 finalizer self-test；
+- E 结果：clean revision `ac01b4d` 的 run `20260901-123158-75973.3gVtsH` 重新生成并逐字比较同一 264-package lockfile；source/audit/feature 为 `0`、deny 为 `4`。独立 `cargo-audit` 未发现 vulnerability，并报告 `proc-macro-error2 2.0.1` 的 `RUSTSEC-2026-0173` unmaintained 信息项；`cargo-deny` 的 sources/advisories 为 `ok`，当前许可证 allowlist 正式拒绝三个 `hpke-rs* 0.7.0` 的 `MPL-2.0`。schema 4/v4 manifest、26 项 checksum、运行控制和零残留均已复核；
+- 结论限制：单元 E 是有效的正式 `STOP`，不是 `INVALID` 或 Phase A `PASS`。`OpenMLS 0.9.0` 当前固定基线不重跑、不进入 Phase B，也不能接入 `SW-V3/P0`；零 vulnerability 只覆盖所记录 lockfile 与 RustSec revision，不构成第三方安全审计或产品安全结论。
 
 ## 官方基线与新增停止线
 
 | 项目 | 固定基线 | 官方事实 | RadishLink 仍需验证 |
 | --- | --- | --- | --- |
-| 主 crate | [`openmls 0.9.0`](https://docs.rs/crate/openmls/0.9.0) | 2026-08-25 稳定发布；MIT；MSRV `1.91` | 发布 tag revision、完整依赖图、许可证、advisory、行为差异 |
-| RustCrypto provider | `openmls_rust_crypto 0.6.0` | 版本线改用 `hpke-rs 0.7`，其 HPKE 依赖启用 `experimental` feature | 0.7 实际解析图是否仍含 RustSec/许可证停止项；AArch64 行为 |
-| SQLite provider | `openmls_sqlite_storage 0.3.0` | 使用 `rusqlite`，初始化入口为 `run_migrations()` | bundled SQLite 来源、许可证表达、事务/损坏恢复和 schema 演进 |
+| 主 crate | [`openmls 0.9.0`](https://docs.rs/crate/openmls/0.9.0) | 2026-08-25 稳定发布；MIT；MSRV `1.91` | 固定依赖图与自动许可证/advisory 门已由单元 E 回答；发布 tag revision、行为差异与完整安全评审仍未关闭 |
+| RustCrypto provider | `openmls_rust_crypto 0.6.0` | 版本线改用 `hpke-rs 0.7`，其 HPKE 依赖启用 `experimental` feature | 实际解析图已确认 `MPL-2.0` 许可证停止项；AArch64 运行行为仍未验证 |
+| SQLite provider | `openmls_sqlite_storage 0.3.0` | 使用 `rusqlite`，初始化入口为 `run_migrations()` | bundled SQLite 来源与许可证已纳入单元 E 自动门；事务/损坏恢复和 schema 演进仍未验证 |
 | traits/credential | `openmls_traits 0.6.0`、`openmls_basic_credential 0.6.0` | 与 0.9.0 版本线配套 | 身份绑定、错误面和自定义 provider 组合 |
 | 目标平台 | `aarch64-unknown-linux-gnu` | 上游声明在 CI 构建并测试 Linux AArch64 | RadishLink fixed image 中原生构建、运行和资源证据 |
 
@@ -159,11 +160,11 @@ artifacts/sw-g2-openmls-0.9/<run-id>/
 4. **证据终结 A5**：离线修正 manifest/checksum 与 `PASS` 时序，不包含 bundle 重跑；
 5. **新审计工具 bundle C2**：A5 clean revision 后的一次授权已消费；`20260830-112214-39636.GpERrj` 为已复核 `PASS` bundle，不复用无效 run 的 `.work`；
 6. **Phase A 单元 D**：一次依赖下载、lockfile 生成与审计授权已消费；结果因 runner/evidence 缺陷整体 `INVALID`，不得自动重试；
-7. **Phase A 修复 A6**：无 Docker/Cargo/网络的 invocation、schema 4/v4 filter、原子 finalizer 与 self-test 修复已实施；不包含 commit 或重跑；
-8. **未来 Phase A 单元 E**：A6、仓库 lockfile 与文档形成 clean revision 后，重新说明同一精确 bundle、全新 Cargo home/target、lockfile 逐字比较、网络/资源/保留边界并另行授权；
-9. **Phase B**：Phase A 通过后构建并运行无网络 Linux ARM64 新建状态场景；
+7. **Phase A 修复 A6**：无 Docker/Cargo/网络的 invocation、schema 4/v4 filter、原子 finalizer 与 self-test 修复已实施并形成 clean revision；
+8. **Phase A 单元 E**：一次精确授权已消费；全新 Cargo home/target 与 lockfile 逐字比较通过，完整 gates 因许可证拒绝形成正式 `STOP`，不包含重跑或门禁变更；
+9. **Phase B**：当前被单元 E 的正式负向证据阻断；不存在可执行授权；
 10. **0.8.1→0.9.0 迁移包**：只有存在产品迁移需求时另行设计，不包含在前述单元；
 11. **移动/FFI 与其他 provider**：另建依赖图与平台授权；
 12. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-当前静态门禁和精确方案已接受，实施单元 A/A2/A3/A4/A5/A6 与 bundle 构建 C2 已完成。`20260830-112214-39636.GpERrj` 只证明固定审计工具 bundle 和 v2 evidence contract 通过。单元 D 整体 `INVALID`；仓库已保留固定 lockfile，partial evidence 仅支持 source/feature 返回零和 `MPL-2.0` 许可证拒绝，不能替代独立 `cargo-audit` 与有效 manifest。未来单元 E、Phase B、候选构建、场景、迁移和平台能力均未授权，`SW-G2` 继续保持未通过。
+当前静态门禁和精确方案已执行到单元 E。`20260830-112214-39636.GpERrj` 只证明固定审计工具 bundle 和 v2 evidence contract 通过；单元 E 则以 schema 4/v4 对固定候选图形成正式许可证 `STOP`。当前不重跑 OpenMLS 0.9.0、不进入 Phase B、不放宽 allowlist 或添加 ignore；候选构建、场景、迁移和平台能力均未授权。下一步回到 `mls-rs 0.56.0` 静态门做离线复核，`SW-G2` 继续保持未通过。

@@ -1,6 +1,6 @@
 # SW-G2 mls-rs 0.56.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Accepted（静态门禁，2026-08-28；未实施、未下载、未构建、未运行）
+- 状态：Accepted（静态门禁，2026-08-28；2026-09-01 确认执行包需离线刷新；未实施、未下载、未构建、未运行）
 - 资料核对日期：2026-08-28
 - 计划证据编号：`SW-EXP-003`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
@@ -9,7 +9,7 @@
 
 本文为 `mls-rs 0.56.0` 对照候选固定首轮依赖、provider、feature、许可证与 advisory 门、Linux ARM64 边界、证据和停止线。它用于在任何依赖下载或代码实施前接受或拒绝运行方案，不构成执行授权，也不选择生产 E2EE 实现、密码套件、credential、FFI、数据库或线格式。
 
-`OpenMLS 0.8.1` 的负向 Phase A 证据不能自动证明 `mls-rs` 安全，也不能把本包变成默认后备路线。2026-08-25 发布的稳定 `OpenMLS 0.9.0` 另行进入静态刷新；两条路线必须各自生成 lockfile、审计完整传递图并使用同一 `SW-G3` 判定口径。
+`OpenMLS 0.8.1` 与 0.9.0 当前固定图的负向 Phase A 证据均不能自动证明 `mls-rs` 安全，也不能把本包变成默认后备路线。0.9.0 单元 E 已取得完整独立 audit 与 schema 4/v4 evidence，并因当前许可证门正式 `STOP`；mls-rs 仍必须生成自己的 lockfile、审计完整传递图并使用同一 `SW-G3` 判定口径，不继承 OpenMLS 的候选 cache、lockfile、结论或运行授权。
 
 本包明确不授权：
 
@@ -24,9 +24,22 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：`mls-rs 0.56.0`、AWS-LC/SQLite provider、直接 feature、许可证/advisory/source 停止线、证据与分段授权边界；
-- 直接结果：该候选可以在未来提交精确的“实施骨架 + Phase A”授权请求，但当前不得创建文件、下载依赖或运行；
+- 直接结果：该候选可继续形成精确实施与 Phase A 包，但 2026-08-28 版本尚未吸收当前运行控制和 evidence finalizer 约束；须先完成无 Docker/Cargo/网络的离线刷新，不能直接申请执行；
 - 保留边界：候选未形成 lockfile、完整许可证结论、Linux ARM64 实证或 ADR，不能成为默认后备路线；
 - 授权边界：本次接受只冻结静态方案，不授权 Phase A、Phase B、FFI/移动、容器、网络或清理操作。
+
+## 2026-09-01 执行就绪差异
+
+对照 OpenMLS 0.9.0 单元 D/A6/E 暴露并关闭的问题后，本包的候选方向仍可保留，但现有执行合同尚不满足当前仓库门禁：
+
+1. “实施骨架 + Phase A”仍合并为一个授权单位，无法在 Docker、Cargo 与网络前先审阅真实 runner；必须拆分离线实施、运行控制、审计工具资源和单次 L3 Phase A；
+2. fixed image 只以“沿用”描述，未在本包内冻结完整 digest、platform、Rust/Cargo 版本与镜像缺失时的网络边界；
+3. Phase A 直接写“固定 cargo-audit/cargo-deny”，但没有不可变二进制 bundle、只读挂载、版本/摘要/manifest/checksum consumer。应先决定是否把既有工具 bundle 泛化为候选无关资源，或建立独立 bundle；两者都需新的离线设计与明确授权，不能直接复用 OpenMLS 授权；
+4. 预计 20–50 分钟与 5 GiB 仍只是人工预算，缺少 45 分钟 deadline、五秒磁盘 monitor、信号收口、精确 label 清理和零残留证据；
+5. manifest 只要求达到旧 `SW-EXP-002` schema 2，缺少独立固定 renderer、原子 finalizer、失败传播、输入摘要、运行控制、gate exit code 与 checksum 自校验合同；
+6. 2026-08-28 的直接依赖、feature、provider/storage 组合与上游元数据尚未形成 lockfile；任何版本或 feature 调整都必须先回到静态差异评审，不能在首次 L3 run 中边解析边放宽。
+
+因此当前只接受“继续离线刷新精确包”，不接受执行就绪结论。刷新不得创建 spike 文件、调用 Docker/Cargo/网络、下载依赖或复用 OpenMLS `.work`；完成代码/文档 clean revision 后，外部运行仍须逐单元明确授权。
 
 ## 官方基线与适用限制
 
@@ -141,4 +154,4 @@ Phase B 获准后才增加 scenario summary、B inventory 与各节点脱敏时�
 3. **FFI/移动静态门与运行**：另建依赖图，不继承核心结果；
 4. **可选清理**：复核精确 run 目录、容器引用和镜像前置状态后另行授权。
 
-本文静态门禁已接受。`SW-EXP-003` 尚未发生，不存在 lockfile、依赖许可证结论、构建、运行或平台实证；`SW-G2` 继续保持未通过。
+本文静态候选方向已接受，但现有执行包尚未通过 2026-09-01 就绪差异复核。`SW-EXP-003` 尚未发生，不存在 lockfile、依赖许可证结论、构建、运行或平台实证；下一步仅限离线刷新精确包，`SW-G2` 继续保持未通过。
