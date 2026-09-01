@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 实施与 Phase A 精确授权包
 
-- 状态：Accepted（2026-09-01；A0/A1 已分别离线实施并形成 clean revision；C/D、Docker、Cargo、网络与候选运行均未授权）
+- 状态：Accepted（2026-09-01；A0/A1 已分别形成 clean revision，单元 C 已独立授权并复核 `PASS`；单元 D 与候选运行未授权）
 - 日期：2026-09-01
 - 证据编号：`SW-EXP-003`
 - 前置门禁：[mls-rs 0.56.0 静态门禁](sw-g2-mls-rs-spike-authorization.md)已接受候选方向，执行就绪差异待本包关闭
@@ -155,6 +155,14 @@ A1 没有新增 `Cargo.lock`，没有执行 runner `prepare`，没有创建 `art
 
 C 成功后必须记录唯一 bundle ID，并在工作区保持干净的情况下独立复核 contract、工具版本、二进制 SHA-256、manifest、checksum、运行控制与残留。C 的一次授权不包含 D。
 
+### C 执行结果
+
+2026-09-01 在 clean revision `c6e3a43a530f4af18cef9ab26a925a241649a16f` 上消费一次独立 L3 授权，唯一命令 `./scripts/run-sw-g2-rust-audit-tools.sh prepare` 返回 `0`，没有重试。run `20260901-134500-6665.ARcd4F` 形成 schema 1 / `sw-g2-rust-audit-tools-v1` `PASS` bundle；manifest SHA-256 为 `79bdf71ba29632fb05a1097431f4c1a2a2c7fbd2f183f3685e808de143dbcad5`，11 项 checksum 已从仓库根全部复核。
+
+固定镜像此前已存在，身份仍为 `rust:1.96.1-bookworm@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663` / `linux/arm64`。构建容器通过默认出站网络访问 crates.io；无网络验证确认 `cargo-audit 0.22.2` 与 `cargo-deny 0.20.2`。两个 `0555` 非 symlink 二进制 SHA-256 分别为 `3f1eec4519d67df8d48c02ff366528155a664702b360388a69ae484549b6cb87` 与 `9ea2b1019a52961af71fcd589a8dd5e640169b8c02a9ab1d3d44d7ac0204fd45`。
+
+monitor 记录 `206562 ms`、峰值 `1358459 KiB`，未触发 90 分钟或 5 GiB 停止线；原始 runtime control 以父进程正常请求停止记录 `runner_requested_stop`，成功 finalizer 在 manifest 中登记 `completed`。工作区前后干净，精确 run label 的独立查询残留为零。约 `1337960 KiB` evidence、`.work`/cache 与 fixed image 默认保留；没有下载 mls-rs/AWS-LC/SQLite 候选、生成候选 lockfile、执行 D/Phase B、commit、push 或清理。
+
 ## 单元 D：mls-rs Phase A
 
 D 只有在以下值全部实际存在并写入当次授权说明后才能申请：
@@ -234,8 +242,8 @@ manifest 使用 schema 1 / `sw-g2-candidate-phase-a-v1`，至少记录：candida
 
 ## 当前停止点与后续授权
 
-精确包已接受；A0/A1 已分别完成离线实施并形成 clean revision。尚未调用 Docker/Cargo/网络，未构建通用 bundle，未生成 mls-rs lockfile，也未执行 Phase A/Phase B。
+精确包已接受；A0/A1 已分别完成离线实施并形成 clean revision，C 已形成并复核真实 bundle `20260901-134500-6665.ARcd4F`。尚未生成 mls-rs lockfile，也未执行候选 Phase A/Phase B。
 
-下一步是 L3 通用 bundle 单元 C。C/D 在执行前必须重新展示唯一命令、A0/A1 clean revision、真实 bundle ID、网络、资源、保留与清理边界并逐次授权。
+单元 C 结果已另获提交授权并形成 clean revision。下一步可展示真实 bundle ID、A1 commit、候选网络/资源、保留与清理边界，单独申请 L3 候选 Phase A 单元 D。
 
-笼统的“继续”“按计划做”或接受本文不授权 C/D。Phase B、失败重试、清理、commit、push、版本/provider/allowlist 变化和其他候选始终是独立动作。
+笼统的“继续”“按计划做”或接受本文不授权 D。Phase B、失败重试、清理、commit、push、版本/provider/allowlist 变化和其他候选始终是独立动作。
