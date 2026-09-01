@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 实施与 Phase A 精确授权包
 
-- 状态：Accepted（2026-09-01；A0/A1 已分别形成 clean revision，单元 C 已独立授权并复核 `PASS`；单元 D 与候选运行未授权）
+- 状态：Accepted（2026-09-01；A0/A1 已分别形成 clean revision，单元 C 已复核 `PASS`；单元 D 在固定 94-package 图的 transitive feature gate 正式 `STOP`，Phase B 禁止）
 - 日期：2026-09-01
 - 证据编号：`SW-EXP-003`
 - 前置门禁：[mls-rs 0.56.0 静态门禁](sw-g2-mls-rs-spike-authorization.md)已接受候选方向，执行就绪差异待本包关闭
@@ -191,6 +191,16 @@ D 只有在以下值全部实际存在并写入当次授权说明后才能申请
 7. source 与 feature 为零、输入/HEAD 未变且目标安全时，才原子新增 `tools/spikes/sw-g2-mls-rs/Cargo.lock`。许可证/advisory `STOP` 时仍保留已复核负向图；runner 不自动暂存、提交或 push；
 8. 任何 gate 非零、tool/runtime/finalizer 异常或残留都终结为真实 `STOP`/`INVALID`，保留 partial evidence，不补跑、换版本/provider、放宽 allowlist、添加 ignore 或进入 Phase B。
 
+### D 执行结果
+
+2026-09-01 在 clean revision `36765755154dc88f8bd21605cbc25f5abf6bb828` 上消费一次独立 L3 授权，唯一命令使用 bundle `20260901-134500-6665.ARcd4F`；run `20260901-135918-13430.mvBCS2` 在第 6/8 步以 `STOP/feature-gate`、退出码 `24` 终止，没有重试。固定图共 94 个 package，evidence lock SHA-256 为 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`；仓库 lockfile 未写入。
+
+顶层 `mls-rs 0.56.0` 的 `std/private_message/out_of_order/prior_epoch/tree_index`、AWS-LC `non-fips`、SQLite `sqlite-bundled`、唯一 provider 与 crates.io source 均匹配。失败来自 transitive `mls-rs-core 0.27.0`：其默认 feature 为 `std/rfc_compliant/fast_serialize`，而 `mls-rs-crypto-awslc 0.25.0` 与 `mls-rs-provider-sqlite 0.23.0` 都以默认 feature 依赖该 core，实际图因此启用已接受 gate 明确禁止的 `rfc_compliant` 和 `fast_serialize`。这不是网络、工具或重复 provider 故障，不得通过自动放宽 gate、patch/fork 或换 provider 处理。
+
+source/audit/deny exit code 均为 `0`；`cargo-audit 0.22.2` 基于 RustSec revision `72f8b23d78ea6c4c9ded301a4c6ec4260e8b4c27` 未发现 vulnerability 或 warning。`cargo-deny` 报告 sources/advisories/licenses `ok`，只有 allowlist 中 `BSD-2-Clause` 未在本图遇到的信息 warning。manifest SHA-256 为 `704e439e66103d7c8ff0f92231be8589a802a7b5f4ba834086aaafec9f8c701a`，25 项 checksum 已从仓库根全部复核。
+
+monitor 记录 `55761 ms`、峰值 `228844 KiB`，工作区前后干净且精确 run label 的独立查询残留为零。约 `254512 KiB` evidence/`.work`/cache、固定镜像与通用 bundle 默认保留；没有编译/运行候选、生成密钥/数据库、提升仓库 lockfile、执行 Phase B、push 或清理。结果文档随后另获 commit 授权并形成 clean revision。
+
 ### D 的预计影响
 
 - 预计 15–45 分钟，45 分钟与 5 GiB 由五秒用户态 monitor 执行；网络量取决于固定候选 crates 与当次 RustSec DB；
@@ -242,8 +252,8 @@ manifest 使用 schema 1 / `sw-g2-candidate-phase-a-v1`，至少记录：candida
 
 ## 当前停止点与后续授权
 
-精确包已接受；A0/A1 已分别完成离线实施并形成 clean revision，C 已形成并复核真实 bundle `20260901-134500-6665.ARcd4F`。尚未生成 mls-rs lockfile，也未执行候选 Phase A/Phase B。
+精确包已接受并执行到 D；固定 94-package 图已形成完整 source/audit/deny 结果和正式 `STOP/feature-gate`。仓库 mls-rs lockfile 未生成，Phase B 未执行且继续禁止。
 
-单元 C 结果已另获提交授权并形成 clean revision。下一步可展示真实 bundle ID、A1 commit、候选网络/资源、保留与清理边界，单独申请 L3 候选 Phase A 单元 D。
+单元 D 负向结果已另获提交授权并形成 clean revision。下一步只读判断“继续禁止 core 默认 feature”“接受这些 feature”“更换/patch provider”或“关闭 mls-rs 候选”哪一条进入新设计。任一 gate、版本、provider、source 或运行变化都必须重新评审并单独授权。
 
-笼统的“继续”“按计划做”或接受本文不授权 D。Phase B、失败重试、清理、commit、push、版本/provider/allowlist 变化和其他候选始终是独立动作。
+笼统的“继续”“按计划做”或接受本文不授权 D 重试或修订。Phase B、失败重试、清理、commit、push、gate/版本/provider/source/allowlist 变化和其他候选始终是独立动作。

@@ -117,7 +117,7 @@
 
 ### SW-G2：E2EE 与身份候选
 
-按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件。OpenMLS 0.8.1 Phase A 已在 advisory/许可证门正式 `STOP`；OpenMLS 0.9.0 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)也已由单元 E 对 264-package 固定图形成正式 `STOP`：独立 audit 漏洞为零但有 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。两者 Phase B 均禁止。[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受，A0/A1 与单元 C 结果已分别形成 clean revision，通用工具 bundle 已复核 `PASS`；下一步单独评审 D。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
+按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线。[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)已收敛候选顺序、无中心身份/投递映射、crash-safe 状态、许可证停止线、受限 spike 与接受条件。OpenMLS 0.8.1 Phase A 已在 advisory/许可证门正式 `STOP`；OpenMLS 0.9.0 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)也已由单元 E 对 264-package 固定图形成正式 `STOP`：独立 audit 漏洞为零但有 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。两者 Phase B 均禁止。[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受并执行到单元 D；固定 94-package 图的 source/audit/deny 均为零，但 transitive feature gate 因 `mls-rs-core` 默认 `fast_serialize` / `rfc_compliant` 正式 `STOP`，Phase B 禁止。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
 
 ### SW-G3：验证设计
 
@@ -149,4 +149,4 @@
 - 修改测试实现需要明确范围；运行容器前再次说明命令、目标、副作用、时长和清理；
 - 依赖安装、VM 启动、系统网络、`NET_ADMIN`、射频、硬件、真实密钥和外部状态分别授权；
 - 任一设计缺失会影响安全、兼容、数据或结论时，停止实现并回到相应决策门；
-- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；mls-rs A0/A1 与单元 C 结果已分别形成 clean revision，下一步只限单独评审 D、`SW-V1/V2` 授权边界及只读核对。mls-rs 候选的下载、Docker/Cargo/网络或运行须按 D 另行精确授权，不得复用 OpenMLS 候选 lockfile/cache 或相邻授权，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。
+- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；mls-rs 单元 D 已正式 `STOP`，下一步只限提交负向结果、只读评审 feature gate 与 provider 兼容性、`SW-V1/V2` 授权边界。任何 mls-rs gate 放宽、依赖/provider/source 变化或重跑均须形成新设计与精确授权，不得复用 OpenMLS lockfile/cache 或相邻授权，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。
