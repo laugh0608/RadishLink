@@ -7,6 +7,7 @@ SECONDS=0
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 repo_root="$(CDPATH= cd -- "${script_dir}/.." && pwd -P)"
 runtime_control_helper="${repo_root}/scripts/monitor-sw-g2-openmls-0.9-run.py"
+manifest_filter_path="${repo_root}/scripts/sw-g2-openmls-0.9-phase-a-manifest.jq"
 spike_relative="tools/spikes/sw-g2-openmls-0.9"
 spike_root="${repo_root}/${spike_relative}"
 lock_relative="${spike_relative}/Cargo.lock"
@@ -19,6 +20,7 @@ image_ref="rust:1.96.1-bookworm@${image_digest}"
 expected_platform="linux/arm64"
 label_key="org.radishlink.sw-g2-openmls-0.9.run"
 scenario_id="phase-a-dependency-audit"
+manifest_contract="sw-exp-004-phase-a-v4"
 audit_tool_bundle_contract="sw-exp-004-audit-tools-v2"
 cargo_audit_version="0.22.2"
 cargo_deny_version="0.20.2"
@@ -197,6 +199,7 @@ required_inputs=(
   "${spike_root}/deny.toml"
   "${spike_root}/src/main.rs"
   "${runtime_control_helper}"
+  "${manifest_filter_path}"
   "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh"
 )
 for required_input in "${required_inputs[@]}"; do
@@ -282,6 +285,7 @@ cargo_toml_sha="unavailable"
 deny_toml_sha="unavailable"
 main_rs_sha="unavailable"
 runtime_control_helper_sha="unavailable"
+manifest_filter_sha="unavailable"
 runner_sha="unavailable"
 expected_lock_sha="unavailable"
 runner_pid="${BASHPID:-$$}"
@@ -300,7 +304,7 @@ mkdir -p \
   "${prepared_spike}/src"
 : > "${run_log}"
 
-number_or_null_jq='def number_or_null($value): if ($value | test("^[0-9]+$")) then ($value | tonumber) else null end; def boolean_or_null($value): if $value == "true" then true elif $value == "false" then false else null end;'
+number_or_null_jq='def number_or_null($value): if ($value | test("^[0-9]+$")) then ($value | tonumber) else null end;'
 
 write_manifest() {
   local manifest_exit_code=$1
@@ -308,8 +312,18 @@ write_manifest() {
   local manifest_stage=$3
   local manifest_tmp="${run_dir}/manifest.json.tmp"
 
-  jq -n \
-    --arg schema_version "3" \
+  if [ -e "${run_dir}/manifest.json" ] || [ -L "${run_dir}/manifest.json" ]; then
+    echo "STOP: manifest final path already exists" >&2
+    return 1
+  fi
+  if [ -e "${manifest_tmp}" ] || [ -L "${manifest_tmp}" ]; then
+    echo "STOP: manifest temporary path already exists" >&2
+    return 1
+  fi
+
+  if ! jq -n \
+    --arg schema_version "4" \
+    --arg manifest_contract "${manifest_contract}" \
     --arg evidence_id "SW-EXP-004" \
     --arg phase "phase-a" \
     --arg scenario_id "${scenario_id}" \
@@ -367,101 +381,33 @@ write_manifest() {
     --arg main_rs_sha256 "${main_rs_sha}" \
     --arg runtime_control_helper_sha256 "${runtime_control_helper_sha}" \
     --arg runner_sha256 "${runner_sha}" \
+    --arg phase_a_manifest_filter_sha256 "${manifest_filter_sha}" \
     --arg exit_code "${manifest_exit_code}" \
-    "${number_or_null_jq}
-    {
-      schema_version: (\$schema_version | tonumber),
-      evidence_id: \$evidence_id,
-      phase: \$phase,
-      scenario_id: \$scenario_id,
-      run_id: \$run_id,
-      outcome: \$outcome,
-      stage: \$stage,
-      start_time: \$start_time,
-      end_time: \$end_time,
-      git_revision: \$git_revision,
-      git_dirty_before: (if \$git_status_before == \"unavailable\" then null else (\$git_status_before != \"\") end),
-      git_status_before: \$git_status_before,
-      git_status_after: \$git_status_after,
-      image_ref: \$image_ref,
-      image_index_digest: \$image_index_digest,
-      image_platform_id: \$image_platform_id,
-      image_preexisting: boolean_or_null(\$image_preexisting),
-      host_arch: \$host_arch,
-      daemon_arch: \$daemon_arch,
-      container_arch: \$container_arch,
-      target_platform: \$target_platform,
-      rust_version: \$rust_version,
-      cargo_version: \$cargo_version,
-      audit_tool_bundle: {
-        contract: \$audit_tool_bundle_contract,
-        id: \$audit_tool_bundle_id,
-        manifest_sha256: \$audit_tool_bundle_manifest_sha256,
-        mount_mode: "read-only",
-        cargo_audit: {
-          requested_version: \$cargo_audit_requested_version,
-          reported_version: \$cargo_audit_reported_version,
-          binary_sha256: \$cargo_audit_binary_sha256
-        },
-        cargo_deny: {
-          requested_version: \$cargo_deny_requested_version,
-          reported_version: \$cargo_deny_reported_version,
-          binary_sha256: \$cargo_deny_binary_sha256
-        }
-      },
-      direct_dependencies: {
-        openmls: { version: \"=0.9.0\", default_features: false, features: [\"fork-resolution\"] },
-        openmls_basic_credential: { version: \"=0.6.0\", features: [] },
-        openmls_rust_crypto: { version: \"=0.6.0\", features: [] },
-        openmls_sqlite_storage: { version: \"=0.3.0\", features: [] },
-        openmls_traits: { version: \"=0.6.0\", features: [] },
-        rusqlite: { version: \"=0.37.0\", features: [\"bundled\"] },
-        serde: { version: \"=1.0.229\", features: [\"derive\"] },
-        serde_json: { version: \"=1.0.151\", features: [] },
-        tls_codec: { version: \"=0.5.0\", features: [\"derive\", \"serde\", \"mls\"] },
-        tempfile: { version: \"=3.27.0\", dependency_kind: \"dev\", features: [] }
-      },
-      resolved_package_count: number_or_null(\$resolved_package_count),
-      cargo_lock_sha256: \$cargo_lock_sha256,
-      expected_lock_sha256: \$expected_lock_sha256,
-      advisory_db_revision: \$advisory_db_revision,
-      gate_exit_codes: {
-        source: number_or_null(\$source_exit_code),
-        audit: number_or_null(\$audit_exit_code),
-        deny: number_or_null(\$deny_exit_code),
-        feature: number_or_null(\$feature_exit_code)
-      },
-      input_sha256: {
-        license: \$license_sha256,
-        cargo_toml: \$cargo_toml_sha256,
-        deny_toml: \$deny_toml_sha256,
-        main_rs: \$main_rs_sha256,
-        runtime_control_helper: \$runtime_control_helper_sha256,
-        runner: \$runner_sha256,
-        audit_tool_bundle_manifest: \$audit_tool_bundle_manifest_sha256,
-        cargo_audit_binary: \$cargo_audit_binary_sha256,
-        cargo_deny_binary: \$cargo_deny_binary_sha256
-      },
-      lockfile_preexisting: (\$lockfile_preexisting == \"true\"),
-      lockfile_written: (\$lockfile_written == \"true\"),
-      disk_available_kib: number_or_null(\$disk_available_kib),
-      runtime_controls: {
-        monitor_status: \$runtime_control_status,
-        termination_reason: \$runtime_termination_reason,
-        received_signal: (if \$received_signal == \"\" then null else \$received_signal end),
-        elapsed_milliseconds: number_or_null(\$runtime_elapsed_milliseconds),
-        timeout_seconds: (\$runtime_timeout_seconds | tonumber),
-        deadline_enforcement: \"periodic-monitor-and-parent-signal\",
-        disk_current_kib: number_or_null(\$runtime_disk_current_kib),
-        disk_peak_kib: number_or_null(\$runtime_disk_peak_kib),
-        disk_budget_kib: (\$runtime_disk_budget_kib | tonumber),
-        disk_enforcement: \"periodic-apparent-size-monitor\",
-        poll_interval_seconds: (\$runtime_poll_interval_seconds | tonumber),
-        network_egress_enforcement: \"docker-default-network-no-domain-allowlist\"
-      },
-      container_residual_count: number_or_null(\$container_residual_count),
-      exit_code: (\$exit_code | tonumber)
-    }" > "${manifest_tmp}"
+    -f "${manifest_filter_path}" > "${manifest_tmp}"; then
+    rm -f -- "${manifest_tmp}"
+    return 1
+  fi
+  if [ ! -s "${manifest_tmp}" ] || [ -L "${manifest_tmp}" ] ||
+    ! jq -e \
+      --arg contract "${manifest_contract}" \
+      --arg run_id "${run_id}" \
+      --arg outcome "${manifest_outcome}" \
+      --arg stage "${manifest_stage}" \
+      --arg filter_sha "${manifest_filter_sha}" \
+      --arg exit_code "${manifest_exit_code}" '
+        .schema_version == 4
+        and .manifest_contract == $contract
+        and .run_id == $run_id
+        and .outcome == $outcome
+        and .stage == $stage
+        and .audit_tool_bundle.mount_mode == "read-only"
+        and .audit_tool_bundle.cargo_audit.invocation == ["audit", "--json"]
+        and .input_sha256.phase_a_manifest_filter == $filter_sha
+        and .exit_code == ($exit_code | tonumber)
+      ' "${manifest_tmp}" >/dev/null; then
+    rm -f -- "${manifest_tmp}"
+    return 1
+  fi
   mv "${manifest_tmp}" "${run_dir}/manifest.json"
 }
 
@@ -480,6 +426,26 @@ append_checksum() {
 write_checksums() {
   local checksums_tmp="${run_dir}/checksums.sha256.tmp"
   local evidence_name
+
+  if [ -e "${run_dir}/checksums.sha256" ] || [ -L "${run_dir}/checksums.sha256" ]; then
+    echo "STOP: checksum final path already exists" >&2
+    return 1
+  fi
+  if [ ! -s "${run_dir}/manifest.json" ] || [ -L "${run_dir}/manifest.json" ] ||
+    ! jq -e \
+      --arg contract "${manifest_contract}" \
+      --arg filter_sha "${manifest_filter_sha}" '
+        .schema_version == 4
+        and .manifest_contract == $contract
+        and .input_sha256.phase_a_manifest_filter == $filter_sha
+      ' "${run_dir}/manifest.json" >/dev/null 2>&1; then
+    echo "STOP: checksum finalization requires a valid non-empty Phase A manifest" >&2
+    return 1
+  fi
+  if [ -e "${checksums_tmp}" ] || [ -L "${checksums_tmp}" ]; then
+    echo "STOP: checksum temporary path already exists" >&2
+    return 1
+  fi
   : > "${checksums_tmp}"
 
   append_checksum "${repo_root}/LICENSE" "LICENSE" "${checksums_tmp}"
@@ -493,6 +459,10 @@ write_checksums() {
   append_checksum \
     "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" \
     "scripts/run-sw-g2-openmls-0.9-spike.sh" \
+    "${checksums_tmp}"
+  append_checksum \
+    "${manifest_filter_path}" \
+    "scripts/sw-g2-openmls-0.9-phase-a-manifest.jq" \
     "${checksums_tmp}"
   append_checksum "${repo_lock}" "${lock_relative}" "${checksums_tmp}"
 
@@ -523,6 +493,72 @@ write_checksums() {
   done
 
   mv "${checksums_tmp}" "${run_dir}/checksums.sha256"
+  if ! (CDPATH= cd -- "${repo_root}" &&
+    shasum -a 256 -c "${run_dir}/checksums.sha256" >/dev/null); then
+    rm -f -- "${run_dir}/checksums.sha256"
+    return 1
+  fi
+}
+
+verify_pass_phase_a_contract() {
+  local required_evidence
+
+  for required_evidence in \
+    "${repo_lock}" \
+    "${run_dir}/Cargo.lock" \
+    "${run_dir}/advisory-db-revision.txt" \
+    "${run_dir}/audit-exit-codes.json" \
+    "${run_dir}/cargo-audit.json" \
+    "${run_dir}/cargo-deny-sources.txt" \
+    "${run_dir}/cargo-deny.txt" \
+    "${run_dir}/cargo-metadata.json" \
+    "${run_dir}/manifest.json" \
+    "${run_dir}/runtime-control.json" \
+    "${run_dir}/checksums.sha256"; do
+    if [ ! -s "${required_evidence}" ] || [ -L "${required_evidence}" ]; then
+      echo "STOP: PASS contract requires non-empty evidence: ${required_evidence}" >&2
+      return 1
+    fi
+  done
+  if [ "$(shasum -a 256 "${repo_lock}" | awk '{print $1}')" != "${lock_sha}" ] ||
+    [ "$(shasum -a 256 "${run_dir}/Cargo.lock" | awk '{print $1}')" != "${lock_sha}" ]; then
+    echo "STOP: PASS contract requires identical reviewed and regenerated lockfiles" >&2
+    return 1
+  fi
+
+  if ! jq -e \
+    --arg contract "${manifest_contract}" \
+    --arg bundle_contract "${audit_tool_bundle_contract}" \
+    --arg bundle_id "${audit_tool_bundle_id}" \
+    --arg filter_sha "${manifest_filter_sha}" \
+    --arg lock_sha "${lock_sha}" '
+      .schema_version == 4
+      and .manifest_contract == $contract
+      and .outcome == "PASS"
+      and .stage == "phase-a-prepared"
+      and .exit_code == 0
+      and .audit_tool_bundle.contract == $bundle_contract
+      and .audit_tool_bundle.id == $bundle_id
+      and .audit_tool_bundle.mount_mode == "read-only"
+      and .audit_tool_bundle.cargo_audit.invocation == ["audit", "--json"]
+      and .resolved_package_count == 264
+      and .cargo_lock_sha256 == $lock_sha
+      and .expected_lock_sha256 == $lock_sha
+      and .lockfile_preexisting == true
+      and .lockfile_written == false
+      and .gate_exit_codes == {source: 0, audit: 0, deny: 0, feature: 0}
+      and .input_sha256.phase_a_manifest_filter == $filter_sha
+      and .git_status_before == ""
+      and .git_status_after == ""
+      and .runtime_controls.termination_reason == "completed"
+      and .runtime_controls.timeout_seconds == 2700
+      and .runtime_controls.disk_budget_kib == 5242880
+      and .runtime_controls.network_egress_enforcement == "docker-default-network-no-domain-allowlist"
+      and .container_residual_count == 0
+    ' "${run_dir}/manifest.json" >/dev/null; then
+    echo "STOP: finalized manifest does not satisfy the Phase A PASS contract" >&2
+    return 1
+  fi
 }
 
 inputs_unchanged() {
@@ -532,6 +568,7 @@ inputs_unchanged() {
     [ "$(shasum -a 256 "${spike_root}/deny.toml" | awk '{print $1}')" = "${deny_toml_sha}" ] &&
     [ "$(shasum -a 256 "${spike_root}/src/main.rs" | awk '{print $1}')" = "${main_rs_sha}" ] &&
     [ "$(shasum -a 256 "${runtime_control_helper}" | awk '{print $1}')" = "${runtime_control_helper_sha}" ] &&
+    [ "$(shasum -a 256 "${manifest_filter_path}" | awk '{print $1}')" = "${manifest_filter_sha}" ] &&
     [ "$(shasum -a 256 "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" | awk '{print $1}')" = "${runner_sha}" ] &&
     [ "$(shasum -a 256 "${audit_tool_bundle_manifest}" | awk '{print $1}')" = "${audit_tool_bundle_manifest_sha}" ] &&
     [ "$(shasum -a 256 "${audit_tool_bundle_bin}/cargo-audit" | awk '{print $1}')" = "${cargo_audit_binary_sha}" ] &&
@@ -786,6 +823,7 @@ cleanup() {
   local expected_status=""
   local final_disk_kib="unavailable"
   local runtime_triggered=false
+  local evidence_finalized=false
   trap - EXIT INT TERM
   set +e
 
@@ -907,13 +945,41 @@ cleanup() {
     echo "STOP: could not finalize manifest" >&2
     workflow_exit_code=1
     final_stage="evidence-finalize"
-  fi
-  if ! write_checksums; then
+  elif ! write_checksums; then
     echo "STOP: could not finalize checksums" >&2
     workflow_exit_code=1
     final_stage="evidence-finalize"
-    write_manifest "${workflow_exit_code}" "STOP" "${final_stage}" || true
-    write_checksums || true
+  elif [ "${workflow_exit_code}" -eq 0 ] && ! verify_pass_phase_a_contract; then
+    echo "STOP: finalized evidence did not satisfy the Phase A PASS contract" >&2
+    workflow_exit_code=1
+    final_stage="evidence-finalize"
+  else
+    evidence_finalized=true
+  fi
+
+  if [ "${evidence_finalized}" = false ]; then
+    runtime_termination_reason="workflow_stop"
+    rm -f -- \
+      "${run_dir}/manifest.json" \
+      "${run_dir}/manifest.json.tmp" \
+      "${run_dir}/checksums.sha256" \
+      "${run_dir}/checksums.sha256.tmp"
+    if write_manifest "${workflow_exit_code}" "STOP" "${final_stage}" && write_checksums; then
+      evidence_finalized=true
+    else
+      rm -f -- \
+        "${run_dir}/manifest.json" \
+        "${run_dir}/manifest.json.tmp" \
+        "${run_dir}/checksums.sha256" \
+        "${run_dir}/checksums.sha256.tmp"
+      echo "STOP: fallback evidence finalization also failed" >&2
+    fi
+  fi
+
+  if [ "${workflow_exit_code}" -eq 0 ] && [ "${evidence_finalized}" = true ]; then
+    echo "SW-EXP-004 PHASE A PASS: manifest and checksums satisfy the fixed contract."
+  else
+    echo "SW-EXP-004 PHASE A STOP: Phase B remains blocked."
   fi
 
   echo "SW-EXP-004 Phase A run: ${run_id}"
@@ -939,6 +1005,7 @@ cargo_toml_sha="$(shasum -a 256 "${spike_root}/Cargo.toml" | awk '{print $1}')"
 deny_toml_sha="$(shasum -a 256 "${spike_root}/deny.toml" | awk '{print $1}')"
 main_rs_sha="$(shasum -a 256 "${spike_root}/src/main.rs" | awk '{print $1}')"
 runtime_control_helper_sha="$(shasum -a 256 "${runtime_control_helper}" | awk '{print $1}')"
+manifest_filter_sha="$(shasum -a 256 "${manifest_filter_path}" | awk '{print $1}')"
 runner_sha="$(shasum -a 256 "${repo_root}/scripts/run-sw-g2-openmls-0.9-spike.sh" | awk '{print $1}')"
 if [ -f "${repo_lock}" ]; then
   lockfile_preexisting=true
@@ -1108,7 +1175,7 @@ run_controlled docker run --rm \
     set +e
     /audit-tools/bin/cargo-deny check sources > /evidence/cargo-deny-sources.txt 2>&1
     source_status=$?
-    /audit-tools/bin/cargo-audit --json > /evidence/cargo-audit.json
+    /audit-tools/bin/cargo-audit audit --json > /evidence/cargo-audit.json
     audit_status=$?
     /audit-tools/bin/cargo-deny check advisories licenses > /evidence/cargo-deny.txt 2>&1
     deny_status=$?
@@ -1169,5 +1236,5 @@ if [ "${source_status}" != "0" ] || [ "${audit_status}" != "0" ] || [ "${deny_st
 fi
 
 final_stage="phase-a-prepared"
-echo "SW-EXP-004 PHASE A PASS: source, feature, license, and advisory gates returned zero."
+echo "SW-EXP-004 Phase A gates returned zero; evidence finalization remains pending."
 echo "Phase B was not run and still requires a separate authorization package."

@@ -1,7 +1,7 @@
 # SW-EXP-004 OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包
 
-- 状态：bundle `PASS` / L3 D pending（2026-08-30；A5 后固定审计工具 bundle `20260830-112214-39636.GpERrj` 已构建并复核，精确 Phase A 授权包已形成但未获执行授权，Phase B 禁止）
-- 日期：2026-08-30
+- 状态：L3 D `INVALID` / A6 implemented（2026-09-01；单元 D 已执行一次并暴露 audit invocation 与 Phase A finalizer 缺陷，A6 已离线修正，Phase B 与重跑均未授权）
+- 日期：2026-09-01
 - 证据编号：`SW-EXP-004`
 - 前置门禁：[OpenMLS 0.9.0 静态门禁](sw-g2-openmls-0.9-spike-authorization.md)已接受
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
@@ -17,7 +17,8 @@
 5. **首次 L3 审计工具 bundle 构建单元 C**：固定二进制构建与无网络版本验证成功，但 evidence finalizer 失败，因此整体为 `INVALID`，不构成成功 bundle；
 6. **证据终结单元 A5**：不重跑 bundle，离线修正 manifest/checksum 原子终结、失败传播和 `PASS` 时序；
 7. **A5 后 L3 bundle 构建单元 C2**：已在 clean revision 上执行一次，固定 bundle `20260830-112214-39636.GpERrj` 通过 v2 finalizer 与独立复核；
-8. **L3 Phase A 执行单元 D**：已写入精确 bundle ID 与唯一命令，但只有再次单独授权后才可执行一次 Phase A。
+8. **L3 Phase A 执行单元 D**：以精确 bundle ID 执行一次 Phase A；source/feature 为零并生成仓库 lockfile，许可证门拒绝三项 `MPL-2.0`，但 `cargo-audit` 调用与 Phase A manifest finalizer 失败，整体为 `INVALID`；
+9. **Phase A 修复单元 A6**：不调用 Docker、Cargo 或网络，修正 `cargo-audit` 子命令形态，把 Phase A manifest 升级为独立 schema 4/v4 filter，并收紧原子终结、checksum 前置与离线 self-test。
 
 分段用于保证用户在任何联网、依赖下载、审计工具编译或 Docker 容器启动前，能够先审阅真实脚本。接受本文不授权 A 或 B；A 的授权不自动包含 B，B 的一次授权也不构成失败重试、Phase B、清理或其他候选的持续授权。
 
@@ -116,6 +117,7 @@ tools/spikes/sw-g2-openmls-0.9/
 | `main.rs` | 显式说明 Phase B 未实现并拒绝所有场景命令 | MLS 状态机、provider 初始化、身份、加密、SQLite 或网络 |
 | 运行控制 monitor | 45 分钟 deadline、5 GiB 本轮目录定期监测、触发原因与离线自检 | 文件系统 quota、Docker 域名 allowlist、依赖或场景执行 |
 | audit tool bundle builder | 使用固定镜像构建、无网络运行验证、manifest/checksum、90 分钟与 5 GiB 用户态上限、精确残留处理 | Phase A、候选依赖、产品构建、自动重试、`.work` 复用 |
+| Phase A manifest filter/self-test | schema 4/v4 JSON 合同、固定字符串、输入摘要、原子终结与空/无效 manifest 拒绝 | Docker、Cargo、网络、历史 evidence 修补或候选结论 |
 | runner | 参数门、bundle 合同核对、隔离目录、镜像/平台核对、单次 Phase A、证据与精确残留处理 | Phase B、工具安装、重试循环、容器网络/端口、主机 Cargo home、真实数据 |
 
 原单元 A runner 只接受一个参数 `prepare`。A4 后当前 runner 只接受 `prepare <audit-tool-bundle-id>`，bundle ID 必须是精确 run ID；无参数、缺失或多余参数、`run`、未知 action、未知 bundle 都必须在 Phase A artifact、Docker 或网络访问前以退出码 `2` 拒绝。A5 后 bundle builder 接受 `prepare` 与不触发 Docker/Cargo/网络的 `self-test`；其他参数均拒绝。两个脚本都使用 `set -euo pipefail`、`umask 077`，拒绝 symlink 输入、artifact root 偏移、run 目录碰撞和 label 不匹配的容器清理。
@@ -397,7 +399,7 @@ A4 原定的 schema 1 / `sw-exp-004-audit-tools-v1` 没有产生任何有效 bun
 
 runner 在创建 Phase A artifact、查询 Docker 或访问网络前完成下列核对：精确 ID 格式和路径、无 symlink payload、`bundle/bin` 只有两个不可写可执行文件、manifest 为固定 contract 的 `PASS`、image/platform/Rust/Cargo/工具版本/90 分钟 bundle 上限/5 GiB 上限/网络口径/clean 状态/残留均匹配、checksum 路径集合完全一致且全部通过、manifest 中的二进制摘要与实际文件一致。不得自动选择 `latest`、模糊匹配或降级到上一轮 `.work`。
 
-通过后，Phase A 只把 `bundle/bin` 挂载到 `/audit-tools/bin` 且为 `readonly`，以绝对路径执行两个工具；候选容器不再运行 `cargo install`，也不挂载 bundle `.work`。Phase A 自身仍保持 45 分钟与 5 GiB 监测、fixed image、默认出站网络无域名 allowlist、无端口、非 root、只读根文件系统和原有 source/license/advisory/feature 停止线。schema 3 Phase A manifest 新增 bundle contract、ID、manifest SHA-256、两个工具版本和二进制 SHA-256。
+通过后，Phase A 只把 `bundle/bin` 挂载到 `/audit-tools/bin` 且为 `readonly`，以绝对路径执行两个工具；候选容器不再运行 `cargo install`，也不挂载 bundle `.work`。Phase A 自身仍保持 45 分钟与 5 GiB 监测、fixed image、默认出站网络无域名 allowlist、无端口、非 root、只读根文件系统和原有 source/license/advisory/feature 停止线。A4 时 schema 3 Phase A manifest 新增 bundle contract、ID、manifest SHA-256、两个工具版本和二进制 SHA-256；A6 后未来 run 升级为 schema 4 / `sw-exp-004-phase-a-v4`，另记独立 filter 摘要与 `cargo-audit audit --json` 调用合同。
 
 此前 signal/deadline 在受控 Docker 子进程返回前会跳过 shell 后处理，使实际存在的 evidence lock 与 metadata 在 manifest 中显示为 `unavailable`。A4 cleanup 现在只回填已经安全落盘的 lock SHA-256、resolved package 数量、advisory DB revision 和已有 gate 退出码；不会在异常路径补跑 feature gate、伪造未执行门或提升仓库 lockfile。正常路径仍显式执行 feature gate 并写入统一退出码文件。
 
@@ -445,7 +447,7 @@ A5 新增 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh self-test`，只在系
 
 该结果只接受固定审计工具 bundle 的构建和证据合同，不是 OpenMLS 候选审计、许可证/advisory 结论或 Phase A/Phase B 授权。
 
-## 待授权的 L3 单元 D：精确 bundle Phase A
+## 已执行的 L3 单元 D：精确 bundle Phase A
 
 单元 D 的唯一允许入口固定为：
 
@@ -453,7 +455,7 @@ A5 新增 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh self-test`，只在系
 ./scripts/run-sw-g2-openmls-0.9-spike.sh prepare 20260830-112214-39636.GpERrj
 ```
 
-本文与状态文档的提交只形成可审阅授权包，不授权执行该命令。执行前仍须基于本次 clean revision 重新向用户说明并取得当前任务明确授权；一次授权只覆盖一次上述入口，不包含失败重试、bundle 重建、Phase B、commit、push 或 evidence 清理。
+用户已于 2026-09-01 明确授权执行一次该命令；授权已消费，不包含失败重试、bundle 重建、Phase B、commit、push 或 evidence 清理。
 
 ### D 的固定动作与副作用
 
@@ -467,9 +469,19 @@ A5 新增 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh self-test`，只在系
 
 预计持续 15–45 分钟，目录预算 5 GiB，网络量取决于 fixed candidate crates 与当次 RustSec DB；45 分钟和 5 GiB 是五秒周期用户态监测，不是内核 quota，采样间隔内可能短暂越界。任一网络失败、deadline/磁盘触发、digest/平台/版本不符、lockfile 漂移、未知来源、feature 不符、advisory、许可证拒绝、证据/finalizer 不完整或精确残留都会 `STOP`，保留真实负向/partial evidence，不自动重试或绕过门禁。
 
+## 2026-09-01 单元 D 结果与 A6 离线修复
+
+- 单元 D 唯一 run 为 `20260901-120714-65631.D9JlZx`，脚本退出 `20`；固定 bundle、image/platform 与 Rust/Cargo 预检通过，本轮 Cargo home/target 成功生成 264-package metadata 与仓库 `Cargo.lock`，lock SHA-256 为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；
+- gate 记录为 source `0`、audit `2`、deny `4`、feature `0`。`cargo-deny` 报告 sources/advisories 正常，但许可证门拒绝 `hpke-rs`、`hpke-rs-crypto`、`hpke-rs-rust-crypto` 0.7.0 的 `MPL-2.0`；不得据此放宽 allowlist；
+- 固定 `cargo-audit 0.22.2` 是 `cargo audit` 子命令，runner 却直接执行 `/audit-tools/bin/cargo-audit --json`，因此 Cargo CLI 拒绝 `--json`、`cargo-audit.json` 为空，独立 RustSec 结果不存在；
+- Phase A 内联 jq program 中 `mount_mode: "read-only"` 被 shell 双引号剥离后解析为减法表达式，留下 0 字节 `manifest.json`；随后 `mv` 遮蔽 jq 非零状态，checksum 又如实记录空文件摘要。该 run 缺少有效 schema 3 manifest，整体为 `INVALID`，不能接受为正式 Phase A 或许可证/advisory 结论；
+- monitor 以 runner 请求正常停止，耗时 `36323 ms`、记录峰值 `192079 KiB`，本轮目录实际保留约 218 MiB；checksum 文件从仓库根复核其 25 项均匹配，精确 Docker label 残留为零。fixed image、bundle、仓库 lockfile、ignored evidence 与 `.work` 原样保留，未自动重试、进入 Phase B、commit、push 或清理；
+- 用户随后授权继续无 Docker、无 Cargo、无网络的下一修复单元。A6 将调用固定为 `/audit-tools/bin/cargo-audit audit --json`；新增 `scripts/sw-g2-openmls-0.9-phase-a-manifest.jq` 与 `scripts/check-sw-g2-openmls-0.9-phase-a.sh`，未来 manifest 升级为 schema 4 / `sw-exp-004-phase-a-v4`；renderer 失败、空/无效 manifest、既有 final/tmp 路径和 checksum 自校验失败均传播非零且不留下可误认的 final evidence；gate-level 成功只打印 finalization pending，唯一 `PASS` 延后到 264-package/四门/运行控制/零残留 contract 与 checksum 全部复核之后；
+- A6 离线 self-test 已覆盖 shell 语法、固定 audit invocation、唯一 post-finalization `PASS`、schema 4/v4 渲染、`read-only` 固定字符串、filter 摘要、renderer 失败和空/无效 JSON 拒绝；未读取或改写历史 run，未调用 Docker/Cargo/网络，也未重跑 Phase A。
+
 ## 当前停止点与未来授权措辞
 
-本文历史 Phase A 已执行；A3 关闭了已知 SQLite 解析冲突，A4/A5 完成独立工具 bundle 与 evidence finalizer。A5 后单元 C2 已生成并复核成功 bundle `20260830-112214-39636.GpERrj`；精确单元 D 授权包已经形成，但尚未获执行授权。当前存在三份 Phase A `SW-EXP-004` ignored evidence、一份无效 bundle run、一份成功 bundle 和一份仅位于最新历史 Phase A evidence 的 partial lockfile；仓库没有候选 `Cargo.lock`，仍没有来源、许可证/advisory、feature、候选构建或场景实证。Phase B 禁止。
+单元 D 的一次授权已经消费并因 runner/evidence 缺陷整体 `INVALID`。当前仓库已保留候选 `Cargo.lock`，partial evidence 支持 source/feature 通过和 `MPL-2.0` 许可证拒绝，但独立 `cargo-audit` 与有效 manifest 均缺失，不能形成正式 Phase A 结论。A6 已离线修正 consumer/finalizer，并获本轮独立 commit 授权；Phase B、失败重跑、bundle 重建、历史 evidence 修补与 cache 清理均禁止。
 
 未来授权必须明确指出授权单元：
 
@@ -480,6 +492,8 @@ A5 新增 `./scripts/run-sw-g2-openmls-0.9-audit-tools.sh self-test`，只在系
 - 首次 L3 单元 C：已经消费的一次固定 bundle 构建授权；结果无效，不包含候选 Phase A、失败重试或 `.work` 复用；
 - 证据终结单元 A5：离线修正 finalizer 并提交；不包含 Docker/Cargo/网络、bundle 重跑或历史 artifact 修补；
 - A5 后 L3 单元 C2：已经消费的一次固定 bundle 构建授权；结果 `PASS`，不包含候选 Phase A 或旧 `.work` 复用；
-- L3 单元 D：以 `20260830-112214-39636.GpERrj` 执行一次精确 Phase A；授权包已形成但未授权执行，不包含 bundle 重建、失败重试或 Phase B。
+- L3 单元 D：已经消费的一次精确 Phase A 授权；结果 `INVALID`，不包含 bundle 重建、失败重试或 Phase B；
+- Phase A 修复单元 A6：已消费的无 Docker/Cargo/网络离线修复授权；commit 已由 2026-09-01 当前任务另行明确授权，不包含重跑或历史 evidence 修补；
+- 未来 L3 单元 E：只有 A6、仓库 lockfile 与结果文档形成 clean revision，并重新说明同一精确 bundle、默认网络、资源、保留与清理边界后，才可另行申请一次从全新 Cargo home/target 重新生成并逐字比较 lockfile、运行完整 gates 的授权。
 
-任何只写“接受文档”“继续下一步”或此前授权都不自动授权 D。C2 的授权不包含 D，D 的授权不包含失败重试。Phase A 即使 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。
+单元 D 的授权不包含单元 E；A6 的原实现授权不包含 commit 或重跑，本轮 commit 已另获明确授权且仍不包含单元 E。Phase A 即使未来 `PASS`，Phase B 仍必须重新形成精确包并另行授权；`SW-G2` 继续保持未通过。

@@ -1,7 +1,7 @@
 # RadishLink 项目执行计划
 
 - 状态：Accepted（`PLAN-G0`，2026-08-24）
-- 更新日期：2026-08-30
+- 更新日期：2026-09-01
 - 适用范围：D0 至 E0 的产品成熟度、软件、硬件与射频证据依赖
 - 目标读者：产品、架构、安全、软件、硬件、法规与测试协作者
 
@@ -45,7 +45,7 @@
 ## 当前项目位置
 
 - 产品成熟度：`D0`；
-- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划、覆盖层消息交付语义与验证设计已通过 `SW-G0/SW-G1/SW-G3`。OpenMLS 0.8.1 Phase A advisory/许可证门 `STOP`，prepared run 的 Phase B 禁止；`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 A3 后 partial graph 可解析，A5 后固定审计工具 bundle 已 `PASS`，精确 Phase A 单元 D 待授权且仍没有正式审计结论；`SW-G4/SW-V0` 已完成且 harness 自检通过；
+- 软件：已有 `SW-EXP-001` 探索性探针；正式软件计划、覆盖层消息交付语义与验证设计已通过 `SW-G0/SW-G1/SW-G3`。OpenMLS 0.8.1 Phase A advisory/许可证门 `STOP`，prepared run 的 Phase B 禁止；`mls-rs 0.56.0` 静态门已接受但未执行；OpenMLS 0.9.0 单元 D 已生成 264-package 仓库 lockfile，source/feature 返回零且许可证门拒绝三个 `MPL-2.0`，但 audit invocation 与 manifest finalizer 失败，整体 `INVALID`；A6 已离线修复，重跑待新授权；`SW-G4/SW-V0` 已完成且 harness 自检通过；
 - 硬件：尚未进入实体设备验证，低成本方案待 `HW-G0` 评审；
 - 射频：保持 `RF-R0` 无发射开发，HaLow 采购和发射暂停；
 - 密码：Signal/MLS 仍是候选，未形成 ADR，不存在已验证 E2EE；
