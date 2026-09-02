@@ -40,7 +40,7 @@ Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端
 两个实现库进入比较：
 
 - [`OpenMLS`](https://github.com/openmls/openmls)：首轮基线 `openmls-v0.8.1` / `47dbede` 的 Phase A 是负向证据；稳定 `0.9.0` 已于 2026-08-25 发布，官方列出 Linux AArch64 构建与测试。RadishLink 已完成其固定依赖图 Phase A，当前许可证门形成正式负向结论，存储迁移与候选运行未执行；
-- [`mls-rs`](https://github.com/awslabs/mls-rs)：对照基线为 `0.56.0` / `8f1b43f`；Rust、Apache-2.0 OR MIT，提供 SQLite state provider、互操作测试与 FFI；上游把 AWS-LC provider 标为 stable，但明确说明尚未完成完整第三方安全审计。[静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受；单元 D 的 94-package 图形成历史 `STOP`，A2 已依据保留图离线修正未来 feature gate，D2 未授权。
+- [`mls-rs`](https://github.com/awslabs/mls-rs)：对照基线为 `0.56.0` / `8f1b43f`；Rust、Apache-2.0 OR MIT，提供 SQLite state provider、互操作测试与 FFI；上游把 AWS-LC provider 标为 stable，但明确说明尚未完成完整第三方安全审计。[静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受；单元 D 的 94-package 图形成历史 `STOP`，A2 已依据保留图离线修正未来 feature gate，前置 A3/D2 未授权。
 
 当前阻塞项：
 
@@ -71,4 +71,4 @@ libsodium、RustCrypto、OpenSSL、Noise primitives 或单独 AEAD 都可以成�
 
 ## 当前建议
 
-暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)保留 OpenMLS 0.8.1 与 0.9.0 两份 Phase A 负向证据；0.9.0 单元 E 已正式 `STOP`，不重跑、不进入 Phase B，也不放宽 `MPL-2.0` allowlist。[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受，A0/A1 与单元 C 结果已分别形成 clean revision；单元 D 的正式历史 `STOP` 保留，A2 已离线把未来 gate 改为包限定精确判定。推荐保持现有版本/provider/source，不 patch/fork、不更换 provider；下一步只形成 D2 精确授权设计，在选择全新解析或只读消费 D 保留 lockfile 后再请求一次 L3 授权。D2 未授权，Phase B 继续禁止。`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前仍只做静态核对。只有候选通过精确依赖、advisory、许可证、命令、副作用和运行授权，才以同一套已接受 `SW-G3` A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。
+暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)保留 OpenMLS 0.8.1 与 0.9.0 两份 Phase A 负向证据；0.9.0 单元 E 已正式 `STOP`，不重跑、不进入 Phase B，也不放宽 `MPL-2.0` allowlist。[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受，A0/A1/A2 与单元 C 结果已分别形成 clean revision；单元 D 的正式历史 `STOP` 保留。推荐保持现有版本/provider/source，不 patch/fork、不更换 provider；D2 Proposed 只读消费 D final lock 以隔离 gate 修订，不重新解析传递版本，也不复用旧 mutable cache。下一步仅申请前置 A3 的离线实施授权，A3/D2 未授权，Phase B 继续禁止。`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前仍只做静态核对。只有候选通过精确依赖、advisory、许可证、命令、副作用和运行授权，才以同一套已接受 `SW-G3` A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。

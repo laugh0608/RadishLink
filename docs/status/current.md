@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 单元 D 的固定 94-package 图保留正式历史 `STOP`，A2 已把未来 feature gate 离线修正为包限定精确判定，D2 与 Phase B 均未授权。OpenMLS 0.9.0 的 A6 已由 `ac01b4d` 收口；2026-09-01 单元 E 在固定 264-package 图上形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，`cargo-audit` 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。OpenMLS 0.9.0 不进入 Phase B，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 单元 D 的固定 94-package 图保留正式历史 `STOP`，A2 已把未来 feature gate 离线修正为包限定精确判定并形成 commit `26bb86d`。D2 已选择只读消费 D final lock、拒绝重新解析与旧 mutable cache 的路径；前置 A3、D2 与 Phase B 均未授权。OpenMLS 0.9.0 的 A6 已由 `ac01b4d` 收口；2026-09-01 单元 E 在固定 264-package 图上形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，`cargo-audit` 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。OpenMLS 0.9.0 不进入 Phase B，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -38,10 +38,10 @@
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
 - [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0`、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 与[确定性故障设计](../testing/sw-g3-deterministic-validation-design.md)的 `SW-G3` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)仍为 Draft；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
-- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确实施/Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)已执行到单元 D。run `20260901-135918-13430.mvBCS2` 的 94-package 图 source/audit/deny 为零、feature 为一，形成正式历史 `STOP/feature-gate`；A2 已依据保留 metadata/source 把未来 gate 改为固定 package/version、精确解析集合、alias 展开和 provider dependency edge 联合判定。它只接受 core 的 `rfc_compliant -> x509` 与 `fast_serialize -> mls-rs-codec/preallocate`，不接受顶层同名 feature 或 provider defaults；仓库 lockfile 仍未提升，D2 与 Phase B 禁止。OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)记录历史单元与 2026-09-01 单元 E。仓库与 evidence lockfile SHA-256 均为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；单元 E run `20260901-123158-75973.3gVtsH` 的 schema 4/v4 manifest、26 项 checksum、独立 audit 与零容器残留已复核，正式结论为许可证门 `STOP`。OpenMLS 0.9.0 的重跑、Phase B、allowlist/advisory ignore 变更、bundle 重建和 evidence 清理均未授权；
+- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确实施/Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)已执行到单元 D。run `20260901-135918-13430.mvBCS2` 的 94-package 图 source/audit/deny 为零、feature 为一，形成正式历史 `STOP/feature-gate`；A2 已依据保留 metadata/source 把未来 gate 改为固定 package/version、精确解析集合、alias 展开和 provider dependency edge 联合判定。它只接受 core 的 `rfc_compliant -> x509` 与 `fast_serialize -> mls-rs-codec/preallocate`，不接受顶层同名 feature 或 provider defaults；仓库 lockfile 仍未提升。D2 Proposed 合同固定只读 seed lock SHA-256 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`，不读取 D `.work`，新 run 重新执行当前审计；A3/D2/Phase B 禁止。OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)记录历史单元与 2026-09-01 单元 E。仓库与 evidence lockfile SHA-256 均为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；单元 E run `20260901-123158-75973.3gVtsH` 的 schema 4/v4 manifest、26 项 checksum、独立 audit 与零容器残留已复核，正式结论为许可证门 `STOP`。OpenMLS 0.9.0 的重跑、Phase B、allowlist/advisory ignore 变更、bundle 重建和 evidence 清理均未授权；
 - [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
-- 下一步只设计 mls-rs D2 的精确授权，先冻结全新解析与只读消费 D 保留 lockfile 两种路径中的一个；任何运行、gate/版本/provider/source 变化仍须单独授权。`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件继续只读评审；
+- 下一步只申请 mls-rs A3 离线实施授权：验证固定 seed final evidence、删除重新解析路径、升级 manifest schema 与 checker；任何 A3 实施、D2 运行、gate/版本/provider/source 变化仍须分别授权。`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件继续只读评审；
 - 无射频软件计划不能替代首个测试地区的法规核对，二者可以并行研究但分别关门。
 
 ## 决策门状态
@@ -59,7 +59,9 @@
 1. **mls-rs A2 包限定 gate 已离线实施**：旧 gate 按 feature 名称扫描全部 `mls-rs*` package，混淆了顶层聚合 feature 与 core alias；新 gate 固定六个关键 package/version、各自解析集合、core/codec/X.509 alias 和 provider normal dependency edge。
 2. **安全边界未放宽为名称 allowlist**：仅接受 `mls-rs-core 0.27.0/rfc_compliant -> x509` 与 `fast_serialize -> mls-rs-codec/preallocate` 的既有展开；顶层 `mls-rs` 同名 feature、AWS-LC/SQLite provider defaults、FIPS、post-quantum、SQLCipher、FFI、第二 provider 与非 crates.io source 仍拒绝。
 3. **离线门禁通过**：两个 shell 语法检查、综合 checker、D 保留 metadata 的只读 gate 回归、仓库门禁与 `git diff --check` 均通过；历史 evidence 未修改。
-4. **授权边界保持**：没有调用 Docker、Cargo 或网络，没有生成/提升 lockfile、重跑 D、进入 Phase B、清理 evidence、commit 或 push。D 的正式历史 `STOP` 不变；D2 必须先形成并接受精确授权设计。
+4. **A2 授权边界保持**：A2 实施时没有调用 Docker、Cargo 或网络，没有生成/提升 lockfile、重跑 D、进入 Phase B、清理 evidence、commit 或 push。D 的正式历史 `STOP` 不变；D2 设计随后才单独形成。
+5. **A2 已形成 clean revision**：用户另行明确授权后，以 `fix(security): qualify mls-rs feature gate` 提交为 `26bb86d`；提交前门禁通过，未 push。
+6. **D2 固定图路径已形成 Proposed 方案**：只读消费 D final `Cargo.lock`，固定 SHA-256 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7` 与 94-package 图；拒绝重新解析和复用 D `.work`，新 run 只用全新 Cargo home/target 重新获取 locked crates 与当前 RustSec DB。前置 A3 只实现 seed 验证、locked consumer、schema 2/v2 与离线负例；A3/D2 均未授权。
 
 ## 上一批次（2026-09-01）
 
@@ -117,7 +119,7 @@
 
 ## 下一步事项
 
-1. **形成 mls-rs D2 精确授权设计**：推荐保持当前版本/provider/source 与包限定 gate，只选择并冻结“从原 manifest 全新解析”或“只读消费并验证 D 保留 lockfile”之一；写清 run ID、网络/cache、RustSec revision、lockfile 提升、失败保留、历史 evidence 不变性与零残留后再请求独立 L3 授权。
+1. **申请 mls-rs A3 离线实施授权**：只修改 runner、manifest filter、checker 与必要状态文档，固定验证 D final seed、以 `--locked` 消费 94-package 图、拒绝旧 mutable cache，并覆盖篡改/漂移/schema 负例；不调用 Docker/Cargo/网络，不生成仓库 lockfile 或 D2 artifact。
 2. **继续阻断 Phase B**：A2 不是 Phase A `PASS`；D 的历史结果仍为 `STOP`，D2 未授权且仓库无 mls-rs lockfile，不存在 Phase B 实现或执行授权；`SW-G2` 继续未通过。
 3. **并行保留低风险规划**：继续评审 `SW-V1/V2` 授权边界、硬件分层路线和已有硬件复用条件；不重跑容器、不采购/刷写硬件、不产生射频发射。
 
