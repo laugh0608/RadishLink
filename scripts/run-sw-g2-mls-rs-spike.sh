@@ -22,8 +22,24 @@ image_ref="rust:1.96.1-bookworm@${image_digest}"
 expected_platform="linux/arm64"
 label_key="org.radishlink.sw-g2.mls-rs.run"
 scenario_id="phase-a-dependency-audit"
-manifest_contract="sw-g2-candidate-phase-a-v1"
+manifest_contract="sw-g2-candidate-phase-a-v2"
 audit_tool_bundle_contract="sw-g2-rust-audit-tools-v1"
+dependency_graph_seed_contract="sw-g2-mls-rs-d-final-v1"
+dependency_graph_seed_run_id="20260901-135918-13430.mvBCS2"
+dependency_graph_seed_revision="36765755154dc88f8bd21605cbc25f5abf6bb828"
+dependency_graph_seed_relative="artifacts/sw-g2-mls-rs/${dependency_graph_seed_run_id}"
+dependency_graph_seed_dir="${repo_root}/${dependency_graph_seed_relative}"
+dependency_graph_seed_manifest="${dependency_graph_seed_dir}/manifest.json"
+dependency_graph_seed_checksums="${dependency_graph_seed_dir}/checksums.sha256"
+dependency_graph_seed_lock="${dependency_graph_seed_dir}/Cargo.lock"
+dependency_graph_seed_metadata="${dependency_graph_seed_dir}/cargo-metadata.json"
+dependency_graph_seed_gate_exit_codes="${dependency_graph_seed_dir}/audit-exit-codes.json"
+dependency_graph_seed_manifest_sha="704e439e66103d7c8ff0f92231be8589a802a7b5f4ba834086aaafec9f8c701a"
+dependency_graph_seed_checksums_sha="aeb904e2656cc6458125017edd84fd6732fbd658c793b77c6d0c230b7feac481"
+dependency_graph_seed_lock_sha="c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7"
+dependency_graph_seed_metadata_sha="632a9bca905426b32a36e08aac8ebdecb04f60ca598d629a99157d2c59c409f8"
+dependency_graph_seed_gate_exit_codes_sha="64526a2beb6feff1ec70eef81d9eb03e7d26013b96f39b4111d2960b210c45d3"
+dependency_graph_seed_package_count=94
 cargo_audit_version="0.22.2"
 cargo_deny_version="0.20.2"
 minimum_disk_kib=5242880
@@ -96,6 +112,101 @@ if [ -e "${repo_lock}" ] && [ ! -f "${repo_lock}" ]; then
   echo "repository Cargo.lock exists but is not a regular file" >&2
   exit 1
 fi
+if [ -e "${repo_lock}" ] || [ -L "${repo_lock}" ]; then
+  echo "D2 requires the repository mls-rs Cargo.lock to be absent before seed consumption" >&2
+  exit 2
+fi
+
+seed_checksum_entry_matches() {
+  local expected_sha=$1
+  local expected_label=$2
+  [ "$(awk -v expected_sha="${expected_sha}" -v expected_label="${expected_label}" '
+    NF == 2 && $1 == expected_sha && $2 == expected_label { matches += 1 }
+    END { print matches + 0 }
+  ' "${dependency_graph_seed_checksums}")" -eq 1 ]
+}
+
+verify_dependency_graph_seed() {
+  local seed_file
+  local resolved_seed_dir
+
+  if [ ! -d "${dependency_graph_seed_dir}" ] || [ -L "${dependency_graph_seed_dir}" ]; then
+    echo "dependency graph seed directory is missing or is a symbolic link" >&2
+    return 2
+  fi
+  resolved_seed_dir="$(CDPATH= cd -- "${dependency_graph_seed_dir}" && pwd -P)"
+  if [ "${resolved_seed_dir}" != "${dependency_graph_seed_dir}" ]; then
+    echo "dependency graph seed directory resolves outside the fixed evidence path" >&2
+    return 2
+  fi
+  for seed_file in \
+    "${dependency_graph_seed_manifest}" \
+    "${dependency_graph_seed_checksums}" \
+    "${dependency_graph_seed_lock}" \
+    "${dependency_graph_seed_metadata}" \
+    "${dependency_graph_seed_gate_exit_codes}"; do
+    if [ ! -f "${seed_file}" ] || [ -L "${seed_file}" ]; then
+      echo "dependency graph seed file is missing or is a symbolic link: ${seed_file}" >&2
+      return 2
+    fi
+  done
+
+  if [ "$(shasum -a 256 "${dependency_graph_seed_manifest}" | awk '{print $1}')" != "${dependency_graph_seed_manifest_sha}" ] ||
+    [ "$(shasum -a 256 "${dependency_graph_seed_checksums}" | awk '{print $1}')" != "${dependency_graph_seed_checksums_sha}" ] ||
+    [ "$(shasum -a 256 "${dependency_graph_seed_lock}" | awk '{print $1}')" != "${dependency_graph_seed_lock_sha}" ] ||
+    [ "$(shasum -a 256 "${dependency_graph_seed_metadata}" | awk '{print $1}')" != "${dependency_graph_seed_metadata_sha}" ] ||
+    [ "$(shasum -a 256 "${dependency_graph_seed_gate_exit_codes}" | awk '{print $1}')" != "${dependency_graph_seed_gate_exit_codes_sha}" ]; then
+    echo "dependency graph seed digest does not match the fixed D final evidence" >&2
+    return 2
+  fi
+
+  if ! seed_checksum_entry_matches "${dependency_graph_seed_manifest_sha}" "${dependency_graph_seed_relative}/manifest.json" ||
+    ! seed_checksum_entry_matches "${dependency_graph_seed_lock_sha}" "${dependency_graph_seed_relative}/Cargo.lock" ||
+    ! seed_checksum_entry_matches "${dependency_graph_seed_metadata_sha}" "${dependency_graph_seed_relative}/cargo-metadata.json" ||
+    ! seed_checksum_entry_matches "${dependency_graph_seed_gate_exit_codes_sha}" "${dependency_graph_seed_relative}/audit-exit-codes.json"; then
+    echo "dependency graph seed checksum records do not match the fixed final files" >&2
+    return 2
+  fi
+
+  if ! jq -e \
+    --arg run_id "${dependency_graph_seed_run_id}" \
+    --arg revision "${dependency_graph_seed_revision}" \
+    --arg lock_sha "${dependency_graph_seed_lock_sha}" \
+    --argjson package_count "${dependency_graph_seed_package_count}" '
+      .schema_version == 1
+      and .manifest_contract == "sw-g2-candidate-phase-a-v1"
+      and .evidence_id == "SW-EXP-003"
+      and .phase == "phase-a"
+      and .scenario_id == "phase-a-dependency-audit"
+      and .run_id == $run_id
+      and .candidate.name == "mls-rs"
+      and .candidate.version == "0.56.0"
+      and .outcome == "STOP"
+      and .stage == "feature-gate"
+      and .repository.git_revision == $revision
+      and .repository.git_status_before == ""
+      and .repository.git_status_after == ""
+      and .cargo_lock_sha256 == $lock_sha
+      and .resolved_package_count == $package_count
+      and .gate_exit_codes == {source: 0, audit: 0, deny: 0, feature: 1}
+    ' "${dependency_graph_seed_manifest}" >/dev/null; then
+    echo "dependency graph seed manifest fields drifted from the fixed D result" >&2
+    return 2
+  fi
+  if ! jq -e --argjson package_count "${dependency_graph_seed_package_count}" \
+    '.packages | type == "array" and length == $package_count' \
+    "${dependency_graph_seed_metadata}" >/dev/null; then
+    echo "dependency graph seed metadata does not contain the fixed package count" >&2
+    return 2
+  fi
+  if ! jq -e '. == {source: 0, audit: 0, deny: 0, feature: 1}' \
+    "${dependency_graph_seed_gate_exit_codes}" >/dev/null; then
+    echo "dependency graph seed gate fields drifted from the historical STOP" >&2
+    return 2
+  fi
+}
+
+verify_dependency_graph_seed || exit $?
 
 if [ ! -d "${audit_tools_artifact_root}" ] || [ -L "${audit_tools_artifact_root}" ]; then
   echo "audit tool artifact root is missing or is a symbolic link" >&2
@@ -292,6 +403,8 @@ deny_status="unavailable"
 feature_status="unavailable"
 lockfile_preexisting=false
 lockfile_written=false
+lockfile_seeded=false
+mutable_cache_reused=false
 container_residual_count="unavailable"
 disk_available_kib="unavailable"
 license_sha="unavailable"
@@ -329,7 +442,7 @@ write_manifest() {
     return 1
   fi
   if ! jq -n \
-    --arg schema_version "1" \
+    --arg schema_version "2" \
     --arg manifest_contract "${manifest_contract}" \
     --arg evidence_id "SW-EXP-003" \
     --arg phase "phase-a" \
@@ -361,6 +474,16 @@ write_manifest() {
     --arg cargo_deny_requested_version "${cargo_deny_version}" \
     --arg cargo_deny_reported_version "${cargo_deny_reported_version}" \
     --arg cargo_deny_binary_sha256 "${cargo_deny_binary_sha}" \
+    --arg dependency_graph_seed_contract "${dependency_graph_seed_contract}" \
+    --arg dependency_graph_seed_run_id "${dependency_graph_seed_run_id}" \
+    --arg dependency_graph_seed_revision "${dependency_graph_seed_revision}" \
+    --arg dependency_graph_seed_source_mode "read-only-final-evidence" \
+    --arg dependency_graph_seed_manifest_sha256 "${dependency_graph_seed_manifest_sha}" \
+    --arg dependency_graph_seed_checksums_sha256 "${dependency_graph_seed_checksums_sha}" \
+    --arg dependency_graph_seed_lock_sha256 "${dependency_graph_seed_lock_sha}" \
+    --arg dependency_graph_seed_metadata_sha256 "${dependency_graph_seed_metadata_sha}" \
+    --arg dependency_graph_seed_gate_exit_codes_sha256 "${dependency_graph_seed_gate_exit_codes_sha}" \
+    --arg dependency_graph_seed_package_count "${dependency_graph_seed_package_count}" \
     --arg cargo_lock_sha256 "${lock_sha}" \
     --arg advisory_db_revision "${advisory_db_revision}" \
     --arg resolved_package_count "${resolved_package_count}" \
@@ -370,6 +493,8 @@ write_manifest() {
     --arg feature_exit_code "${feature_status}" \
     --arg lockfile_preexisting "${lockfile_preexisting}" \
     --arg lockfile_written "${lockfile_written}" \
+    --arg lockfile_seeded "${lockfile_seeded}" \
+    --arg mutable_cache_reused "${mutable_cache_reused}" \
     --arg disk_available_kib "${disk_available_kib}" \
     --arg runtime_control_status "${runtime_control_status}" \
     --arg runtime_termination_reason "${runtime_termination_reason}" \
@@ -401,13 +526,21 @@ write_manifest() {
       --arg outcome "${manifest_outcome}" \
       --arg stage "${manifest_stage}" \
       --arg filter_sha "${manifest_filter_sha}" \
+      --arg seed_contract "${dependency_graph_seed_contract}" \
+      --arg seed_run_id "${dependency_graph_seed_run_id}" \
+      --arg seed_lock_sha "${dependency_graph_seed_lock_sha}" \
       --arg exit_code "${manifest_exit_code}" '
-        .schema_version == 1
+        .schema_version == 2
         and .manifest_contract == $contract
         and .run_id == $run_id
         and .outcome == $outcome
         and .stage == $stage
         and .audit_tool_bundle.mount_mode == "read-only"
+        and .dependency_graph_seed.contract == $seed_contract
+        and .dependency_graph_seed.run_id == $seed_run_id
+        and .dependency_graph_seed.source_mode == "read-only-final-evidence"
+        and .dependency_graph_seed.cargo_lock_sha256 == $seed_lock_sha
+        and .mutable_cache_reused == false
         and .input_sha256.phase_a_manifest_filter == $filter_sha
         and .exit_code == ($exit_code | tonumber)
       ' "${manifest_tmp}" >/dev/null; then
@@ -437,7 +570,7 @@ write_checksums() {
   fi
   if [ ! -s "${run_dir}/manifest.json" ] || [ -L "${run_dir}/manifest.json" ] ||
     ! jq -e --arg contract "${manifest_contract}" --arg filter_sha "${manifest_filter_sha}" '
-      .schema_version == 1
+      .schema_version == 2
       and .manifest_contract == $contract
       and .input_sha256.phase_a_manifest_filter == $filter_sha
     ' "${run_dir}/manifest.json" >/dev/null 2>&1; then
@@ -457,6 +590,11 @@ write_checksums() {
   append_checksum "${runner_path}" "scripts/run-sw-g2-mls-rs-spike.sh" "${checksums_tmp}"
   append_checksum "${manifest_filter_path}" "scripts/sw-g2-mls-rs-phase-a-manifest.jq" "${checksums_tmp}"
   append_checksum "${offline_checker_path}" "scripts/check-sw-g2-mls-rs-phase-a.sh" "${checksums_tmp}"
+  append_checksum "${dependency_graph_seed_manifest}" "${dependency_graph_seed_relative}/manifest.json" "${checksums_tmp}"
+  append_checksum "${dependency_graph_seed_checksums}" "${dependency_graph_seed_relative}/checksums.sha256" "${checksums_tmp}"
+  append_checksum "${dependency_graph_seed_lock}" "${dependency_graph_seed_relative}/Cargo.lock" "${checksums_tmp}"
+  append_checksum "${dependency_graph_seed_metadata}" "${dependency_graph_seed_relative}/cargo-metadata.json" "${checksums_tmp}"
+  append_checksum "${dependency_graph_seed_gate_exit_codes}" "${dependency_graph_seed_relative}/audit-exit-codes.json" "${checksums_tmp}"
   append_checksum "${repo_lock}" "${lock_relative}" "${checksums_tmp}"
   for evidence_name in \
     Cargo.lock \
@@ -497,6 +635,11 @@ inputs_unchanged() {
     [ "$(shasum -a 256 "${runner_path}" | awk '{print $1}')" = "${runner_sha}" ] &&
     [ "$(shasum -a 256 "${manifest_filter_path}" | awk '{print $1}')" = "${manifest_filter_sha}" ] &&
     [ "$(shasum -a 256 "${offline_checker_path}" | awk '{print $1}')" = "${offline_checker_sha}" ] &&
+    [ "$(shasum -a 256 "${dependency_graph_seed_manifest}" | awk '{print $1}')" = "${dependency_graph_seed_manifest_sha}" ] &&
+    [ "$(shasum -a 256 "${dependency_graph_seed_checksums}" | awk '{print $1}')" = "${dependency_graph_seed_checksums_sha}" ] &&
+    [ "$(shasum -a 256 "${dependency_graph_seed_lock}" | awk '{print $1}')" = "${dependency_graph_seed_lock_sha}" ] &&
+    [ "$(shasum -a 256 "${dependency_graph_seed_metadata}" | awk '{print $1}')" = "${dependency_graph_seed_metadata_sha}" ] &&
+    [ "$(shasum -a 256 "${dependency_graph_seed_gate_exit_codes}" | awk '{print $1}')" = "${dependency_graph_seed_gate_exit_codes_sha}" ] &&
     [ "$(shasum -a 256 "${audit_tool_bundle_manifest}" | awk '{print $1}')" = "${audit_tool_bundle_manifest_sha}" ] &&
     [ "$(shasum -a 256 "${audit_tool_bundle_bin}/cargo-audit" | awk '{print $1}')" = "${cargo_audit_binary_sha}" ] &&
     [ "$(shasum -a 256 "${audit_tool_bundle_bin}/cargo-deny" | awk '{print $1}')" = "${cargo_deny_binary_sha}" ]
@@ -512,10 +655,14 @@ expected_git_status_after() {
 
 promote_lockfile() {
   local current_repo_status
-  local current_lock_sha
   if [ ! -f "${run_dir}/Cargo.lock" ] || [ -L "${run_dir}/Cargo.lock" ]; then
     echo "STOP: generated Cargo.lock evidence is missing or is a symbolic link" >&2
     return 25
+  fi
+  if [ "${lock_sha}" != "${dependency_graph_seed_lock_sha}" ] ||
+    [ "${resolved_package_count}" != "${dependency_graph_seed_package_count}" ]; then
+    echo "STOP: seeded dependency graph drifted before lockfile promotion" >&2
+    return 22
   fi
   if ! inputs_unchanged; then
     echo "STOP: HEAD or fixed inputs changed during Phase A" >&2
@@ -525,14 +672,6 @@ promote_lockfile() {
   if [ -n "${current_repo_status}" ]; then
     echo "STOP: unexpected workspace change appeared before lockfile promotion" >&2
     return 25
-  fi
-  if [ "${lockfile_preexisting}" = true ]; then
-    current_lock_sha="$(shasum -a 256 "${repo_lock}" | awk '{print $1}')"
-    if [ "${current_lock_sha}" != "${lock_sha}" ]; then
-      echo "STOP: regenerated Cargo.lock does not match the repository lockfile" >&2
-      return 21
-    fi
-    return 0
   fi
   if [ -e "${repo_lock}" ] || [ -L "${repo_lock}" ] || [ -e "${promotion_temp}" ] || [ -L "${promotion_temp}" ]; then
     echo "STOP: lockfile promotion target changed during Phase A" >&2
@@ -842,8 +981,16 @@ verify_pass_phase_a_contract() {
     --arg bundle_manifest_sha "${audit_tool_bundle_manifest_sha}" \
     --arg filter_sha "${manifest_filter_sha}" \
     --arg lock_sha "${lock_sha}" \
+    --arg seed_contract "${dependency_graph_seed_contract}" \
+    --arg seed_run_id "${dependency_graph_seed_run_id}" \
+    --arg seed_revision "${dependency_graph_seed_revision}" \
+    --arg seed_manifest_sha "${dependency_graph_seed_manifest_sha}" \
+    --arg seed_checksums_sha "${dependency_graph_seed_checksums_sha}" \
+    --arg seed_metadata_sha "${dependency_graph_seed_metadata_sha}" \
+    --arg seed_gate_sha "${dependency_graph_seed_gate_exit_codes_sha}" \
+    --argjson seed_package_count "${dependency_graph_seed_package_count}" \
     --arg expected_status "${expected_status}" '
-      .schema_version == 1
+      .schema_version == 2
       and .manifest_contract == $contract
       and .candidate.name == "mls-rs"
       and .candidate.version == "0.56.0"
@@ -855,7 +1002,23 @@ verify_pass_phase_a_contract() {
       and .audit_tool_bundle.manifest_sha256 == $bundle_manifest_sha
       and .audit_tool_bundle.mount_mode == "read-only"
       and .audit_tool_bundle.cargo_audit.invocation == ["audit", "--json"]
-      and (.resolved_package_count > 0)
+      and .dependency_graph_seed == {
+        contract: $seed_contract,
+        run_id: $seed_run_id,
+        repository_revision: $seed_revision,
+        source_outcome: "STOP",
+        source_stage: "feature-gate",
+        source_mode: "read-only-final-evidence",
+        manifest_sha256: $seed_manifest_sha,
+        checksums_sha256: $seed_checksums_sha,
+        cargo_lock_sha256: $lock_sha,
+        cargo_metadata_sha256: $seed_metadata_sha,
+        gate_exit_codes_sha256: $seed_gate_sha,
+        resolved_package_count: $seed_package_count
+      }
+      and .lockfile_seeded == true
+      and .mutable_cache_reused == false
+      and .resolved_package_count == $seed_package_count
       and .cargo_lock_sha256 == $lock_sha
       and (.advisory_db_revision | test("^[0-9a-f]{40}$"))
       and .gate_exit_codes == {source: 0, audit: 0, deny: 0, feature: 0}
@@ -1027,9 +1190,6 @@ if [ -n "${git_status_before}" ]; then
   echo "STOP: worktree changed after the clean preflight" >&2
   exit 10
 fi
-if [ -f "${repo_lock}" ]; then
-  lockfile_preexisting=true
-fi
 host_arch="$(uname -m)"
 disk_available_kib="$(df -Pk "${artifact_root}" | awk 'NR == 2 { print $4; exit }')"
 if ! [[ "${disk_available_kib}" =~ ^[0-9]+$ ]] || [ "${disk_available_kib}" -lt "${minimum_disk_kib}" ]; then
@@ -1119,12 +1279,11 @@ cp "${repo_root}/LICENSE" "${prepared_repo}/LICENSE"
 cp "${spike_root}/Cargo.toml" "${prepared_spike}/Cargo.toml"
 cp "${spike_root}/deny.toml" "${prepared_spike}/deny.toml"
 cp "${spike_root}/src/main.rs" "${prepared_spike}/src/main.rs"
-if [ "${lockfile_preexisting}" = true ]; then
-  cp "${repo_lock}" "${prepared_spike}/Cargo.lock"
-fi
+cp "${dependency_graph_seed_lock}" "${prepared_spike}/Cargo.lock"
+lockfile_seeded=true
 
-echo "[5/8] resolve and download the fixed candidate graph without compiling it"
-current_stage="dependency-resolve"
+echo "[5/8] consume and download the seeded candidate graph without compiling it"
+current_stage="dependency-fetch"
 set +e
 run_controlled docker run --rm \
   --name "${container_name}" \
@@ -1143,16 +1302,20 @@ run_controlled docker run --rm \
   --env CARGO_TARGET_DIR=/evidence/.work/cargo-target \
   --env CARGO_INCREMENTAL=0 \
   --env CARGO_TERM_COLOR=never \
+  --env DEPENDENCY_GRAPH_SEED_LOCK_SHA256="${dependency_graph_seed_lock_sha}" \
   --mount "type=bind,source=${run_dir},target=/evidence" \
   --mount "type=bind,source=${audit_tool_bundle_bin},target=/audit-tools/bin,readonly" \
   --workdir "/evidence/.work/repo/${spike_relative}" \
   "${image_ref}" \
   sh -euc '
     mkdir -p "$HOME" "$CARGO_HOME" "$CARGO_TARGET_DIR"
-    cargo generate-lockfile
     cp Cargo.lock /evidence/Cargo.lock
     sha256sum Cargo.lock | awk "{print \$1}" > /evidence/generated-lock-sha256.txt
     cargo fetch --locked --target aarch64-unknown-linux-gnu
+    if [ "$(sha256sum Cargo.lock | awk "{print \$1}")" != "$DEPENDENCY_GRAPH_SEED_LOCK_SHA256" ]; then
+      echo "seeded Cargo.lock drifted during locked fetch" >&2
+      exit 22
+    fi
     cargo metadata --locked --format-version 1 > /evidence/cargo-metadata.json
     cargo tree --locked --target all > /evidence/cargo-tree.txt
     cargo tree --locked --target all --edges features > /evidence/cargo-tree-features.txt
@@ -1180,6 +1343,17 @@ set -e
 echo "[6/8] evaluate fixed source, provider, version, and feature gates"
 current_stage="feature-gate"
 load_partial_dependency_state
+if [ "${lock_sha}" != "unavailable" ] && [ "${lock_sha}" != "${dependency_graph_seed_lock_sha}" ]; then
+  final_stage="dependency-graph-drift"
+  echo "STOP: evidence Cargo.lock drifted from the fixed dependency graph seed" >&2
+  exit 22
+fi
+if [ "${resolved_package_count}" != "unavailable" ] &&
+  [ "${resolved_package_count}" != "${dependency_graph_seed_package_count}" ]; then
+  final_stage="dependency-graph-drift"
+  echo "STOP: resolved package count drifted from the fixed dependency graph seed" >&2
+  exit 22
+fi
 evaluate_feature_gate
 write_gate_exit_codes
 if [[ "${feature_status}" =~ ^[0-9]+$ ]] && [ "${feature_status}" -ne 0 ]; then

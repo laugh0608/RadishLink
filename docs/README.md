@@ -30,8 +30,8 @@
 - [外场验证计划](testing/field-validation-plan.md)
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A lockfile、审计 `STOP` 与 Phase B 门禁。
-- [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：单元 D 在固定 94-package 图的旧 feature gate 形成历史 `STOP`；A2 已完成 package-qualified gate 离线修订，前置 A3、D2 与 Phase B 未授权。
-- [`SW-EXP-003` mls-rs 0.56.0 实施与 Phase A 精确授权包](testing/sw-g2-mls-rs-phase-a-authorization.md)：A2 已形成 clean revision；D2 Proposed 选择只读 seed D final lock、拒绝重新解析与旧 mutable cache，前置 A3/D2/Phase B 均未授权。
+- [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：单元 D 在固定 94-package 图的旧 feature gate 形成历史 `STOP`；A2 已完成 package-qualified gate，A3 已离线实现固定图消费合同，D2/Phase B 未授权。
+- [`SW-EXP-003` mls-rs 0.56.0 实施与 Phase A 精确授权包](testing/sw-g2-mls-rs-phase-a-authorization.md)：A2/A3 已形成 clean revision；A3 固定只读 seed D final lock、拒绝重新解析与旧 mutable cache，D2/Phase B 未授权。
 - [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：单元 E 已形成 schema 4/v4 正式 `STOP`；独立 audit 漏洞为零但有 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate，Phase B 禁止。
 - [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：记录成功 bundle、单元 D 无效结果、A6 修复与单元 E 正式负向证据；不授权重跑、Phase B 或放宽门禁。
 - [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：已接受的 profile、seed、数值、manifest 与 `PASS/FAIL/INVALID` 口径。

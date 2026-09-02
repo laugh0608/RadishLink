@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 实施与 Phase A 精确授权包
 
-- 状态：Accepted（2026-09-02；A0/A1/A2 已分别形成 clean revision，单元 C 已复核 `PASS`；单元 D 在旧 transitive feature gate 正式 `STOP`；A3、D2 与 Phase B 均未授权）
+- 状态：Accepted（2026-09-02；A0/A1/A2/A3 已分别形成 clean revision；单元 C 已复核 `PASS`，单元 D 在旧 transitive feature gate 正式 `STOP`；D2 与 Phase B 均未授权）
 - 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置门禁：[mls-rs 0.56.0 静态门禁](sw-g2-mls-rs-spike-authorization.md)已接受候选方向，执行就绪差异待本包关闭
@@ -15,13 +15,13 @@
 1. **共享运行资源单元 A0**：离线实现候选无关的运行 monitor、固定审计工具 bundle builder、独立 manifest filter 与 self-test；
 2. **mls-rs Phase A 骨架单元 A1**：离线新增固定 crate 输入、拒绝 Phase B 的入口、受限 runner、候选 manifest filter 与 self-test；
 3. **mls-rs 包限定 feature gate 单元 A2**：依据 D 的保留 metadata 与 crate source，离线把按 feature 名称全局拒绝改为固定 package/版本、解析集合、alias 展开和 provider 依赖边联合判定；
-4. **D2 固定图消费合同单元 A3（Proposed）**：离线实现只读验证 D 最终 evidence、以其 `Cargo.lock` 固定新 run 图、升级 manifest 合同与负例；当前未授权；
+4. **D2 固定图消费合同单元 A3**：离线实现只读验证 D 最终 evidence、以其 `Cargo.lock` 固定新 run 图、升级 manifest 合同与负例；已按单次授权实施并形成 clean revision；
 5. **L3 通用审计工具 bundle 单元 C**：在 A0 clean revision 上构建一次固定 `cargo-audit` / `cargo-deny` bundle，并以无网络容器验证版本；
 6. **L3 mls-rs Phase A 单元 D**：在 A1 clean revision 上只读消费一个精确、已复核的通用 bundle，生成独立 lockfile 并执行完整 gates；
 7. **L3 mls-rs 固定图复核单元 D2（Proposed）**：A3 clean revision 后只运行一次新 evidence，重新执行当前 source/audit/deny/feature gates；当前未授权；
 8. **Phase B**：只有未来获授权的 Phase A 完整 `PASS`、许可证人工复核与非实现者证据复核都通过后，才另建精确包；当前不存在实现或执行授权。
 
-本文的接受只冻结精确方案，不自动授权任何实施单元。A0、A1 与 A2 已分别获得一次明确授权并离线实施；A2 不重写 D 的历史 `STOP`，也不包含 D2、Cargo、Docker、网络、lockfile 提升、commit 或 Phase B。C 不包含 D，任一 L3 授权不包含失败重试、Phase B、清理、push 或其他候选。
+本文的接受只冻结精确方案，不自动授权任何实施单元。A0、A1、A2 与 A3 已分别获得一次明确授权并离线实施；A3 不重写 D 的历史 `STOP`，也不包含 D2、Cargo、Docker、网络、lockfile 提升、commit 或 Phase B。C 不包含 D，任一 L3 授权不包含失败重试、Phase B、清理、push 或其他候选。
 
 ## 固定基线
 
@@ -188,7 +188,7 @@ git diff --check
 
 两个 shell 语法检查、综合离线 checker、D 保留 metadata 的只读 gate 回归、仓库门禁与 diff 检查均通过。没有调用 Docker、Cargo 或网络，没有修改历史 evidence、crate manifest、版本、provider、source、allowlist 或 manifest schema，没有生成/提升 lockfile、重跑 D、进入 Phase B、commit 或 push。
 
-## 单元 A3：D2 固定图消费合同（Proposed，未授权）
+## 单元 A3：D2 固定图消费合同（已离线实施并提交）
 
 ### 路径选择
 
@@ -204,7 +204,7 @@ D2 推荐**只读消费 D 的最终 `Cargo.lock` 作为固定图种子，不重�
 | D checksums SHA-256 | `aeb904e2656cc6458125017edd84fd6732fbd658c793b77c6d0c230b7feac481` |
 | D `Cargo.lock` SHA-256 | `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7` |
 | D metadata SHA-256 | `632a9bca905426b32a36e08aac8ebdecb04f60ca598d629a99157d2c59c409f8` |
-| D gate JSON SHA-256 | `64526a2beb6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b` |
+| D gate JSON SHA-256 | `64526a2beb6feff1ec70eef81d9eb03e7d26013b96f39b4111d2960b210c45d3` |
 | D package/gates | `94`；source/audit/deny `0`，历史 feature `1` |
 
 `checksums.sha256` 同时覆盖当时的仓库输入；A2 已合法改变 runner/checker，因此 A3 不用当前工作区对整份历史 checksum 清单执行无差别 `-c`。它必须先固定清单文件本身的上述 SHA-256，再逐项核对 final manifest、lock、metadata 与 gate JSON 的清单记录、实际摘要及 manifest 字段，避免把预期的输入修订误报为 evidence 损坏。
@@ -218,7 +218,7 @@ D2 推荐**只读消费 D 的最终 `Cargo.lock` 作为固定图种子，不重�
 | `scripts/check-sw-g2-mls-rs-phase-a.sh` | 固定上述 ID/摘要/字段；新增 seed 缺失、symlink、清单/manifest/lock/metadata/gate 摘要篡改、历史 gate 字段漂移、读取 `.work`、重新解析版本、schema 1 假通过等离线负例 |
 | 本包与当前状态 | 同步 A3/D2 授权边界；不改历史 D 结论 |
 
-A3 不修改 `Cargo.toml`、`deny.toml`、版本、provider、feature gate、source/allowlist 或任何历史 evidence；不生成仓库 `Cargo.lock`，不调用 Docker/Cargo/网络，不创建 D2 artifact，不重跑 Phase A，不进入 Phase B，也不 commit 或 push。A3 实施完成、离线门禁通过并另获 commit 授权形成 clean revision 后，才可申请 D2。
+A3 不修改 `Cargo.toml`、`deny.toml`、版本、provider、feature gate、source/allowlist 或任何历史 evidence；不生成仓库 `Cargo.lock`，不调用 Docker/Cargo/网络，不创建 D2 artifact，不重跑 Phase A，不进入 Phase B，也不 push。A3 已按该边界实施并另获 commit 授权形成 clean revision；D2 仍须单独取得 L3 授权。
 
 ### A3 离线验证
 
@@ -230,7 +230,13 @@ bash -n scripts/check-sw-g2-mls-rs-phase-a.sh
 git diff --check
 ```
 
-checker 还必须证明 A3 只读验证 final seed files、拒绝 D `.work`，并继续用同一抽取 gate 对固定 metadata 返回零。接受本节只冻结方案，不授权 A3 实施。
+checker 还必须证明 A3 只读验证 final seed files、拒绝 D `.work`，并继续用同一抽取 gate 对固定 metadata 返回零。
+
+### A3 实施结果
+
+2026-09-02 已按单次明确授权完成 A3。runner 在 audit bundle 检查、artifact 创建、Docker 查询和候选网络之前，固定验证 D final 目录、五个 final 文件的非 symlink/摘要、历史 checksum 记录、schema 1 manifest 字段、94-package metadata 与 `0/0/0/1` 历史 gate；仓库 mls-rs lockfile 必须不存在。隔离输入只复制 seed `Cargo.lock`，候选命令删除 `cargo generate-lockfile`，仅允许 `cargo fetch --locked`，并在容器内外复核 lock 摘要与 94-package 计数；历史 D `.work`、Cargo home、target 与 advisory DB 均不读取。
+
+未来 D2 manifest 已升级为 schema 2 / `sw-g2-candidate-phase-a-v2`，记录 `dependency_graph_seed`、`lockfile_seeded` 与 `mutable_cache_reused: false`；新 checksum 也逐项绑定五个 seed final 文件。离线 checker 已覆盖 seed 正例、缺失目录、symlink、checksum/manifest/lock/metadata/gate 篡改、历史 gate 字段漂移、schema 1 假通过、重新解析与旧 mutable cache 禁止线，并用同一 package-qualified gate 对 D 固定 metadata 返回零。实施核对还纠正了设计表中 gate JSON 摘要的抄录错误；正确值来自现场文件与历史 `checksums.sha256`，历史 evidence 未修改。
 
 ## 单元 C：通用固定审计工具 bundle
 
@@ -324,7 +330,7 @@ D2 预计 15–45 分钟，五秒用户态 monitor 执行 45 分钟/5 GiB 停止
 4. source/audit/deny/feature 全部为零、schema 2/v2 manifest、checksum、输入不变、运行控制与零残留全部通过时，D2 才为 `PASS`；
 5. 任一失败保留 partial/final evidence，不自动重试、不换版本/provider/source、不重新解析、不放宽 gate/allowlist、不清理、不 commit/push，也不进入 Phase B。
 
-D2 `PASS` 仍只证明该固定图在记录的 RustSec revision 与门禁下通过 Phase A。人工许可证复核与非实现者 evidence 复核完成后，才可另行设计 Phase B；本节不构成 A3、D2 或 Phase B 授权。
+D2 `PASS` 仍只证明该固定图在记录的 RustSec revision 与门禁下通过 Phase A。人工许可证复核与非实现者 evidence 复核完成后，才可另行设计 Phase B；本节不构成 D2 或 Phase B 授权。
 
 ## 证据合同
 
@@ -372,6 +378,6 @@ artifacts/sw-g2-mls-rs/<run-id>/
 
 精确包已执行到 D；固定 94-package 图已形成完整 source/audit/deny 结果和正式历史 `STOP/feature-gate`。A2 只修正未来 gate 的包限定语义，不改写 D 的 manifest、checksum、退出码或结论。仓库 mls-rs lockfile 未生成，Phase B 未执行且继续禁止。
 
-推荐保留 `mls-rs 0.56.0 + AWS-LC 0.25.0 + SQLite 0.23.0` 候选，不 patch/fork 或更换 provider。D2 已选择只读消费 D final lock、拒绝重新解析和旧 mutable cache 的路径；下一个最小授权单元是上述 A3 离线实施，不是 D2 运行。A3 尚未授权，D2 也不得执行。
+推荐保留 `mls-rs 0.56.0 + AWS-LC 0.25.0 + SQLite 0.23.0` 候选，不 patch/fork 或更换 provider。D2 已选择只读消费 D final lock、拒绝重新解析和旧 mutable cache 的路径，A3 已形成 clean revision。下一个最小单元是申请 D2 单次 L3 运行授权；在明确授权前 D2 仍不得执行。
 
 笼统的“继续”“按计划做”或接受本文不授权 D2、Phase B、失败重试、清理、commit、push、gate/版本/provider/source/allowlist 变化和其他候选；这些始终是独立动作。

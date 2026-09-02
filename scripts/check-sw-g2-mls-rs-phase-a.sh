@@ -14,9 +14,23 @@ deny_toml_path="${spike_root}/deny.toml"
 main_rs_path="${spike_root}/src/main.rs"
 repo_lock="${spike_root}/Cargo.lock"
 artifact_root="${repo_root}/artifacts/sw-g2-mls-rs"
+dependency_graph_seed_run_id="20260901-135918-13430.mvBCS2"
+dependency_graph_seed_revision="36765755154dc88f8bd21605cbc25f5abf6bb828"
+dependency_graph_seed_relative="artifacts/sw-g2-mls-rs/${dependency_graph_seed_run_id}"
+dependency_graph_seed_dir="${repo_root}/${dependency_graph_seed_relative}"
+dependency_graph_seed_manifest="${dependency_graph_seed_dir}/manifest.json"
+dependency_graph_seed_checksums="${dependency_graph_seed_dir}/checksums.sha256"
+dependency_graph_seed_lock="${dependency_graph_seed_dir}/Cargo.lock"
+dependency_graph_seed_metadata="${dependency_graph_seed_dir}/cargo-metadata.json"
+dependency_graph_seed_gate_exit_codes="${dependency_graph_seed_dir}/audit-exit-codes.json"
+dependency_graph_seed_manifest_sha="704e439e66103d7c8ff0f92231be8589a802a7b5f4ba834086aaafec9f8c701a"
+dependency_graph_seed_checksums_sha="aeb904e2656cc6458125017edd84fd6732fbd658c793b77c6d0c230b7feac481"
+dependency_graph_seed_lock_sha="c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7"
+dependency_graph_seed_metadata_sha="632a9bca905426b32a36e08aac8ebdecb04f60ca598d629a99157d2c59c409f8"
+dependency_graph_seed_gate_exit_codes_sha="64526a2beb6feff1ec70eef81d9eb03e7d26013b96f39b4111d2960b210c45d3"
 self_test_parent="${TMPDIR:-/tmp}"
 
-for command_name in awk bash chmod dirname find jq mkdir mktemp pwd python3 rg rm shasum sort; do
+for command_name in awk bash chmod cp dirname find jq ln mkdir mktemp mv pwd python3 rg rm shasum sort; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "required command is unavailable: ${command_name}" >&2
     exit 1
@@ -28,14 +42,19 @@ for required_input in \
   "${monitor_path}" \
   "${cargo_toml_path}" \
   "${deny_toml_path}" \
-  "${main_rs_path}"; do
+  "${main_rs_path}" \
+  "${dependency_graph_seed_manifest}" \
+  "${dependency_graph_seed_checksums}" \
+  "${dependency_graph_seed_lock}" \
+  "${dependency_graph_seed_metadata}" \
+  "${dependency_graph_seed_gate_exit_codes}"; do
   if [ ! -f "${required_input}" ] || [ -L "${required_input}" ]; then
     echo "required regular input is missing or is a symbolic link: ${required_input}" >&2
     exit 1
   fi
 done
 if [ -e "${repo_lock}" ] || [ -L "${repo_lock}" ]; then
-  echo "A1 must not add Cargo.lock" >&2
+  echo "A3 must not add Cargo.lock" >&2
   exit 1
 fi
 if [ ! -d "${self_test_parent}" ] || [ -L "${self_test_parent}" ]; then
@@ -59,6 +78,49 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 bash -n "${runner_path}"
+
+if [ "$(shasum -a 256 "${dependency_graph_seed_manifest}" | awk '{print $1}')" != "${dependency_graph_seed_manifest_sha}" ] ||
+  [ "$(shasum -a 256 "${dependency_graph_seed_checksums}" | awk '{print $1}')" != "${dependency_graph_seed_checksums_sha}" ] ||
+  [ "$(shasum -a 256 "${dependency_graph_seed_lock}" | awk '{print $1}')" != "${dependency_graph_seed_lock_sha}" ] ||
+  [ "$(shasum -a 256 "${dependency_graph_seed_metadata}" | awk '{print $1}')" != "${dependency_graph_seed_metadata_sha}" ] ||
+  [ "$(shasum -a 256 "${dependency_graph_seed_gate_exit_codes}" | awk '{print $1}')" != "${dependency_graph_seed_gate_exit_codes_sha}" ]; then
+  echo "fixed dependency graph seed digest check failed" >&2
+  exit 1
+fi
+if ! jq -e \
+  --arg run_id "${dependency_graph_seed_run_id}" \
+  --arg revision "${dependency_graph_seed_revision}" \
+  --arg lock_sha "${dependency_graph_seed_lock_sha}" '
+    .schema_version == 1
+    and .manifest_contract == "sw-g2-candidate-phase-a-v1"
+    and .run_id == $run_id
+    and .outcome == "STOP"
+    and .stage == "feature-gate"
+    and .repository.git_revision == $revision
+    and .repository.git_status_before == ""
+    and .repository.git_status_after == ""
+    and .cargo_lock_sha256 == $lock_sha
+    and .resolved_package_count == 94
+    and .gate_exit_codes == {source: 0, audit: 0, deny: 0, feature: 1}
+  ' "${dependency_graph_seed_manifest}" >/dev/null ||
+  ! jq -e '.packages | type == "array" and length == 94' "${dependency_graph_seed_metadata}" >/dev/null ||
+  ! jq -e '. == {source: 0, audit: 0, deny: 0, feature: 1}' "${dependency_graph_seed_gate_exit_codes}" >/dev/null; then
+  echo "fixed dependency graph seed semantic check failed" >&2
+  exit 1
+fi
+for seed_checksum_pair in \
+  "${dependency_graph_seed_manifest_sha} ${dependency_graph_seed_relative}/manifest.json" \
+  "${dependency_graph_seed_lock_sha} ${dependency_graph_seed_relative}/Cargo.lock" \
+  "${dependency_graph_seed_metadata_sha} ${dependency_graph_seed_relative}/cargo-metadata.json" \
+  "${dependency_graph_seed_gate_exit_codes_sha} ${dependency_graph_seed_relative}/audit-exit-codes.json"; do
+  if [ "$(awk -v expected_pair="${seed_checksum_pair}" '
+    NF == 2 && ($1 " " $2) == expected_pair { matches += 1 }
+    END { print matches + 0 }
+  ' "${dependency_graph_seed_checksums}")" -ne 1 ]; then
+    echo "fixed dependency graph seed checksum entry is missing: ${seed_checksum_pair}" >&2
+    exit 1
+  fi
+done
 
 expected_spike_files="$(printf '%s\n' \
   "${cargo_toml_path}" \
@@ -292,6 +354,10 @@ if ! jq -e -f "${feature_filter_path}" "${feature_fixture_path}" >/dev/null; the
   echo "feature gate rejected the fixed positive fixture" >&2
   exit 1
 fi
+if ! jq -e -f "${feature_filter_path}" "${dependency_graph_seed_metadata}" >/dev/null; then
+  echo "package-qualified feature gate rejected the fixed D metadata" >&2
+  exit 1
+fi
 if jq '.resolve.nodes |= map(if .id | contains("#mls-rs@0.56.0") then .features += ["rfc_compliant"] else . end)' \
   "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
   echo "feature gate accepted the prohibited top-level rfc_compliant feature" >&2
@@ -364,8 +430,17 @@ if jq '.packages |= map(if .id | contains("#mls-rs-codec@0.7.0") then .source = 
 fi
 
 for required_contract in \
-  'manifest_contract="sw-g2-candidate-phase-a-v1"' \
+  'manifest_contract="sw-g2-candidate-phase-a-v2"' \
   'audit_tool_bundle_contract="sw-g2-rust-audit-tools-v1"' \
+  'dependency_graph_seed_contract="sw-g2-mls-rs-d-final-v1"' \
+  'dependency_graph_seed_run_id="20260901-135918-13430.mvBCS2"' \
+  'dependency_graph_seed_revision="36765755154dc88f8bd21605cbc25f5abf6bb828"' \
+  'dependency_graph_seed_manifest_sha="704e439e66103d7c8ff0f92231be8589a802a7b5f4ba834086aaafec9f8c701a"' \
+  'dependency_graph_seed_checksums_sha="aeb904e2656cc6458125017edd84fd6732fbd658c793b77c6d0c230b7feac481"' \
+  'dependency_graph_seed_lock_sha="c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7"' \
+  'dependency_graph_seed_metadata_sha="632a9bca905426b32a36e08aac8ebdecb04f60ca598d629a99157d2c59c409f8"' \
+  'dependency_graph_seed_gate_exit_codes_sha="64526a2beb6feff1ec70eef81d9eb03e7d26013b96f39b4111d2960b210c45d3"' \
+  'dependency_graph_seed_package_count=94' \
   'artifact_root="${artifact_parent}/sw-g2-mls-rs"' \
   'audit_tools_artifact_root="${artifact_parent}/sw-g2-rust-audit-tools"' \
   'image_ref="rust:1.96.1-bookworm@${image_digest}"' \
@@ -378,7 +453,8 @@ for required_contract in \
   '/audit-tools/bin/cargo-audit audit --json > /evidence/cargo-audit.json' \
   '/audit-tools/bin/cargo-deny check sources > /evidence/cargo-deny-sources.txt' \
   '/audit-tools/bin/cargo-deny check advisories licenses > /evidence/cargo-deny.txt' \
-  'cargo generate-lockfile' \
+  'verify_dependency_graph_seed || exit $?' \
+  'cp "${dependency_graph_seed_lock}" "${prepared_spike}/Cargo.lock"' \
   'cargo fetch --locked --target aarch64-unknown-linux-gnu' \
   'cargo metadata --locked --format-version 1' \
   'evaluate_feature_gate' \
@@ -391,6 +467,29 @@ for required_contract in \
     exit 1
   fi
 done
+
+if rg -Fq -- 'cargo generate-lockfile' "${runner_path}"; then
+  echo "runner retains a prohibited dependency re-resolution path" >&2
+  exit 1
+fi
+if rg -Fq -- '${dependency_graph_seed_dir}/.work' "${runner_path}" ||
+  rg -Fq -- 'source=${dependency_graph_seed_dir}' "${runner_path}" ||
+  rg -Fq -- 'mutable_cache_reused=true' "${runner_path}"; then
+  echo "runner can reuse mutable state from the historical D run" >&2
+  exit 1
+fi
+
+seed_preflight_line="$(awk '/^verify_dependency_graph_seed \|\| exit \$\?/ { print NR; exit }' "${runner_path}")"
+bundle_preflight_line="$(awk '/^if \[ ! -d "\$\{audit_tools_artifact_root\}"/ { print NR; exit }' "${runner_path}")"
+artifact_create_line="$(awk '/^for artifact_directory in / { print NR; exit }' "${runner_path}")"
+if ! [[ "${seed_preflight_line}" =~ ^[0-9]+$ ]] ||
+  ! [[ "${bundle_preflight_line}" =~ ^[0-9]+$ ]] ||
+  ! [[ "${artifact_create_line}" =~ ^[0-9]+$ ]] ||
+  [ "${seed_preflight_line}" -ge "${bundle_preflight_line}" ] ||
+  [ "${seed_preflight_line}" -ge "${artifact_create_line}" ]; then
+  echo "dependency graph seed validation must precede bundle checks and artifact creation" >&2
+  exit 1
+fi
 
 for security_control in \
   '--read-only' \
@@ -408,7 +507,7 @@ for security_control in \
 done
 
 candidate_block="$(awk '
-  /echo "\[5\/8\] resolve and download/ { capture = 1 }
+  /echo "\[5\/8\] consume and download/ { capture = 1 }
   /echo "\[6\/8\] evaluate fixed source/ { capture = 0 }
   capture { print }
 ' "${runner_path}")"
@@ -446,8 +545,8 @@ fi
 manifest_path="${self_test_dir}/manifest.json"
 filter_sha="$(shasum -a 256 "${manifest_filter_path}" | awk '{print $1}')"
 jq -n \
-  --arg schema_version "1" \
-  --arg manifest_contract "sw-g2-candidate-phase-a-v1" \
+  --arg schema_version "2" \
+  --arg manifest_contract "sw-g2-candidate-phase-a-v2" \
   --arg evidence_id "SW-EXP-003" \
   --arg phase "phase-a" \
   --arg scenario_id "phase-a-dependency-audit" \
@@ -478,15 +577,27 @@ jq -n \
   --arg cargo_deny_requested_version "0.20.2" \
   --arg cargo_deny_reported_version "cargo-deny 0.20.2" \
   --arg cargo_deny_binary_sha256 "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" \
-  --arg cargo_lock_sha256 "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" \
+  --arg dependency_graph_seed_contract "sw-g2-mls-rs-d-final-v1" \
+  --arg dependency_graph_seed_run_id "${dependency_graph_seed_run_id}" \
+  --arg dependency_graph_seed_revision "${dependency_graph_seed_revision}" \
+  --arg dependency_graph_seed_source_mode "read-only-final-evidence" \
+  --arg dependency_graph_seed_manifest_sha256 "${dependency_graph_seed_manifest_sha}" \
+  --arg dependency_graph_seed_checksums_sha256 "${dependency_graph_seed_checksums_sha}" \
+  --arg dependency_graph_seed_lock_sha256 "${dependency_graph_seed_lock_sha}" \
+  --arg dependency_graph_seed_metadata_sha256 "${dependency_graph_seed_metadata_sha}" \
+  --arg dependency_graph_seed_gate_exit_codes_sha256 "${dependency_graph_seed_gate_exit_codes_sha}" \
+  --arg dependency_graph_seed_package_count "94" \
+  --arg cargo_lock_sha256 "${dependency_graph_seed_lock_sha}" \
   --arg advisory_db_revision "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" \
-  --arg resolved_package_count "321" \
+  --arg resolved_package_count "94" \
   --arg source_exit_code "0" \
   --arg audit_exit_code "0" \
   --arg deny_exit_code "4" \
   --arg feature_exit_code "0" \
   --arg lockfile_preexisting "false" \
   --arg lockfile_written "true" \
+  --arg lockfile_seeded "true" \
+  --arg mutable_cache_reused "false" \
   --arg disk_available_kib "6291456" \
   --arg runtime_control_status "stopped" \
   --arg runtime_termination_reason "workflow_stop" \
@@ -510,8 +621,8 @@ jq -n \
   -f "${manifest_filter_path}" > "${manifest_path}"
 
 if [ ! -s "${manifest_path}" ] || ! jq -e --arg filter_sha "${filter_sha}" '
-  .schema_version == 1
-  and .manifest_contract == "sw-g2-candidate-phase-a-v1"
+  .schema_version == 2
+  and .manifest_contract == "sw-g2-candidate-phase-a-v2"
   and .candidate == {
     name: "mls-rs",
     version: "0.56.0",
@@ -522,6 +633,22 @@ if [ ! -s "${manifest_path}" ] || ! jq -e --arg filter_sha "${filter_sha}" '
   and .audit_tool_bundle.contract == "sw-g2-rust-audit-tools-v1"
   and .audit_tool_bundle.mount_mode == "read-only"
   and .audit_tool_bundle.cargo_audit.invocation == ["audit", "--json"]
+  and .dependency_graph_seed == {
+    contract: "sw-g2-mls-rs-d-final-v1",
+    run_id: "20260901-135918-13430.mvBCS2",
+    repository_revision: "36765755154dc88f8bd21605cbc25f5abf6bb828",
+    source_outcome: "STOP",
+    source_stage: "feature-gate",
+    source_mode: "read-only-final-evidence",
+    manifest_sha256: "704e439e66103d7c8ff0f92231be8589a802a7b5f4ba834086aaafec9f8c701a",
+    checksums_sha256: "aeb904e2656cc6458125017edd84fd6732fbd658c793b77c6d0c230b7feac481",
+    cargo_lock_sha256: "c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7",
+    cargo_metadata_sha256: "632a9bca905426b32a36e08aac8ebdecb04f60ca598d629a99157d2c59c409f8",
+    gate_exit_codes_sha256: "64526a2beb6feff1ec70eef81d9eb03e7d26013b96f39b4111d2960b210c45d3",
+    resolved_package_count: 94
+  }
+  and .lockfile_seeded == true
+  and .mutable_cache_reused == false
   and .direct_dependencies.mls_rs.features == ["std", "private_message", "out_of_order", "prior_epoch", "tree_index"]
   and .direct_dependencies.mls_rs_crypto_awslc.features == ["non-fips"]
   and .direct_dependencies.mls_rs_provider_sqlite.features == ["sqlite-bundled"]
@@ -532,6 +659,20 @@ if [ ! -s "${manifest_path}" ] || ! jq -e --arg filter_sha "${filter_sha}" '
   and .exit_code == 20
 ' "${manifest_path}" >/dev/null; then
   echo "mls-rs Phase A manifest self-test did not preserve the fixed contract" >&2
+  exit 1
+fi
+
+schema_one_manifest_path="${self_test_dir}/schema-one-manifest.json"
+jq '.schema_version = 1 | .manifest_contract = "sw-g2-candidate-phase-a-v1"' \
+  "${manifest_path}" > "${schema_one_manifest_path}"
+if jq -e '
+  .schema_version == 2
+  and .manifest_contract == "sw-g2-candidate-phase-a-v2"
+  and .dependency_graph_seed.contract == "sw-g2-mls-rs-d-final-v1"
+  and .lockfile_seeded == true
+  and .mutable_cache_reused == false
+' "${schema_one_manifest_path}" >/dev/null; then
+  echo "schema 1 manifest unexpectedly satisfied the D2 schema 2 contract" >&2
   exit 1
 fi
 
@@ -601,5 +742,113 @@ assert_rejected_before_side_effects "Phase B action" phase-b "${fixture_bundle_i
 assert_rejected_before_side_effects "latest selector" prepare latest
 assert_rejected_before_side_effects "path selector" prepare ../bundle
 assert_rejected_before_side_effects "absolute selector" prepare /tmp/bundle
+
+seed_fixture_repo="${self_test_dir}/seed-fixture-repo"
+seed_fixture_runner="${seed_fixture_repo}/scripts/run-sw-g2-mls-rs-spike.sh"
+seed_fixture_dir="${seed_fixture_repo}/${dependency_graph_seed_relative}"
+seed_fixture_bin="${seed_fixture_repo}/test-bin"
+seed_fixture_output="${self_test_dir}/seed-fixture-output.txt"
+seed_fixture_marker="${self_test_dir}/seed-fixture-prohibited-command-used"
+
+prepare_seed_fixture() {
+  rm -rf -- "${seed_fixture_repo}"
+  rm -f -- "${seed_fixture_output}" "${seed_fixture_marker}"
+  mkdir -p \
+    "${seed_fixture_repo}/scripts" \
+    "${seed_fixture_repo}/tools/spikes/sw-g2-mls-rs/src" \
+    "${seed_fixture_dir}" \
+    "${seed_fixture_bin}"
+  cp "${repo_root}/LICENSE" "${seed_fixture_repo}/LICENSE"
+  cp "${runner_path}" "${seed_fixture_runner}"
+  cp "${manifest_filter_path}" "${seed_fixture_repo}/scripts/sw-g2-mls-rs-phase-a-manifest.jq"
+  cp "${monitor_path}" "${seed_fixture_repo}/scripts/monitor-sw-g2-dependency-audit-run.py"
+  cp "$0" "${seed_fixture_repo}/scripts/check-sw-g2-mls-rs-phase-a.sh"
+  cp "${cargo_toml_path}" "${seed_fixture_repo}/tools/spikes/sw-g2-mls-rs/Cargo.toml"
+  cp "${deny_toml_path}" "${seed_fixture_repo}/tools/spikes/sw-g2-mls-rs/deny.toml"
+  cp "${main_rs_path}" "${seed_fixture_repo}/tools/spikes/sw-g2-mls-rs/src/main.rs"
+  cp "${dependency_graph_seed_manifest}" "${seed_fixture_dir}/manifest.json"
+  cp "${dependency_graph_seed_checksums}" "${seed_fixture_dir}/checksums.sha256"
+  cp "${dependency_graph_seed_lock}" "${seed_fixture_dir}/Cargo.lock"
+  cp "${dependency_graph_seed_metadata}" "${seed_fixture_dir}/cargo-metadata.json"
+  cp "${dependency_graph_seed_gate_exit_codes}" "${seed_fixture_dir}/audit-exit-codes.json"
+  chmod 0755 "${seed_fixture_runner}"
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'if [ "${1:-}" = "-C" ]; then shift 2; fi' \
+    'case "${1:-}" in' \
+    '  status) exit 0 ;;' \
+    '  rev-parse) printf "%s\n" 0123456789abcdef0123456789abcdef01234567; exit 0 ;;' \
+    '  *) exit 97 ;;' \
+    'esac' > "${seed_fixture_bin}/git"
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'touch "${SW_G2_PROHIBITED_MARKER}"' \
+    'exit 97' > "${seed_fixture_bin}/docker"
+  cp "${seed_fixture_bin}/docker" "${seed_fixture_bin}/cargo"
+  cp "${seed_fixture_bin}/docker" "${seed_fixture_bin}/curl"
+  cp "${seed_fixture_bin}/docker" "${seed_fixture_bin}/wget"
+  chmod 0755 "${seed_fixture_bin}/git" "${seed_fixture_bin}/docker" \
+    "${seed_fixture_bin}/cargo" "${seed_fixture_bin}/curl" "${seed_fixture_bin}/wget"
+}
+
+assert_seed_fixture_result() {
+  local rejection_name=$1
+  local expected_message=$2
+  local before_entries
+  local after_entries
+  local status
+  before_entries="$(find "${seed_fixture_repo}/artifacts" -mindepth 1 -maxdepth 3 -print | LC_ALL=C sort)"
+  set +e
+  PATH="${seed_fixture_bin}:${PATH}" \
+    SW_G2_PROHIBITED_MARKER="${seed_fixture_marker}" \
+    "${seed_fixture_runner}" prepare "${fixture_bundle_id}" > "${seed_fixture_output}" 2>&1
+  status=$?
+  set -e
+  after_entries="$(find "${seed_fixture_repo}/artifacts" -mindepth 1 -maxdepth 3 -print | LC_ALL=C sort)"
+  if [ "${status}" -ne 2 ]; then
+    echo "${rejection_name} returned ${status}, expected 2" >&2
+    exit 1
+  fi
+  if ! rg -Fq -- "${expected_message}" "${seed_fixture_output}"; then
+    echo "${rejection_name} did not report the expected seed preflight result" >&2
+    exit 1
+  fi
+  if [ -e "${seed_fixture_marker}" ] || [ -L "${seed_fixture_marker}" ]; then
+    echo "${rejection_name} reached Docker, Cargo, or a network client" >&2
+    exit 1
+  fi
+  if [ "${before_entries}" != "${after_entries}" ]; then
+    echo "${rejection_name} changed the artifact tree before seed preflight completed" >&2
+    exit 1
+  fi
+}
+
+prepare_seed_fixture
+assert_seed_fixture_result "valid seed" "audit tool artifact root is missing or is a symbolic link"
+
+prepare_seed_fixture
+mv "${seed_fixture_dir}" "${seed_fixture_dir}.missing"
+assert_seed_fixture_result "missing seed directory" "dependency graph seed directory is missing or is a symbolic link"
+
+prepare_seed_fixture
+mv "${seed_fixture_dir}/manifest.json" "${seed_fixture_dir}/manifest.real.json"
+ln -s "${seed_fixture_dir}/manifest.real.json" "${seed_fixture_dir}/manifest.json"
+assert_seed_fixture_result "symlinked seed manifest" "dependency graph seed file is missing or is a symbolic link"
+
+for seed_tamper_file in checksums.sha256 Cargo.lock cargo-metadata.json; do
+  prepare_seed_fixture
+  printf '\n' >> "${seed_fixture_dir}/${seed_tamper_file}"
+  assert_seed_fixture_result "tampered ${seed_tamper_file}" "dependency graph seed digest does not match the fixed D final evidence"
+done
+
+prepare_seed_fixture
+jq '.outcome = "PASS"' "${seed_fixture_dir}/manifest.json" > "${seed_fixture_dir}/manifest.changed.json"
+mv "${seed_fixture_dir}/manifest.changed.json" "${seed_fixture_dir}/manifest.json"
+assert_seed_fixture_result "drifted seed manifest fields" "dependency graph seed digest does not match the fixed D final evidence"
+
+prepare_seed_fixture
+jq '.feature = 0' "${seed_fixture_dir}/audit-exit-codes.json" > "${seed_fixture_dir}/audit-exit-codes.changed.json"
+mv "${seed_fixture_dir}/audit-exit-codes.changed.json" "${seed_fixture_dir}/audit-exit-codes.json"
+assert_seed_fixture_result "drifted historical gate fields" "dependency graph seed digest does not match the fixed D final evidence"
 
 echo "SW-EXP-003 mls-rs Phase A offline check: PASS"

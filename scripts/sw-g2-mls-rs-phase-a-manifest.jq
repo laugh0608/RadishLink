@@ -68,6 +68,20 @@ def boolean_or_null($value):
       invocations: [["check", "sources"], ["check", "advisories", "licenses"]]
     }
   },
+  dependency_graph_seed: {
+    contract: $dependency_graph_seed_contract,
+    run_id: $dependency_graph_seed_run_id,
+    repository_revision: $dependency_graph_seed_revision,
+    source_outcome: "STOP",
+    source_stage: "feature-gate",
+    source_mode: $dependency_graph_seed_source_mode,
+    manifest_sha256: $dependency_graph_seed_manifest_sha256,
+    checksums_sha256: $dependency_graph_seed_checksums_sha256,
+    cargo_lock_sha256: $dependency_graph_seed_lock_sha256,
+    cargo_metadata_sha256: $dependency_graph_seed_metadata_sha256,
+    gate_exit_codes_sha256: $dependency_graph_seed_gate_exit_codes_sha256,
+    resolved_package_count: ($dependency_graph_seed_package_count | tonumber)
+  },
   direct_dependencies: {
     mls_rs: {
       version: "=0.56.0",
@@ -113,6 +127,8 @@ def boolean_or_null($value):
   },
   lockfile_preexisting: boolean_or_null($lockfile_preexisting),
   lockfile_written: boolean_or_null($lockfile_written),
+  lockfile_seeded: boolean_or_null($lockfile_seeded),
+  mutable_cache_reused: boolean_or_null($mutable_cache_reused),
   disk_available_kib: number_or_null($disk_available_kib),
   runtime_controls: {
     monitor_status: $runtime_control_status,
