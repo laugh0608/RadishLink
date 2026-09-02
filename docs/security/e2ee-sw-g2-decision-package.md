@@ -13,7 +13,7 @@
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
 2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已完成 A/A2/A3/A4/A5/C2/D/A6/E；A5 后 bundle `20260830-112214-39636.GpERrj` 已构建并复核 `PASS`。单元 E 对独立 264-package 固定图形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，独立 audit 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate；不重跑、不进入 Phase B，也不能继承 0.8.1 lockfile、cache 或授权；
-3. 以[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和已接受的[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)对照许可证、advisory、存储、互操作与平台边界；A0/A1/A2/A3 已离线实施并形成 clean revision，单元 C 固定审计工具 bundle 已复核 `PASS`，单元 D 在固定 94-package 图的旧 transitive feature gate 形成正式历史 `STOP`。D2 随后只读 seed 同一 final lock、拒绝重新解析和旧 mutable cache，形成正式 Phase A `PASS` 并提升同一仓库 lockfile；人工许可证/NOTICE 与非实现者 evidence 复核未完成，Phase B 禁止；
+3. 以[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和已接受的[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)对照许可证、advisory、存储、互操作与平台边界；A0/A1/A2/A3 已离线实施并形成 clean revision，单元 C 固定审计工具 bundle 已复核 `PASS`，单元 D 在固定 94-package 图的旧 transitive feature gate 形成正式历史 `STOP`。D2 随后只读 seed 同一 final lock、拒绝重新解析和旧 mutable cache，形成正式 Phase A `PASS` 并提升同一仓库 lockfile；[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线形成，R1/R2 与 Phase B 未授权；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
 这个顺序不是采用结论。任一候选只有同时通过许可证、Linux ARM64、身份绑定、去中心化投递、崩溃安全、中继不可解密和独立复核，才可以进入 ADR；`SW-G2` 当前仍为未通过。
@@ -112,7 +112,7 @@
 
 ## 运行授权包要求
 
-本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的单元 E 也已形成正式负向 Phase A 并阻断 Phase B，不再申请同基线重跑。[`mls-rs 0.56.0` 静态包](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受并按分段授权执行到 D2；历史 fixed graph 的旧 feature-gate `STOP` 保留，D2 对同一固定图形成正式 Phase A `PASS`。进入联网许可证/NOTICE 补证、D2 重跑、Phase B 或任何其他修订 spike 前必须重新满足：
+本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的单元 E 也已形成正式负向 Phase A 并阻断 Phase B，不再申请同基线重跑。[`mls-rs 0.56.0` 静态包](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受并按分段授权执行到 D2；历史 fixed graph 的旧 feature-gate `STOP` 保留，D2 对同一固定图形成正式 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)只完成 R0 离线设计；进入 R1 联网补证、R2 独立复核、D2 重跑、Phase B 或任何其他修订 spike 前必须重新满足：
 
 - 精确依赖版本、commit、校验值、来源、许可证和 lockfile 变更；
 - 精确命令、目标平台、网络访问、临时目录、预计时长和最大资源占用；

@@ -158,4 +158,4 @@ Phase B 获准后才增加 scenario summary、B inventory 与各节点脱敏时�
 
 授权必须按[精确包](sw-g2-mls-rs-phase-a-authorization.md)拆分为共享运行资源 A0、候选骨架 A1、包限定 gate A2、固定图消费合同 A3、L3 通用 bundle C、历史 L3 Phase A D 与固定图复核 D2；Phase B、FFI/移动与可选清理继续分别形成新包。任一单元不得继承相邻授权。
 
-本文静态候选方向与精确包均已接受并执行到 D2。run `20260901-135918-13430.mvBCS2` 对固定 94-package 图形成历史 `STOP/feature-gate`；source/audit/deny 为零但 feature 为一，A2 的包限定 gate 修订不重写该结果。D2 run `20260902-130415-49997.8P5Td6` 对同一固定图形成 schema 2/v2 正式 Phase A `PASS`，四门全零，仓库 lockfile 已提升且与 seed/evidence 一致；仍没有候选构建/运行或平台功能实证。下一步先冻结 11 个 crate archive 的许可证/NOTICE 补证与非实现者 evidence 复核清单；联网补证、D2 重跑、Phase B、版本/provider/source 或 gate 继续变化均需单独精确授权。`SW-G2` 继续保持未通过。
+本文静态候选方向与精确包均已接受并执行到 D2。run `20260901-135918-13430.mvBCS2` 对固定 94-package 图形成历史 `STOP/feature-gate`；source/audit/deny 为零但 feature 为一，A2 的包限定 gate 修订不重写该结果。D2 run `20260902-130415-49997.8P5Td6` 对同一固定图形成 schema 2/v2 正式 Phase A `PASS`，四门全零，仓库 lockfile 已提升且与 seed/evidence 一致；仍没有候选构建/运行或平台功能实证。[许可证/NOTICE 与非实现者复核包](sw-g2-mls-rs-license-notice-review.md)的 R0 已离线形成；R1 联网补证、R2 独立复核、D2 重跑、Phase B、版本/provider/source 或 gate 继续变化均需单独精确授权。`SW-G2` 继续保持未通过。

@@ -390,6 +390,6 @@ artifacts/sw-g2-mls-rs/<run-id>/
 
 精确包已执行到 D2。D 的固定 94-package 图保留正式历史 `STOP/feature-gate`；A2 只修正后续 gate 的包限定语义，不改写 D 的 manifest、checksum、退出码或结论。D2 对同一固定图形成完整 source/audit/deny/feature 全零的正式 Phase A `PASS`，仓库 mls-rs lockfile 已提升且与 seed/evidence 摘要一致；Phase B 未执行且继续禁止。
 
-推荐继续保留 `mls-rs 0.56.0 + AWS-LC 0.25.0 + SQLite 0.23.0` 候选，不 patch/fork 或更换 provider。D2 已完成只读消费 D final lock、拒绝重新解析和旧 mutable cache 的路径。下一个最小单元是离线冻结许可证/NOTICE 证据缺口与非实现者 evidence 复核清单；若需要联网取得 11 个 package 的上游许可证正文、NOTICE 或源码归属，必须先形成精确来源、版本、摘要、产物与网络副作用方案并单独授权。两项复核关闭前不得设计或执行 Phase B。
+推荐继续保留 `mls-rs 0.56.0 + AWS-LC 0.25.0 + SQLite 0.23.0` 候选，不 patch/fork 或更换 provider。D2 已完成只读消费 D final lock、拒绝重新解析和旧 mutable cache 的路径。[许可证/NOTICE 补证与非实现者复核包](sw-g2-mls-rs-license-notice-review.md)的 R0 已离线固定 11 个 package、3 个 repository、6 个 commit、网络 allowlist、证据合同和复核清单。下一个最小单元是为 R1 固定一次性命令/helper 全文与摘要并申请单次 L3 联网授权；R1 与 R2 关闭前不得设计或执行 Phase B。
 
 笼统的“继续”“按计划做”或接受本文不授权 Phase B、D2 重跑、联网补证、失败重试、清理、commit、push、gate/版本/provider/source/allowlist 变化和其他候选；这些始终是独立动作。

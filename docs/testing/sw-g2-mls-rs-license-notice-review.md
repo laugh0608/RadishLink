@@ -1,0 +1,173 @@
+# SW-EXP-003 mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包
+
+- 状态：Proposed（2026-09-02；R0 离线盘点与设计已形成，R1 联网补证、R2 非实现者复核、结果收口与 Phase B 均未授权）
+- 日期：2026-09-02
+- 证据编号：`SW-EXP-003`
+- 前置结果：[mls-rs 0.56.0 实施与 Phase A 精确授权包](sw-g2-mls-rs-phase-a-authorization.md)的 D2 固定 94-package 图已正式 `PASS`
+- 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
+
+## 目的与结论边界
+
+本文把 D2 后尚未关闭的两项门禁拆成可复核、可停止、逐单元授权的方案：
+
+1. 为 crate archive 中未携带许可证/NOTICE 类文件的 11 个 package，按 registry checksum、`.cargo_vcs_info.json` commit 与 `path_in_vcs` 收集不可变上游证据；
+2. 由未参与 A2/A3、D2 runner 实施、D2 执行或本轮结果撰写的复核者，独立核对 D2 与许可证补证。
+
+本文不判断组合、链接、商店发布或任何目标渠道在法律上合规，不把 Cargo license metadata 或 SPDX 表达式当作许可证正文，也不因 D2 四门全零推导完整第三方安全审计、候选采用、`SW-G2 PASS` 或 Phase B 授权。若目标分发方式需要法律意见，仍须由有资格的独立评审者给出；工程记录不得代替该结论。
+
+## 授权单位
+
+1. **R0：离线盘点与设计**：只读 D2 final evidence、固定 `Cargo.lock` 与保留 crate source，固定本包的 package、commit、网络来源、证据合同、判定和复核清单；只修改必要文档。2026-09-02 已按单次授权实施。
+2. **R1：受限联网补证**：在 R0 形成 clean revision 后，仅访问本文列出的三个 GitHub 仓库和六个不可变 commit，产生新的许可证评审 evidence；不得修改 D/D2 evidence、依赖图、gate、provider 或 source。当前未授权。
+3. **R2：非实现者复核**：在 R1 形成有效 final evidence 后，由符合独立性条件的复核者只读检查 D2、R1 与仓库 lockfile，另存复核记录；当前执行者不能自我关闭该门禁。当前未授权。
+4. **结果收口**：只有 R1 与 R2 均有效 `PASS` 后，才可另行授权把结论同步到状态和决策文档。该动作也不授权 Phase B；Phase B 必须另建精确设计、实施与 L3 运行包。
+
+笼统的“继续”“按计划做”或接受本文不授权 R1、R2、联网、创建新 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/source/allowlist 变化或其他候选。
+
+## 固定 D2 基线
+
+| 项目 | 固定值 |
+| --- | --- |
+| D2 run | `20260902-130415-49997.8P5Td6` |
+| D2 clean revision | `64cf079a7b14a3ce90be92b93e56e2ad80555d80` |
+| evidence 路径 | `artifacts/sw-g2-mls-rs/20260902-130415-49997.8P5Td6/` |
+| manifest | schema `2` / `sw-g2-candidate-phase-a-v2`；SHA-256 `b42b4bd34142e71f44c020ec3c84ab0c329b2865b0e822efbf0adb53f0440a5f` |
+| checksums | `32` 项；清单 SHA-256 `922ce41492cd7911a7be8c2c4f3aedf70e42116bce1b5fb0b03b6bdbdbbb4baa` |
+| lockfile | `94` package；SHA-256 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`；repository、D seed 与 D2 三份逐字一致 |
+| gates | source/audit/deny/feature 均为 `0` |
+| advisory | RustSec revision `5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5`；1239 条；vulnerability 与 warning 均为零 |
+| fixed graph | `lockfile_seeded: true`、`lockfile_written: true`、`mutable_cache_reused: false` |
+| runtime | `completed`；`40525 ms`；峰值 `229278 KiB`；退出码 `0`；精确 run label 残留 `0` |
+
+R1/R2 开始前必须重新只读复核上述值。任一摘要、package 数、gate、outcome/stage、seed contract、repository revision 或工作区预期不一致即 `INVALID`，不得用当前网络结果覆盖或解释漂移。
+
+## R0 离线许可证缺口盘点
+
+D2 固定图含 1 个本地 path package 与 93 个 crates.io package。93 个 registry package 的 Cargo license metadata 均非空，`cargo-deny 0.20.2` 的 licenses/advisories 结果为 `ok`；这只证明固定 metadata 表达式通过当前工具门。保留的 11 个下列 crate archive 中未找到名称匹配 `LICENSE`、`LICENCE`、`NOTICE`、`COPYING`、`COPYRIGHT`、`AUTHORS` 或同类形式的文件。
+
+表中 registry checksum 来自已提交的固定 `Cargo.lock`；repository/license 来自 D2 `cargo-metadata.json`；commit 与仓库内路径来自每个 archive 自带的 `.cargo_vcs_info.json`。commit 是发布包的本地 provenance，R1 仍须通过对应官方仓库的不可变 commit API 验证；浮动 tag、branch 或仓库默认分支不能替代。
+
+| package | registry checksum | Cargo license | repository / commit / `path_in_vcs` |
+| --- | --- | --- | --- |
+| `debug_tree 0.4.0` | `2d1ec383f2d844902d3c34e4253ba11ae48513cdaddc565cf1a6518db09a8e57` | `MIT` | `martypapa/debug-tree` / `5b709de2d8872102b20b566c408d31d0662d7a9f` / `.` |
+| `mls-rs 0.56.0` | `4392c3b3ed7d835ca8f318f85ca65d3f0d3e879538d6e70679827a2f3af72029` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `8f1b43f447a792ff9307f1c2c7f54da63914870e` / `mls-rs` |
+| `mls-rs-codec 0.7.0` | `45bd834f164dc06c1fed805540ae307a460b7ed7c2769a35a376f1de577a0dc1` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `3a185cd2cf4c89c3cd30adf294d7c18d2735725e` / `mls-rs-codec` |
+| `mls-rs-codec-derive 0.2.0` | `c8b31fb579767147e96686889f1e7459d6bd41a131b11d7cd130776cffadb1c3` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `5224ee3afd6f9f026d579f3ed17a8fdda121946e` / `mls-rs-codec-derive` |
+| `mls-rs-core 0.27.0` | `e282079e5bd2fe95a009ac8af6a8e510924d876234ee494cd97f15f52de53cb0` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `a0eb41def0cf227034bde19b7c11e62ab2a74a03` / `mls-rs-core` |
+| `mls-rs-crypto-awslc 0.25.0` | `858ba8df345ebbda20868b503fda4fb46a921ca0e035025cbbaed0c8b5245da0` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `a0eb41def0cf227034bde19b7c11e62ab2a74a03` / `mls-rs-crypto-awslc` |
+| `mls-rs-crypto-hpke 0.21.0` | `b53db9a20568dec53e4f280ec8152c862b98efe105894e378d996be3305f32f2` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `a0eb41def0cf227034bde19b7c11e62ab2a74a03` / `mls-rs-crypto-hpke` |
+| `mls-rs-crypto-traits 0.22.0` | `49171fd5c7c77cd29ec452dcc6f537b8c568084b97023dcc5c0d41140da8ceb4` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `a0eb41def0cf227034bde19b7c11e62ab2a74a03` / `mls-rs-crypto-traits` |
+| `mls-rs-identity-x509 0.21.0` | `ec1ecb6a61a296b8240cea19171477293663dcc6540353dc8cbcda2d9f61039b` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `a0eb41def0cf227034bde19b7c11e62ab2a74a03` / `mls-rs-identity-x509` |
+| `mls-rs-provider-sqlite 0.23.0` | `e8e52c2b3b9c3421fe4bd96266016306595a66c1f4830ee2f1a19d50b209895e` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `a0eb41def0cf227034bde19b7c11e62ab2a74a03` / `mls-rs-provider-sqlite` |
+| `r-efi 6.0.0` | `f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf` | `MIT OR Apache-2.0 OR LGPL-2.1-or-later` | `r-efi/r-efi` / `7e1b0322d31d625f81a5656096330934f9cd835d` / `.` |
+
+这 11 项不是“无许可证”或工具 gate 失败。缺口是 crate archive 本身不足以独立给出正文、copyright、NOTICE 与目标分发义务；同一仓库/commit 的多个 package 可以共享上游文件，但 mapping 必须逐 package 明示，不能只用仓库级推断替代。
+
+## R1 受限联网补证方案
+
+### 前置与允许外部范围
+
+R1 只有在 R0 形成 clean revision、工作区干净、上述 D2/lock/source 摘要再次匹配且单独说明 L3 副作用后，才可申请一次执行授权。只允许匿名 HTTPS `GET`，不携带 token、cookie、GitHub 登录态或用户数据，不使用浏览器会话，不调用 Git/Cargo/Docker，不下载 crate/source archive，不访问 crates.io，也不创建远程状态。
+
+允许 host 仅为：
+
+- `api.github.com`：验证六个固定 commit，取得对应 tree SHA 和非截断 tree；
+- `raw.githubusercontent.com`：只下载由已验证 tree 返回、且满足下述选择规则的同 commit 文本文件。
+
+固定 commit API URL：
+
+| repository | 固定 URL |
+| --- | --- |
+| `martypapa/debug-tree` | `https://api.github.com/repos/martypapa/debug-tree/git/commits/5b709de2d8872102b20b566c408d31d0662d7a9f` |
+| `awslabs/mls-rs` | `https://api.github.com/repos/awslabs/mls-rs/git/commits/8f1b43f447a792ff9307f1c2c7f54da63914870e` |
+| `awslabs/mls-rs` | `https://api.github.com/repos/awslabs/mls-rs/git/commits/3a185cd2cf4c89c3cd30adf294d7c18d2735725e` |
+| `awslabs/mls-rs` | `https://api.github.com/repos/awslabs/mls-rs/git/commits/5224ee3afd6f9f026d579f3ed17a8fdda121946e` |
+| `awslabs/mls-rs` | `https://api.github.com/repos/awslabs/mls-rs/git/commits/a0eb41def0cf227034bde19b7c11e62ab2a74a03` |
+| `r-efi/r-efi` | `https://api.github.com/repos/r-efi/r-efi/git/commits/7e1b0322d31d625f81a5656096330934f9cd835d` |
+
+每个 commit 响应的 `.sha` 必须逐字等于请求值；随后只允许访问同 repository 的 `https://api.github.com/repos/<owner>/<repo>/git/trees/<validated-tree-sha>?recursive=1`。tree 响应的 `.sha` 必须匹配且 `.truncated` 必须为 `false`。tag 只可作为响应外的附加说明，不作为 selector，也不允许请求 `main`、默认分支、`latest` 或浮动 release URL。
+
+### 文件选择规则
+
+对每个 package，只允许从对应 commit 下载：
+
+1. `path_in_vcs` 的 package `Cargo.toml`，以及从该目录向仓库根逐级祖先中的 `Cargo.toml`，用于解析 workspace 继承；
+2. 仓库根、上述祖先目录及 `path_in_vcs` 中 basename 不区分大小写匹配 `LICENSE`、`LICENCE`、`NOTICE`、`COPYING`、`COPYRIGHT`、`AUTHORS` 及其带后缀/分隔符变体的文件；
+3. 上述目录下 `LICENSES/` 或 `licenses/` 目录内的普通文件；
+4. 只有前述 `Cargo.toml` 明确引用 `license-file`、`readme` 或相邻归属文件时，才允许增加该精确相对路径，并在 mapping 中记录引用字段。
+
+raw URL 必须按 `https://raw.githubusercontent.com/<owner>/<repo>/<fixed-commit>/<validated-tree-path>` 确定；path 必须逐字来自已保存的非截断 tree，拒绝 `..`、绝对路径、symlink/submodule、tree 外路径和重定向到其他 host。只接受非空普通文本；HTML、可执行文件、archive、LFS pointer 或二进制响应立即 `STOP`。
+
+### 新 evidence 与资源边界
+
+R1 只能新建私有目录：
+
+```text
+artifacts/sw-g2-mls-rs-license-review/<run-id>/
+├── inventory.json
+├── commits/
+├── trees/
+├── upstream/
+├── package-license-mapping.json
+├── http-observations.json
+├── manifest.json
+├── checksums.sha256
+└── run.log
+```
+
+`manifest.json` 使用 schema 1 / `sw-g2-mls-rs-license-review-v1`，至少记录 R0 clean revision、D2 run/manifest/checksum/lock 摘要、11 个 registry checksum、六个 repository commit/tree SHA、每次请求的 method/host/path/status/content type/byte count、下载文件的 raw URL/SHA-256、package mapping、是否发现 NOTICE、网络/资源边界、开始/结束时间、outcome/stage/exit code。`checksums.sha256` 覆盖所有 final 文件并从仓库根自校验；finalizer 失败不得留下可误认的 `PASS` manifest。
+
+批准时应固定一次性命令或临时 helper 的全文与 SHA-256。预计 1–10 分钟、HTTPS 请求不超过 40 次、下载不超过 50 MiB、evidence 不超过 100 MiB；10 分钟或 100 MiB 为用户态停止线。没有后台服务、端口、容器、系统设置或远程写入；成功与负向 evidence 默认保留，不修改/清理 D/D2 或其他历史 evidence。HTTP、rate limit、tree 截断、摘要、解析、资源、finalizer 或零后台进程检查失败时保留真实 `STOP/INVALID`，不自动重试、不改用 token、mirror、branch、tag 或搜索引擎。
+
+### R1 判定
+
+`PASS` 必须同时满足：
+
+- 11 个 package 的 registry checksum、repository、commit、`path_in_vcs` 与本表一致；
+- 六个 commit 与 tree 均由对应官方 repository 的固定 API 验证，tree 未截断；
+- upstream/ancestor manifest 能把 package 名称、版本、license 与 workspace 继承闭合到 registry metadata；
+- 每个 SPDX alternative 的上游许可证正文都已保留，或明确记录上游固定 tree 中不存在及其影响；Apache-2.0 路径的 NOTICE 存在性也逐 commit 明示；
+- 每个 package 到正文、copyright/NOTICE 和 commit 的 mapping 完整，无浮动来源、摘要漂移、互相矛盾或未解释缺口；
+- manifest、checksum、资源控制和零后台进程合同全部通过。
+
+固定 tree 中没有 NOTICE 不自动等于许可证失败；它必须被明确记录并交由 R2 判断是否存在随分发 NOTICE 义务。无法支持 Cargo 声明的许可证表达式、仓库/commit/path 不匹配、正文或归属含义矛盾、只能依赖浮动页面或无法解释适用范围时，R1 为 `STOP`。证据缺失、tree 截断、checksum/finalizer 失败或输入漂移时为 `INVALID`。R1 的 `PASS` 只表示上游证据采集完整，不是法律合规结论。
+
+## R2 非实现者复核
+
+### 独立性条件
+
+复核者必须明确声明未参与 A2/A3 gate/runner/checker 实施、D2 执行以及 D2/R0 结果撰写；当前执行者不满足该条件。复核可以由项目所有者指定的人类评审者或单独任务完成，但不得把同一执行者换一个会话标签视为独立。复核记录只使用任务/角色标识与日期，不写入私人凭据、邮箱、token 或签名密钥。
+
+### D2 清单
+
+复核者必须从仓库根独立完成并记录：
+
+1. D2 final 文件均为预期普通文件、非 symlink；manifest SHA、32 项 checksum 清单 SHA 与逐项 `shasum -a 256 -c` 匹配；
+2. manifest 是 schema 2 / v2、`PASS/phase-a-prepared`、revision `64cf079...`、94 package、seeded/written true、mutable cache false、exit `0`；
+3. repository、D seed、D2 三份 lockfile 逐字一致且 SHA-256 为 `c6dfa...50c7`；历史 D 仍为 `STOP/feature-gate`、`0/0/0/1`，没有被 D2 改写；
+4. D2 source/audit/deny/feature 为 `0/0/0/0`；`cargo-audit.json` 的 vulnerability/warning 为空且 advisory revision 固定；deny/source 输出与 manifest 相符；
+5. 输入、固定 audit bundle/image/platform/toolchain 摘要相符；runtime 为 `completed`、未超 45 分钟/5 GiB、退出码 `0`，精确 run label 残留记录为零；
+6. git before 为空、after 只含预期 `Cargo.lock`，运行没有 Phase B、候选编译/执行、真实数据、重试、evidence 清理或 push。
+
+摘要缩写只用于文档可读性；实际复核必须使用本包和 D2 manifest 中的完整值。
+
+### 许可证/NOTICE 清单
+
+复核者还必须验证：
+
+1. R1 inventory 与固定 lock/metadata/vcs provenance 的 11 行逐项一致；
+2. commit/tree API 原始响应、raw URL 和文件 SHA 能从 manifest/checksum 复现，所有来源都落在允许 host、repository 与 commit；
+3. upstream Cargo manifest/workspace 继承与 registry package 的 name/version/license 一致；
+4. package mapping 对每个 SPDX alternative、copyright 和 NOTICE 存在性给出证据或明确缺口；
+5. 区分“archive 未随包携带文件”“上游固定 commit 有文件”“工程证据完整”和“目标分发法律结论”，不得把前一项自动推导为后一项；
+6. 若许可证选择、归属、NOTICE 或目标渠道义务仍需法律判断，结果必须保留为待独立许可证评审，不能以工程 `PASS` 消除。
+
+### R2 输出与判定
+
+R2 不修改 D2/R1 原始 evidence，只在 R1 run 下新增独立 `review/` 目录，保存 reviewer qualification、逐项结果、引用路径/摘要、未决问题、最终 `PASS/STOP/INVALID` 与 checksum。复核者不满足独立性、未逐项验证或原始 evidence 漂移时为 `INVALID`；发现真实来源、许可证、NOTICE、checksum 或运行合同缺口时为 `STOP`；只有清单全部通过且所有保留法律问题明确隔离时才为工程证据 `PASS`。
+
+## 当前停止点与最小后续单元
+
+R0 已只读固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单；没有联网、创建 R1 evidence、修改 D/D2 evidence、运行 Cargo/Docker、进入 Phase B、commit 或 push。
+
+下一个最小单元是在本包形成 clean revision 后，为 R1 形成一次性命令/helper 全文与 SHA-256，并连同上述 host/commit、10 分钟/100 MiB、无 token、失败不重试和 evidence 保留边界申请单次 L3 联网授权。R1 `PASS` 后再由项目所有者指定非实现者执行 R2；R1/R2 均关闭前不得设计或执行 Phase B。
