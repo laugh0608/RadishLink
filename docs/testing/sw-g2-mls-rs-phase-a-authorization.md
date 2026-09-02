@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 实施与 Phase A 精确授权包
 
-- 状态：Accepted（2026-09-02；A0/A1/A2/A3 已分别形成 clean revision；单元 C 已复核 `PASS`，单元 D 在旧 transitive feature gate 正式 `STOP`；D2 与 Phase B 均未授权）
+- 状态：Accepted（2026-09-02；A0/A1/A2/A3 已分别形成 clean revision；单元 C 已复核 `PASS`，单元 D 保留旧 transitive feature gate 的正式历史 `STOP`；D2 固定 94-package 图已正式 `PASS`，人工许可证/NOTICE 与非实现者 evidence 复核未完成，Phase B 禁止）
 - 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置门禁：[mls-rs 0.56.0 静态门禁](sw-g2-mls-rs-spike-authorization.md)已接受候选方向，执行就绪差异待本包关闭
@@ -18,10 +18,10 @@
 4. **D2 固定图消费合同单元 A3**：离线实现只读验证 D 最终 evidence、以其 `Cargo.lock` 固定新 run 图、升级 manifest 合同与负例；已按单次授权实施并形成 clean revision；
 5. **L3 通用审计工具 bundle 单元 C**：在 A0 clean revision 上构建一次固定 `cargo-audit` / `cargo-deny` bundle，并以无网络容器验证版本；
 6. **L3 mls-rs Phase A 单元 D**：在 A1 clean revision 上只读消费一个精确、已复核的通用 bundle，生成独立 lockfile 并执行完整 gates；
-7. **L3 mls-rs 固定图复核单元 D2（Proposed）**：A3 clean revision 后只运行一次新 evidence，重新执行当前 source/audit/deny/feature gates；当前未授权；
+7. **L3 mls-rs 固定图复核单元 D2**：A3 clean revision 后只运行一次新 evidence，重新执行当前 source/audit/deny/feature gates；已按单次 L3 授权执行并正式 `PASS`；
 8. **Phase B**：只有未来获授权的 Phase A 完整 `PASS`、许可证人工复核与非实现者证据复核都通过后，才另建精确包；当前不存在实现或执行授权。
 
-本文的接受只冻结精确方案，不自动授权任何实施单元。A0、A1、A2 与 A3 已分别获得一次明确授权并离线实施；A3 不重写 D 的历史 `STOP`，也不包含 D2、Cargo、Docker、网络、lockfile 提升、commit 或 Phase B。C 不包含 D，任一 L3 授权不包含失败重试、Phase B、清理、push 或其他候选。
+本文的接受只冻结精确方案，不自动授权任何实施单元。A0、A1、A2 与 A3 已分别获得一次明确授权并离线实施；A3 不重写 D 的历史 `STOP`，也不包含 D2、Cargo、Docker、网络、lockfile 提升、commit 或 Phase B。D2 随后消费一次独立 L3 授权；该授权不包含失败重试、Phase B、清理、commit、push 或其他候选。
 
 ## 固定基线
 
@@ -218,7 +218,7 @@ D2 推荐**只读消费 D 的最终 `Cargo.lock` 作为固定图种子，不重�
 | `scripts/check-sw-g2-mls-rs-phase-a.sh` | 固定上述 ID/摘要/字段；新增 seed 缺失、symlink、清单/manifest/lock/metadata/gate 摘要篡改、历史 gate 字段漂移、读取 `.work`、重新解析版本、schema 1 假通过等离线负例 |
 | 本包与当前状态 | 同步 A3/D2 授权边界；不改历史 D 结论 |
 
-A3 不修改 `Cargo.toml`、`deny.toml`、版本、provider、feature gate、source/allowlist 或任何历史 evidence；不生成仓库 `Cargo.lock`，不调用 Docker/Cargo/网络，不创建 D2 artifact，不重跑 Phase A，不进入 Phase B，也不 push。A3 已按该边界实施并另获 commit 授权形成 clean revision；D2 仍须单独取得 L3 授权。
+A3 不修改 `Cargo.toml`、`deny.toml`、版本、provider、feature gate、source/allowlist 或任何历史 evidence；不生成仓库 `Cargo.lock`，不调用 Docker/Cargo/网络，不创建 D2 artifact，不重跑 Phase A，不进入 Phase B，也不 push。A3 已按该边界实施并另获 commit 授权形成 clean revision；D2 后续另行取得并消费一次 L3 授权。
 
 ### A3 离线验证
 
@@ -236,7 +236,7 @@ checker 还必须证明 A3 只读验证 final seed files、拒绝 D `.work`，�
 
 2026-09-02 已按单次明确授权完成 A3。runner 在 audit bundle 检查、artifact 创建、Docker 查询和候选网络之前，固定验证 D final 目录、五个 final 文件的非 symlink/摘要、历史 checksum 记录、schema 1 manifest 字段、94-package metadata 与 `0/0/0/1` 历史 gate；仓库 mls-rs lockfile 必须不存在。隔离输入只复制 seed `Cargo.lock`，候选命令删除 `cargo generate-lockfile`，仅允许 `cargo fetch --locked`，并在容器内外复核 lock 摘要与 94-package 计数；历史 D `.work`、Cargo home、target 与 advisory DB 均不读取。
 
-未来 D2 manifest 已升级为 schema 2 / `sw-g2-candidate-phase-a-v2`，记录 `dependency_graph_seed`、`lockfile_seeded` 与 `mutable_cache_reused: false`；新 checksum 也逐项绑定五个 seed final 文件。离线 checker 已覆盖 seed 正例、缺失目录、symlink、checksum/manifest/lock/metadata/gate 篡改、历史 gate 字段漂移、schema 1 假通过、重新解析与旧 mutable cache 禁止线，并用同一 package-qualified gate 对 D 固定 metadata 返回零。实施核对还纠正了设计表中 gate JSON 摘要的抄录错误；正确值来自现场文件与历史 `checksums.sha256`，历史 evidence 未修改。
+D2 manifest 已升级为 schema 2 / `sw-g2-candidate-phase-a-v2`，记录 `dependency_graph_seed`、`lockfile_seeded` 与 `mutable_cache_reused: false`；新 checksum 也逐项绑定五个 seed final 文件。离线 checker 已覆盖 seed 正例、缺失目录、symlink、checksum/manifest/lock/metadata/gate 篡改、历史 gate 字段漂移、schema 1 假通过、重新解析与旧 mutable cache 禁止线，并用同一 package-qualified gate 对 D 固定 metadata 返回零。实施核对还纠正了设计表中 gate JSON 摘要的抄录错误；正确值来自现场文件与历史 `checksums.sha256`，历史 evidence 未修改。
 
 ## 单元 C：通用固定审计工具 bundle
 
@@ -310,9 +310,9 @@ monitor 记录 `55761 ms`、峰值 `228844 KiB`，工作区前后干净且精确
 - fixed image、bundle、本轮 evidence、候选 `.work`/cache 与可能新增的仓库 lockfile 默认保留；精确容器清理后必须复核残留为零；
 - 不访问远程 Git，不修改系统配置，不启动 VM/长期服务，不操作硬件或射频。
 
-## 单元 D2：固定 94-package 图 Phase A 复核（Proposed，未授权）
+## 单元 D2：固定 94-package 图 Phase A 复核（已执行，`PASS`）
 
-D2 只有在 A3 已形成 clean revision、仓库仍无 mls-rs `Cargo.lock`、固定 seed 与通用工具 bundle 再次只读复核通过时，才可申请一次 L3 授权。唯一命令保持：
+D2 在 A3 clean revision `64cf079a7b14a3ce90be92b93e56e2ad80555d80`、仓库无 mls-rs `Cargo.lock`、固定 seed 与通用工具 bundle 再次只读复核通过后，消费一次 L3 授权。唯一命令为：
 
 ```bash
 ./scripts/run-sw-g2-mls-rs-spike.sh prepare 20260901-134500-6665.ARcd4F
@@ -320,7 +320,7 @@ D2 只有在 A3 已形成 clean revision、仓库仍无 mls-rs `Cargo.lock`、�
 
 固定工具与运行边界不变：bundle manifest SHA-256 为 `79bdf71ba29632fb05a1097431f4c1a2a2c7fbd2f183f3685e808de143dbcad5`，`cargo-audit 0.22.2` / `cargo-deny 0.20.2` 二进制 SHA-256 分别为 `3f1eec4519d67df8d48c02ff366528155a664702b360388a69ae484549b6cb87` 与 `9ea2b1019a52961af71fcd589a8dd5e640169b8c02a9ab1d3d44d7ac0204fd45`；镜像仍为 Rust 1.96.1 的固定 Linux ARM64 digest。候选容器使用默认出站网络且无域名 allowlist，只下载 seed lock 指定 crates 和当次 RustSec DB；新 run 使用全新 Cargo home/target，不编译或运行候选。
 
-D2 预计 15–45 分钟，五秒用户态 monitor 执行 45 分钟/5 GiB 停止线；候选容器为 4 CPU/4 GiB，工具链无网络验证为 1 CPU/512 MiB。新 evidence、`.work`/cache、fixed image、bundle 与可能提升的仓库 lockfile 默认保留；只清理名称和精确 run label 同时匹配的本轮容器并复核零残留，不做全局 Docker 清理。
+D2 的批准预算为 15–45 分钟，五秒用户态 monitor 执行 45 分钟/5 GiB 停止线；候选容器为 4 CPU/4 GiB，工具链无网络验证为 1 CPU/512 MiB。新 evidence、`.work`/cache、fixed image、bundle 与提升的仓库 lockfile 默认保留；只清理名称和精确 run label 同时匹配的本轮容器并复核零残留，不做全局 Docker 清理。
 
 判定顺序固定：
 
@@ -330,7 +330,19 @@ D2 预计 15–45 分钟，五秒用户态 monitor 执行 45 分钟/5 GiB 停止
 4. source/audit/deny/feature 全部为零、schema 2/v2 manifest、checksum、输入不变、运行控制与零残留全部通过时，D2 才为 `PASS`；
 5. 任一失败保留 partial/final evidence，不自动重试、不换版本/provider/source、不重新解析、不放宽 gate/allowlist、不清理、不 commit/push，也不进入 Phase B。
 
-D2 `PASS` 仍只证明该固定图在记录的 RustSec revision 与门禁下通过 Phase A。人工许可证复核与非实现者 evidence 复核完成后，才可另行设计 Phase B；本节不构成 D2 或 Phase B 授权。
+D2 `PASS` 仍只证明该固定图在记录的 RustSec revision 与门禁下通过 Phase A。人工许可证复核与非实现者 evidence 复核完成后，才可另行设计 Phase B；本节不构成 Phase B 授权。
+
+### D2 执行结果
+
+2026-09-02 在上述 clean revision 上消费一次独立 L3 授权，唯一 run `20260902-130415-49997.8P5Td6` 正常退出 `0`，形成 schema 2 / `sw-g2-candidate-phase-a-v2` 正式 `PASS/phase-a-prepared`。固定 seed 合同完整；新 evidence `Cargo.lock` 与 D final seed 逐字一致，SHA-256 仍为 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`，解析仍为 94 个 package。仓库原先无 lockfile，runner 记录 `lockfile_seeded: true`、`lockfile_written: true`、`mutable_cache_reused: false`，并原子提升同一 lockfile 到 `tools/spikes/sw-g2-mls-rs/Cargo.lock`。
+
+source/audit/deny/feature exit code 全部为 `0`。`cargo-audit 0.22.2` 基于 RustSec revision `5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5` 检查 1239 条 advisory，未发现 vulnerability 或 warning；`cargo-deny 0.20.2` 的 sources、advisories、licenses 均为 `ok`，仅报告 allowlist 中 `BSD-2-Clause` 未在本图遇到的信息 warning。manifest SHA-256 为 `b42b4bd34142e71f44c020ec3c84ab0c329b2865b0e822efbf0adb53f0440a5f`，32 项 checksum 的清单 SHA-256 为 `922ce41492cd7911a7be8c2c4f3aedf70e42116bce1b5fb0b03b6bdbdbbb4baa`，已从仓库根逐项复核。
+
+monitor 记录 `40525 ms`、当前/峰值 `229278 KiB`，runtime 正常完成；约 `254556 KiB` 本轮 evidence/`.work`/cache 与既有 fixed image、bundle 默认保留。工作区只新增预期仓库 lockfile，精确 run label 的独立查询残留为零；没有重试、编译或运行候选、生成密钥/数据库、进入 Phase B、修改历史 evidence、清理、commit 或 push。
+
+### D2 后人工许可证/NOTICE 复核
+
+固定图中的 93 个 crates.io package 均有非空 Cargo license metadata，`cargo-deny` 也接受其表达式；这不是产品分发许可证义务已经关闭。保留的 crate archive 显示下列 11 个 package 没有随包 `LICENSE`、`NOTICE`、`COPYING` 或同类文件：`debug_tree 0.4.0`、`mls-rs 0.56.0`、`mls-rs-codec 0.7.0`、`mls-rs-codec-derive 0.2.0`、`mls-rs-core 0.27.0`、`mls-rs-crypto-awslc 0.25.0`、`mls-rs-crypto-hpke 0.21.0`、`mls-rs-crypto-traits 0.22.0`、`mls-rs-identity-x509 0.21.0`、`mls-rs-provider-sqlite 0.23.0` 与 `r-efi 6.0.0`。其 `Cargo.toml`/`Cargo.toml.orig` 仍声明 license 和 repository；因此这不是“无许可证”判定，而是当前 D2 归档证据不足以关闭许可证正文、copyright、NOTICE 与目标分发义务。任何联网获取上游 license/notice/source、改变依赖或形成法律结论都须另行精确授权。
 
 ## 证据合同
 
@@ -370,14 +382,14 @@ artifacts/sw-g2-mls-rs/<run-id>/
 └── run.log
 ```
 
-历史 D manifest 使用 schema 1 / `sw-g2-candidate-phase-a-v1`。Proposed D2 升级为 schema 2 / `sw-g2-candidate-phase-a-v2`，除既有 candidate/evidence/scenario/run、outcome/stage、clean revision、fixed image/platform/toolchain、精确 bundle contract/ID/manifest/binary 摘要与只读挂载、direct dependencies/features、resolved package count、lock SHA、gate exit codes、RustSec revision、输入摘要、runtime controls、网络边界、lockfile preexisting/written、零残留和 runner exit code 外，还必须记录固定 seed contract/run/revision/final 文件摘要、只读消费、`lockfile_seeded: true` 与 `mutable_cache_reused: false`。
+历史 D manifest 使用 schema 1 / `sw-g2-candidate-phase-a-v1`。D2 使用 schema 2 / `sw-g2-candidate-phase-a-v2`，除既有 candidate/evidence/scenario/run、outcome/stage、clean revision、fixed image/platform/toolchain、精确 bundle contract/ID/manifest/binary 摘要与只读挂载、direct dependencies/features、resolved package count、lock SHA、gate exit codes、RustSec revision、输入摘要、runtime controls、网络边界、lockfile preexisting/written、零残留和 runner exit code 外，还记录固定 seed contract/run/revision/final 文件摘要、只读消费、`lockfile_seeded: true` 与 `mutable_cache_reused: false`。
 
 只有四个 gate 全部为零、manifest 非空有效、输入/HEAD/工作区未变、runtime 正常、零残留、checksum 完整自校验，才能打印唯一 `PASS`。零 vulnerability 只覆盖固定 lockfile 与记录的 RustSec revision，不构成第三方安全审计或 `SW-G2` 通过。
 
 ## 当前停止点与后续授权
 
-精确包已执行到 D；固定 94-package 图已形成完整 source/audit/deny 结果和正式历史 `STOP/feature-gate`。A2 只修正未来 gate 的包限定语义，不改写 D 的 manifest、checksum、退出码或结论。仓库 mls-rs lockfile 未生成，Phase B 未执行且继续禁止。
+精确包已执行到 D2。D 的固定 94-package 图保留正式历史 `STOP/feature-gate`；A2 只修正后续 gate 的包限定语义，不改写 D 的 manifest、checksum、退出码或结论。D2 对同一固定图形成完整 source/audit/deny/feature 全零的正式 Phase A `PASS`，仓库 mls-rs lockfile 已提升且与 seed/evidence 摘要一致；Phase B 未执行且继续禁止。
 
-推荐保留 `mls-rs 0.56.0 + AWS-LC 0.25.0 + SQLite 0.23.0` 候选，不 patch/fork 或更换 provider。D2 已选择只读消费 D final lock、拒绝重新解析和旧 mutable cache 的路径，A3 已形成 clean revision。下一个最小单元是申请 D2 单次 L3 运行授权；在明确授权前 D2 仍不得执行。
+推荐继续保留 `mls-rs 0.56.0 + AWS-LC 0.25.0 + SQLite 0.23.0` 候选，不 patch/fork 或更换 provider。D2 已完成只读消费 D final lock、拒绝重新解析和旧 mutable cache 的路径。下一个最小单元是离线冻结许可证/NOTICE 证据缺口与非实现者 evidence 复核清单；若需要联网取得 11 个 package 的上游许可证正文、NOTICE 或源码归属，必须先形成精确来源、版本、摘要、产物与网络副作用方案并单独授权。两项复核关闭前不得设计或执行 Phase B。
 
-笼统的“继续”“按计划做”或接受本文不授权 D2、Phase B、失败重试、清理、commit、push、gate/版本/provider/source/allowlist 变化和其他候选；这些始终是独立动作。
+笼统的“继续”“按计划做”或接受本文不授权 Phase B、D2 重跑、联网补证、失败重试、清理、commit、push、gate/版本/provider/source/allowlist 变化和其他候选；这些始终是独立动作。

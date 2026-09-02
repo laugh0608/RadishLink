@@ -1,6 +1,6 @@
 # SW-G2 mls-rs 0.56.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Accepted（静态门禁，2026-08-28；2026-09-02 A2 已依据 D 保留图完成包限定 feature gate 离线修订；D 保持历史 `STOP`，D2/Phase B 未授权）
+- 状态：Accepted（静态门禁，2026-08-28；2026-09-02 A2 已依据 D 保留图完成包限定 feature gate 离线修订；D 保持历史 `STOP`，D2 固定图 Phase A 已 `PASS`，人工许可证/NOTICE 与非实现者复核未完成，Phase B 禁止）
 - 资料核对日期：2026-09-02
 - 计划证据编号：`SW-EXP-003`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
@@ -24,8 +24,8 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：`mls-rs 0.56.0`、AWS-LC/SQLite provider、直接 feature、许可证/advisory/source 停止线、证据与分段授权边界；
-- 直接结果：该候选的[精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受并执行到 D；A0/A1 已实施，C 已形成 `PASS` bundle，D 在固定 94-package 图的旧 transitive feature gate 正式 `STOP`，A2 已离线修正未来 gate；
-- 保留边界：候选未形成 lockfile、完整许可证结论、Linux ARM64 实证或 ADR，不能成为默认后备路线；
+- 直接结果：该候选的[精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受并执行到 D2；A0/A1/A2/A3 已实施，C 已形成 `PASS` bundle，D 在固定 94-package 图的旧 transitive feature gate 正式 `STOP`，D2 对同一图形成正式 Phase A `PASS`；
+- 保留边界：候选已形成固定 lockfile，但完整许可证/NOTICE 结论、非实现者 evidence 复核、Linux ARM64 候选运行实证与 ADR 均未完成，不能成为默认后备路线；
 - 授权边界：本次接受只冻结静态方案，不授权 Phase A、Phase B、FFI/移动、容器、网络或清理操作。
 
 ## 2026-09-01 执行就绪差异
@@ -45,7 +45,7 @@
 
 D 保留 metadata 与 crate source 证明，当时的全局 feature 名称门禁过度约束：core 的 `rfc_compliant` 只展开为 `x509`，并不等于顶层 `mls-rs/rfc_compliant` 聚合；core 的 `fast_serialize` 只展开为 `mls-rs-codec/preallocate`，而直接 codec 依赖的默认 feature 已启用同一叶子。AWS-LC 又无条件依赖 `mls-rs-identity-x509`，后者显式启用 core `x509`；只拒绝 core alias 不能移除这些叶子或源码面。
 
-A2 因此只对固定 package/version 接受精确 core alias、解析集合与 provider dependency edge。顶层聚合 feature、provider 自身 defaults、FIPS、post-quantum、SQLCipher、FFI、第二 provider 和非 crates.io source 继续禁止。该决定不证明 X.509 身份已被产品接受，不证明预分配实现无资源风险，也不把上游“RFC compliant”名称升级为完整安全审计或互操作结论。D 的 evidence 和正式 `STOP` 不变；D2 与 Phase B 仍需另行授权。
+A2 因此只对固定 package/version 接受精确 core alias、解析集合与 provider dependency edge。顶层聚合 feature、provider 自身 defaults、FIPS、post-quantum、SQLCipher、FFI、第二 provider 和非 crates.io source 继续禁止。该决定不证明 X.509 身份已被产品接受，不证明预分配实现无资源风险，也不把上游“RFC compliant”名称升级为完整安全审计或互操作结论。D 的 evidence 和正式 `STOP` 不变；D2 随后另获单次 L3 授权并对同一固定图形成 Phase A `PASS`，但 Phase B 仍须另行设计和授权。
 
 ## 官方基线与适用限制
 
@@ -87,7 +87,7 @@ A2 因此只对固定 package/version 接受精确 core alias、解析集合与 
 
 ## Phase A：lockfile、来源、许可证与 advisory 门
 
-本节保留 2026-08-28 静态门禁的候选输入与停止线，不再作为当前可执行合同。授权拆分、候选无关 audit bundle、runtime controls、manifest/finalizer、真实 bundle ID 与唯一命令以已接受的[精确包](sw-g2-mls-rs-phase-a-authorization.md)为准；A0/A1/C 已完成，D 已在旧 feature gate 形成历史 `STOP`，A2 已离线修正未来 gate，D2 未授权。
+本节保留 2026-08-28 静态门禁的候选输入与停止线，不再作为当前可执行合同。授权拆分、候选无关 audit bundle、runtime controls、manifest/finalizer、真实 bundle ID 与唯一命令以已接受的[精确包](sw-g2-mls-rs-phase-a-authorization.md)为准；A0/A1/A2/A3/C 已完成，D 已在旧 feature gate 形成历史 `STOP`，D2 已对同一固定图形成正式 Phase A `PASS`。
 
 ### 计划入口
 
@@ -156,6 +156,6 @@ artifacts/sw-g2-mls-rs/<run-id>/
 
 Phase B 获准后才增加 scenario summary、B inventory 与各节点脱敏时间线。不得保存 endpoint database、私钥、完整 credential、随机种子原值、合成 plaintext、core dump 或敏感 debug 输出。
 
-授权必须按[精确包](sw-g2-mls-rs-phase-a-authorization.md)拆分为共享运行资源 A0、候选骨架 A1、包限定 gate A2、L3 通用 bundle C、历史 L3 Phase A D 与未来精确 D2；Phase B、FFI/移动与可选清理继续分别形成新包。任一单元不得继承相邻授权。
+授权必须按[精确包](sw-g2-mls-rs-phase-a-authorization.md)拆分为共享运行资源 A0、候选骨架 A1、包限定 gate A2、固定图消费合同 A3、L3 通用 bundle C、历史 L3 Phase A D 与固定图复核 D2；Phase B、FFI/移动与可选清理继续分别形成新包。任一单元不得继承相邻授权。
 
-本文静态候选方向与精确包均已接受并执行到 D。run `20260901-135918-13430.mvBCS2` 对固定 94-package 图形成历史 `STOP/feature-gate`；source/audit/deny 为零但 feature 为一，仓库 lockfile 未写入，也没有候选构建/运行或平台功能实证。A2 已完成包限定 gate 的离线修订，但不重写该结果。下一步只形成 D2 精确授权设计；任何运行、版本/provider/source、gate 继续变化或 lockfile 提升均需单独授权。`SW-G2` 继续保持未通过。
+本文静态候选方向与精确包均已接受并执行到 D2。run `20260901-135918-13430.mvBCS2` 对固定 94-package 图形成历史 `STOP/feature-gate`；source/audit/deny 为零但 feature 为一，A2 的包限定 gate 修订不重写该结果。D2 run `20260902-130415-49997.8P5Td6` 对同一固定图形成 schema 2/v2 正式 Phase A `PASS`，四门全零，仓库 lockfile 已提升且与 seed/evidence 一致；仍没有候选构建/运行或平台功能实证。下一步先冻结 11 个 crate archive 的许可证/NOTICE 补证与非实现者 evidence 复核清单；联网补证、D2 重跑、Phase B、版本/provider/source 或 gate 继续变化均需单独精确授权。`SW-G2` 继续保持未通过。
