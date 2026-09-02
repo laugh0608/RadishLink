@@ -584,35 +584,108 @@ evaluate_feature_gate() {
   fi
   set +e
   jq -e '
+    def crates_io: "registry+https://github.com/rust-lang/crates.io-index";
     . as $metadata
-    | ($metadata.packages | map(select(.name == "mls-rs" and .version == "0.56.0"))[0].id) as $mls_id
-    | ($metadata.packages | map(select(.name == "mls-rs-crypto-awslc" and .version == "0.25.0"))[0].id) as $awslc_id
-    | ($metadata.packages | map(select(.name == "mls-rs-provider-sqlite" and .version == "0.23.0"))[0].id) as $sqlite_id
+    | ($metadata.packages | map(select(.name == "radishlink-sw-g2-mls-rs-spike" and .version == "0.0.0" and .source == null))[0]) as $root_package
+    | ($metadata.packages | map(select(.name == "mls-rs" and .version == "0.56.0"))[0]) as $mls_package
+    | ($metadata.packages | map(select(.name == "mls-rs-core" and .version == "0.27.0"))[0]) as $core_package
+    | ($metadata.packages | map(select(.name == "mls-rs-codec" and .version == "0.7.0"))[0]) as $codec_package
+    | ($metadata.packages | map(select(.name == "mls-rs-identity-x509" and .version == "0.21.0"))[0]) as $x509_package
+    | ($metadata.packages | map(select(.name == "mls-rs-crypto-awslc" and .version == "0.25.0"))[0]) as $awslc_package
+    | ($metadata.packages | map(select(.name == "mls-rs-provider-sqlite" and .version == "0.23.0"))[0]) as $sqlite_package
+    | ($mls_package.id) as $mls_id
+    | ($core_package.id) as $core_id
+    | ($codec_package.id) as $codec_id
+    | ($x509_package.id) as $x509_id
+    | ($awslc_package.id) as $awslc_id
+    | ($sqlite_package.id) as $sqlite_id
     | ($metadata.resolve.nodes | map(select(.id == $mls_id))[0].features) as $mls_features
+    | ($metadata.resolve.nodes | map(select(.id == $core_id))[0].features) as $core_features
+    | ($metadata.resolve.nodes | map(select(.id == $codec_id))[0].features) as $codec_features
+    | ($metadata.resolve.nodes | map(select(.id == $x509_id))[0].features) as $x509_features
     | ($metadata.resolve.nodes | map(select(.id == $awslc_id))[0].features) as $awslc_features
     | ($metadata.resolve.nodes | map(select(.id == $sqlite_id))[0].features) as $sqlite_features
-    | ($metadata.packages | map(select(.name == "mls-rs" and .version == "0.56.0")) | length) == 1
+    | ($metadata.packages | map(select(.name == "radishlink-sw-g2-mls-rs-spike" and .version == "0.0.0" and .source == null)) | length) == 1
+      and ($metadata.packages | map(select(.name == "mls-rs" and .version == "0.56.0")) | length) == 1
+      and ($metadata.packages | map(select(.name == "mls-rs-core" and .version == "0.27.0")) | length) == 1
+      and ($metadata.packages | map(select(.name == "mls-rs-codec" and .version == "0.7.0")) | length) == 1
+      and ($metadata.packages | map(select(.name == "mls-rs-identity-x509" and .version == "0.21.0")) | length) == 1
       and ($metadata.packages | map(select(.name == "mls-rs-crypto-awslc" and .version == "0.25.0")) | length) == 1
       and ($metadata.packages | map(select(.name == "mls-rs-provider-sqlite" and .version == "0.23.0")) | length) == 1
-      and ($metadata.packages | map(select(.name == "mls-rs-codec" and .version == "0.7.0")) | length) == 1
       and ($metadata.packages | map(select(.name | test("^mls-rs-crypto-(awslc|openssl|rustcrypto|webcrypto)$"))) | map(.name) | unique) == ["mls-rs-crypto-awslc"]
       and ($metadata.packages | map(select(.name | test("^mls-rs-provider-"))) | map(.name) | unique) == ["mls-rs-provider-sqlite"]
-      and all($metadata.packages[]; (.source == null) or (.source == "registry+https://github.com/rust-lang/crates.io-index"))
-      and (["std", "private_message", "out_of_order", "prior_epoch", "tree_index"] - $mls_features | length) == 0
-      and ($awslc_features | index("non-fips") != null)
-      and ($sqlite_features | index("sqlite-bundled") != null)
-      and ([$mls_features[] | select(
-        . == "rfc_compliant"
-        or . == "fast_serialize"
-        or . == "rayon"
-        or . == "external_client"
-        or . == "test_util"
-        or (. | startswith("benchmark"))
-        or . == "fuzz_util"
-      )] | length) == 0
-      and ([$awslc_features[] | select(. == "fips" or . == "post-quantum")] | length) == 0
-      and ([$sqlite_features[] | select(. | startswith("sqlcipher"))] | length) == 0
-      and all($metadata.resolve.nodes[] | select(.id | contains("mls-rs"));
+      and ($metadata.packages | map(select(.name == "mls-rs-ffi" or .name == "mls-rs-uniffi")) | length) == 0
+      and all($metadata.packages[];
+        if .id == $root_package.id
+        then .source == null
+        else .source == "registry+https://github.com/rust-lang/crates.io-index"
+        end)
+      and ($mls_features | sort) == ["out_of_order", "prior_epoch", "private_message", "std", "tree_index"]
+      and ($core_features | sort) == ["default", "fast_serialize", "rfc_compliant", "std", "x509"]
+      and ($codec_features | sort) == ["default", "preallocate", "std"]
+      and ($x509_features | sort) == ["default", "std"]
+      and ($awslc_features | sort) == ["non-fips"]
+      and ($sqlite_features | sort) == ["sqlite", "sqlite-bundled"]
+      and (($core_package.features.default | sort) == ["fast_serialize", "rfc_compliant", "std"])
+      and $core_package.features.fast_serialize == ["mls-rs-codec/preallocate"]
+      and $core_package.features.rfc_compliant == ["x509"]
+      and (($codec_package.features.default | sort) == ["preallocate", "std"])
+      and $x509_package.features.default == ["std"]
+      and $awslc_package.features.default == ["non-fips"]
+      and $sqlite_package.features.default == ["sqlcipher-bundled"]
+      and ([$awslc_package.dependencies[] | select(.name == "mls-rs-core" and .kind == null)] | length) == 1
+      and ([$awslc_package.dependencies[] | select(
+        .name == "mls-rs-core"
+        and .source == crates_io
+        and .req == "^0.27.0"
+        and .kind == null
+        and .rename == null
+        and .optional == false
+        and .uses_default_features == true
+        and (.features | length) == 0
+        and .target == null
+        and .registry == null
+      )] | length) == 1
+      and ([$awslc_package.dependencies[] | select(.name == "mls-rs-identity-x509" and .kind == null)] | length) == 1
+      and ([$awslc_package.dependencies[] | select(
+        .name == "mls-rs-identity-x509"
+        and .source == crates_io
+        and .req == "^0.21.0"
+        and .kind == null
+        and .rename == null
+        and .optional == false
+        and .uses_default_features == true
+        and (.features | length) == 0
+        and .target == null
+        and .registry == null
+      )] | length) == 1
+      and ([$sqlite_package.dependencies[] | select(.name == "mls-rs-core" and .kind == null)] | length) == 1
+      and ([$sqlite_package.dependencies[] | select(
+        .name == "mls-rs-core"
+        and .source == crates_io
+        and .req == "^0.27.0"
+        and .kind == null
+        and .rename == null
+        and .optional == false
+        and .uses_default_features == true
+        and (.features | length) == 0
+        and .target == null
+        and .registry == null
+      )] | length) == 1
+      and ([$x509_package.dependencies[] | select(.name == "mls-rs-core" and .kind == null)] | length) == 1
+      and ([$x509_package.dependencies[] | select(
+        .name == "mls-rs-core"
+        and .source == crates_io
+        and .req == "^0.27.0"
+        and .kind == null
+        and .rename == null
+        and .optional == false
+        and .uses_default_features == false
+        and (.features | sort) == ["x509"]
+        and .target == null
+        and .registry == null
+      )] | length) == 1
+      and all($metadata.resolve.nodes[] | select(.id != $core_id and (.id | contains("mls-rs")));
         ([.features[] | select(
           . == "rfc_compliant"
           or . == "fast_serialize"

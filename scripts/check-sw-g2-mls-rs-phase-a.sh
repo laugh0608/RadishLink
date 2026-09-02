@@ -167,19 +167,123 @@ jq -n '
   def registry: "registry+https://github.com/rust-lang/crates.io-index";
   {
     packages: [
-      {id: "root", name: "radishlink-sw-g2-mls-rs-spike", version: "0.0.0", source: null},
-      {id: "mls", name: "mls-rs", version: "0.56.0", source: registry},
-      {id: "awslc", name: "mls-rs-crypto-awslc", version: "0.25.0", source: registry},
-      {id: "sqlite", name: "mls-rs-provider-sqlite", version: "0.23.0", source: registry},
-      {id: "codec", name: "mls-rs-codec", version: "0.7.0", source: registry}
+      {
+        id: "path#radishlink-sw-g2-mls-rs-spike@0.0.0",
+        name: "radishlink-sw-g2-mls-rs-spike",
+        version: "0.0.0",
+        source: null,
+        features: {},
+        dependencies: []
+      },
+      {
+        id: "registry#mls-rs@0.56.0",
+        name: "mls-rs",
+        version: "0.56.0",
+        source: registry,
+        features: {},
+        dependencies: []
+      },
+      {
+        id: "registry#mls-rs-core@0.27.0",
+        name: "mls-rs-core",
+        version: "0.27.0",
+        source: registry,
+        features: {
+          default: ["std", "rfc_compliant", "fast_serialize"],
+          fast_serialize: ["mls-rs-codec/preallocate"],
+          rfc_compliant: ["x509"]
+        },
+        dependencies: []
+      },
+      {
+        id: "registry#mls-rs-codec@0.7.0",
+        name: "mls-rs-codec",
+        version: "0.7.0",
+        source: registry,
+        features: {default: ["std", "preallocate"]},
+        dependencies: []
+      },
+      {
+        id: "registry#mls-rs-identity-x509@0.21.0",
+        name: "mls-rs-identity-x509",
+        version: "0.21.0",
+        source: registry,
+        features: {default: ["std"]},
+        dependencies: [{
+          name: "mls-rs-core",
+          source: registry,
+          req: "^0.27.0",
+          kind: null,
+          rename: null,
+          optional: false,
+          uses_default_features: false,
+          features: ["x509"],
+          target: null,
+          registry: null
+        }]
+      },
+      {
+        id: "registry#mls-rs-crypto-awslc@0.25.0",
+        name: "mls-rs-crypto-awslc",
+        version: "0.25.0",
+        source: registry,
+        features: {default: ["non-fips"]},
+        dependencies: [
+          {
+            name: "mls-rs-core",
+            source: registry,
+            req: "^0.27.0",
+            kind: null,
+            rename: null,
+            optional: false,
+            uses_default_features: true,
+            features: [],
+            target: null,
+            registry: null
+          },
+          {
+            name: "mls-rs-identity-x509",
+            source: registry,
+            req: "^0.21.0",
+            kind: null,
+            rename: null,
+            optional: false,
+            uses_default_features: true,
+            features: [],
+            target: null,
+            registry: null
+          }
+        ]
+      },
+      {
+        id: "registry#mls-rs-provider-sqlite@0.23.0",
+        name: "mls-rs-provider-sqlite",
+        version: "0.23.0",
+        source: registry,
+        features: {default: ["sqlcipher-bundled"]},
+        dependencies: [{
+          name: "mls-rs-core",
+          source: registry,
+          req: "^0.27.0",
+          kind: null,
+          rename: null,
+          optional: false,
+          uses_default_features: true,
+          features: [],
+          target: null,
+          registry: null
+        }]
+      }
     ],
     resolve: {
       nodes: [
-        {id: "root", features: []},
-        {id: "mls", features: ["std", "private_message", "out_of_order", "prior_epoch", "tree_index"]},
-        {id: "awslc", features: ["non-fips"]},
-        {id: "sqlite", features: ["sqlite-bundled"]},
-        {id: "codec", features: []}
+        {id: "path#radishlink-sw-g2-mls-rs-spike@0.0.0", features: []},
+        {id: "registry#mls-rs@0.56.0", features: ["std", "private_message", "out_of_order", "prior_epoch", "tree_index"]},
+        {id: "registry#mls-rs-core@0.27.0", features: ["default", "std", "rfc_compliant", "fast_serialize", "x509"]},
+        {id: "registry#mls-rs-codec@0.7.0", features: ["default", "std", "preallocate"]},
+        {id: "registry#mls-rs-identity-x509@0.21.0", features: ["default", "std"]},
+        {id: "registry#mls-rs-crypto-awslc@0.25.0", features: ["non-fips"]},
+        {id: "registry#mls-rs-provider-sqlite@0.23.0", features: ["sqlite", "sqlite-bundled"]}
       ]
     }
   }
@@ -188,9 +292,54 @@ if ! jq -e -f "${feature_filter_path}" "${feature_fixture_path}" >/dev/null; the
   echo "feature gate rejected the fixed positive fixture" >&2
   exit 1
 fi
-if jq '.resolve.nodes |= map(if .id == "awslc" then .features += ["fips"] else . end)' \
+if jq '.resolve.nodes |= map(if .id | contains("#mls-rs@0.56.0") then .features += ["rfc_compliant"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted the prohibited top-level rfc_compliant feature" >&2
+  exit 1
+fi
+if jq '.resolve.nodes |= map(if .id | contains("#mls-rs@0.56.0") then .features += ["fast_serialize"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted the prohibited top-level fast_serialize feature" >&2
+  exit 1
+fi
+if jq '.resolve.nodes |= map(if .id | contains("#mls-rs-core@0.27.0") then .features += ["serde"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted an unexpected mls-rs-core feature" >&2
+  exit 1
+fi
+if jq '.packages |= map(if .id | contains("#mls-rs-core@0.27.0") then .features.fast_serialize = ["unexpected"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted a changed fast_serialize alias" >&2
+  exit 1
+fi
+if jq '.packages |= map(if .id | contains("#mls-rs-core@0.27.0") then .features.rfc_compliant = ["unexpected"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted a changed rfc_compliant alias" >&2
+  exit 1
+fi
+if jq '.packages |= map(if .id | contains("#mls-rs-crypto-awslc@0.25.0") then .dependencies |= map(if .name == "mls-rs-core" and .kind == null then .uses_default_features = false else . end) else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted a changed AWS-LC core dependency edge" >&2
+  exit 1
+fi
+if jq '.resolve.nodes |= map(if .id | contains("#mls-rs-crypto-awslc@0.25.0") then .features += ["default"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted the AWS-LC provider default feature" >&2
+  exit 1
+fi
+if jq '.resolve.nodes |= map(if .id | contains("#mls-rs-crypto-awslc@0.25.0") then .features += ["fips"] else . end)' \
   "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
   echo "feature gate accepted the prohibited fips feature" >&2
+  exit 1
+fi
+if jq '.resolve.nodes |= map(if .id | contains("#mls-rs-crypto-awslc@0.25.0") then .features += ["post-quantum"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted the prohibited post-quantum feature" >&2
+  exit 1
+fi
+if jq '.resolve.nodes |= map(if .id | contains("#mls-rs-provider-sqlite@0.23.0") then .features += ["default", "sqlcipher-bundled"] else . end)' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted the SQLite provider default feature" >&2
   exit 1
 fi
 if jq '.packages += [{id: "other", name: "mls-rs-crypto-rustcrypto", version: "0.20.0", source: "registry+https://github.com/rust-lang/crates.io-index"}]' \
@@ -198,7 +347,17 @@ if jq '.packages += [{id: "other", name: "mls-rs-crypto-rustcrypto", version: "0
   echo "feature gate accepted a second crypto provider" >&2
   exit 1
 fi
-if jq '.packages |= map(if .id == "codec" then .source = "git+https://example.invalid/repo" else . end)' \
+if jq '.packages += [{id: "ffi", name: "mls-rs-ffi", version: "0.1.0", source: "registry+https://github.com/rust-lang/crates.io-index"}]' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted an FFI package" >&2
+  exit 1
+fi
+if jq '.packages += [{id: "path#unexpected@0.1.0", name: "unexpected-path-dependency", version: "0.1.0", source: null}]' \
+  "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
+  echo "feature gate accepted an unexpected path source" >&2
+  exit 1
+fi
+if jq '.packages |= map(if .id | contains("#mls-rs-codec@0.7.0") then .source = "git+https://example.invalid/repo" else . end)' \
   "${feature_fixture_path}" | jq -e -f "${feature_filter_path}" >/dev/null; then
   echo "feature gate accepted a git source" >&2
   exit 1

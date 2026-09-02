@@ -1,7 +1,7 @@
 # SW-G2 mls-rs 0.56.0 受限 spike 静态门禁与执行授权包
 
-- 状态：Accepted（静态门禁，2026-08-28；2026-09-01 [精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受且 A0/A1 已离线实施；候选未下载、构建或运行）
-- 资料核对日期：2026-08-28
+- 状态：Accepted（静态门禁，2026-08-28；2026-09-02 A2 已依据 D 保留图完成包限定 feature gate 离线修订；D 保持历史 `STOP`，D2/Phase B 未授权）
+- 资料核对日期：2026-09-02
 - 计划证据编号：`SW-EXP-003`
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
 
@@ -24,7 +24,7 @@
 - 结论：Accepted；
 - 日期：2026-08-28；
 - 接受范围：`mls-rs 0.56.0`、AWS-LC/SQLite provider、直接 feature、许可证/advisory/source 停止线、证据与分段授权边界；
-- 直接结果：该候选的[精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受并执行到 D；A0/A1 已实施，C 已形成 `PASS` bundle，D 在固定 94-package 图的 transitive feature gate 正式 `STOP`；
+- 直接结果：该候选的[精确实施与 Phase A 包](sw-g2-mls-rs-phase-a-authorization.md)已接受并执行到 D；A0/A1 已实施，C 已形成 `PASS` bundle，D 在固定 94-package 图的旧 transitive feature gate 正式 `STOP`，A2 已离线修正未来 gate；
 - 保留边界：候选未形成 lockfile、完整许可证结论、Linux ARM64 实证或 ADR，不能成为默认后备路线；
 - 授权边界：本次接受只冻结静态方案，不授权 Phase A、Phase B、FFI/移动、容器、网络或清理操作。
 
@@ -39,7 +39,13 @@
 5. manifest 只要求达到旧 `SW-EXP-002` schema 2，缺少独立固定 renderer、原子 finalizer、失败传播、输入摘要、运行控制、gate exit code 与 checksum 自校验合同；
 6. 2026-08-28 的直接依赖、feature、provider/storage 组合与上游元数据尚未形成 lockfile；任何版本或 feature 调整都必须先回到静态差异评审，不能在首次 L3 run 中边解析边放宽。
 
-上述差异已由接受后的精确包关闭到可分段实施状态；A0/A1 已形成 clean revision，C 已按独立授权完成。D 的固定图证明顶层 feature 精确匹配，但两个 provider 对 `mls-rs-core 0.27.0` 的默认依赖实际启用 `fast_serialize` 与 `rfc_compliant`，违反已接受 gate；正式结果为 `STOP`，不得自动放宽或重跑。
+上述差异已由接受后的精确包关闭到可分段实施状态；A0/A1 已形成 clean revision，C 已按独立授权完成。D 的固定图证明顶层 feature 精确匹配，但两个 provider 对 `mls-rs-core 0.27.0` 的默认依赖实际启用 `fast_serialize` 与 `rfc_compliant`，违反当时按名称全局拒绝的 gate；正式结果为历史 `STOP`，不得自动重跑。
+
+## 2026-09-02 package-qualified gate 决定
+
+D 保留 metadata 与 crate source 证明，当时的全局 feature 名称门禁过度约束：core 的 `rfc_compliant` 只展开为 `x509`，并不等于顶层 `mls-rs/rfc_compliant` 聚合；core 的 `fast_serialize` 只展开为 `mls-rs-codec/preallocate`，而直接 codec 依赖的默认 feature 已启用同一叶子。AWS-LC 又无条件依赖 `mls-rs-identity-x509`，后者显式启用 core `x509`；只拒绝 core alias 不能移除这些叶子或源码面。
+
+A2 因此只对固定 package/version 接受精确 core alias、解析集合与 provider dependency edge。顶层聚合 feature、provider 自身 defaults、FIPS、post-quantum、SQLCipher、FFI、第二 provider 和非 crates.io source 继续禁止。该决定不证明 X.509 身份已被产品接受，不证明预分配实现无资源风险，也不把上游“RFC compliant”名称升级为完整安全审计或互操作结论。D 的 evidence 和正式 `STOP` 不变；D2 与 Phase B 仍需另行授权。
 
 ## 官方基线与适用限制
 
@@ -64,23 +70,24 @@
 | `mls-rs` | `=0.56.0` | `default-features = false`；只启用 `std`、`private_message`、`out_of_order`、`prior_epoch`、`tree_index` |
 | `mls-rs-crypto-awslc` | `=0.25.0` | `default-features = false`；只启用 `non-fips` |
 | `mls-rs-provider-sqlite` | `=0.23.0` | `default-features = false`；只启用 `sqlite-bundled` |
-| `mls-rs-codec` | `=0.7.0` | 标准 MLS 对象编码与解析 |
+| `mls-rs-codec` | `=0.7.0` | 标准 MLS 对象编码与解析；无显式 feature，crate default 解析为 `std/preallocate` |
 | `serde` | `=1.0.229` | 只用于脱敏证据结构 |
 | `serde_json` | `=1.0.151` | 只用于 manifest/summary 输出 |
 | `tempfile` | `=3.27.0` | 仅 dev dependency，隔离测试状态 |
 
-首轮不启用：
+直接 manifest 与解析图边界如下：
 
-- `rfc_compliant` 聚合 feature，因为它会连带启用本轮不使用的 X.509 等功能；实际能力缺口逐项记录，不能借 feature 名称宣称 RFC 全面互操作；
-- `fast_serialize`、`rayon`、`external_client`、`serde`、`sqlcipher*`、`test_util`、`benchmark*`、`fuzz_util`、`post-quantum` 或 `fips`；
+- 顶层 `mls-rs/rfc_compliant` 聚合 feature 不启用，因为它会连带启用本轮未接受的功能；实际能力缺口逐项记录，不能借 feature 名称宣称 RFC 全面互操作；
+- 顶层 `mls-rs/fast_serialize`、`rayon`、`external_client`、`serde`、`sqlcipher*`、`test_util`、`benchmark*`、`fuzz_util` 不启用；AWS-LC provider 只解析 `non-fips`，SQLite provider 只解析 `sqlite/sqlite-bundled`，不得解析各自 `default`、`post-quantum`、`fips` 或 `sqlcipher*`；
+- 固定传递图允许 `mls-rs-core 0.27.0` 精确解析 `default/std/rfc_compliant/fast_serialize/x509`，只因其 alias 分别精确展开为 `x509` 与 `mls-rs-codec/preallocate`；codec 精确解析 `default/std/preallocate`，identity-x509 精确解析 `default/std`。上述任一集合、alias 或 provider dependency edge 漂移都 `STOP`；
 - `cfg(mls_build_async)`；首轮只比较同步、单进程命令入口，不把异步模式缺口隐藏在运行差异中；
 - `mls-rs-ffi` 或 `mls-rs-uniffi`；移动接口在核心 Linux ARM64 状态安全通过后形成独立依赖图和授权。
 
-首轮 cipher suite 固定为 `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`。身份使用合成 A/C 标识和最小自定义 `IdentityProvider`；不得把显示名当 credential，不启用 X.509，也不生成真实设备身份。SQLite 只验证 provider 的状态接口，不等于覆盖层消息、去重、receipt 和 MLS 状态已经处于同一事务。
+首轮 cipher suite 固定为 `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`。身份使用合成 A/C 标识和最小自定义 `IdentityProvider`；不得把显示名当 credential，不选择或验证 X.509 credential，也不生成真实设备身份。固定 provider 图包含 X.509 支持代码面，因此自定义 `IdentityProvider` 必须显式拒绝未批准的 X.509 credential；是否要求最终二进制移除该代码面属于新的 provider/source 评审。SQLite 只验证 provider 的状态接口，不等于覆盖层消息、去重、receipt 和 MLS 状态已经处于同一事务。
 
 ## Phase A：lockfile、来源、许可证与 advisory 门
 
-本节保留 2026-08-28 静态门禁的候选输入与停止线，不再作为当前可执行合同。授权拆分、候选无关 audit bundle、runtime controls、manifest/finalizer、真实 bundle ID 与唯一命令以已接受的[精确包](sw-g2-mls-rs-phase-a-authorization.md)为准；A0/A1/C 已完成，D 已在 feature gate `STOP`。
+本节保留 2026-08-28 静态门禁的候选输入与停止线，不再作为当前可执行合同。授权拆分、候选无关 audit bundle、runtime controls、manifest/finalizer、真实 bundle ID 与唯一命令以已接受的[精确包](sw-g2-mls-rs-phase-a-authorization.md)为准；A0/A1/C 已完成，D 已在旧 feature gate 形成历史 `STOP`，A2 已离线修正未来 gate，D2 未授权。
 
 ### 计划入口
 
@@ -149,6 +156,6 @@ artifacts/sw-g2-mls-rs/<run-id>/
 
 Phase B 获准后才增加 scenario summary、B inventory 与各节点脱敏时间线。不得保存 endpoint database、私钥、完整 credential、随机种子原值、合成 plaintext、core dump 或敏感 debug 输出。
 
-授权必须按[精确包](sw-g2-mls-rs-phase-a-authorization.md)拆分为共享运行资源 A0、候选骨架 A1、L3 通用 bundle C、L3 Phase A D；Phase B、FFI/移动与可选清理继续分别形成新包。任一单元不得继承相邻授权。
+授权必须按[精确包](sw-g2-mls-rs-phase-a-authorization.md)拆分为共享运行资源 A0、候选骨架 A1、包限定 gate A2、L3 通用 bundle C、历史 L3 Phase A D 与未来精确 D2；Phase B、FFI/移动与可选清理继续分别形成新包。任一单元不得继承相邻授权。
 
-本文静态候选方向与精确包均已接受并执行到 D。run `20260901-135918-13430.mvBCS2` 对固定 94-package 图形成 `STOP/feature-gate`；source/audit/deny 为零但 feature 为一，仓库 lockfile 未写入，也没有候选构建/运行或平台功能实证。下一步只读评审该 provider/core feature 不兼容；`SW-G2` 继续保持未通过。
+本文静态候选方向与精确包均已接受并执行到 D。run `20260901-135918-13430.mvBCS2` 对固定 94-package 图形成历史 `STOP/feature-gate`；source/audit/deny 为零但 feature 为一，仓库 lockfile 未写入，也没有候选构建/运行或平台功能实证。A2 已完成包限定 gate 的离线修订，但不重写该结果。下一步只形成 D2 精确授权设计；任何运行、版本/provider/source、gate 继续变化或 lockfile 提升均需单独授权。`SW-G2` 继续保持未通过。

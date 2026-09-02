@@ -1,7 +1,7 @@
 # SW-EXP-003 mls-rs 0.56.0 实施与 Phase A 精确授权包
 
-- 状态：Accepted（2026-09-01；A0/A1 已分别形成 clean revision，单元 C 已复核 `PASS`；单元 D 在固定 94-package 图的 transitive feature gate 正式 `STOP`，Phase B 禁止）
-- 日期：2026-09-01
+- 状态：Accepted（2026-09-02；A0/A1 已分别形成 clean revision，单元 C 已复核 `PASS`；单元 D 在旧 transitive feature gate 正式 `STOP`，A2 已离线改为包限定 gate；D2 与 Phase B 均未授权）
+- 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置门禁：[mls-rs 0.56.0 静态门禁](sw-g2-mls-rs-spike-authorization.md)已接受候选方向，执行就绪差异待本包关闭
 - 适用决策：[SW-G2 E2EE 与身份候选决策包](../security/e2ee-sw-g2-decision-package.md)
@@ -14,11 +14,12 @@
 
 1. **共享运行资源单元 A0**：离线实现候选无关的运行 monitor、固定审计工具 bundle builder、独立 manifest filter 与 self-test；
 2. **mls-rs Phase A 骨架单元 A1**：离线新增固定 crate 输入、拒绝 Phase B 的入口、受限 runner、候选 manifest filter 与 self-test；
-3. **L3 通用审计工具 bundle 单元 C**：在 A0 clean revision 上构建一次固定 `cargo-audit` / `cargo-deny` bundle，并以无网络容器验证版本；
-4. **L3 mls-rs Phase A 单元 D**：在 A1 clean revision 上只读消费一个精确、已复核的通用 bundle，生成独立 lockfile 并执行完整 gates；
-5. **Phase B**：只有 D 完整 `PASS`、许可证人工复核与非实现者证据复核都通过后，才另建精确包；当前不存在实现或执行授权。
+3. **mls-rs 包限定 feature gate 单元 A2**：依据 D 的保留 metadata 与 crate source，离线把按 feature 名称全局拒绝改为固定 package/版本、解析集合、alias 展开和 provider 依赖边联合判定；
+4. **L3 通用审计工具 bundle 单元 C**：在 A0 clean revision 上构建一次固定 `cargo-audit` / `cargo-deny` bundle，并以无网络容器验证版本；
+5. **L3 mls-rs Phase A 单元 D**：在 A1 clean revision 上只读消费一个精确、已复核的通用 bundle，生成独立 lockfile 并执行完整 gates；
+6. **Phase B**：只有未来获授权的 Phase A 完整 `PASS`、许可证人工复核与非实现者证据复核都通过后，才另建精确包；当前不存在实现或执行授权。
 
-本文的接受只冻结精确方案，不自动授权任何实施单元。A0 与 A1 已分别获得一次明确授权并离线实施；A0 不包含 A1，A0/A1 不包含 commit，C 不包含 D，任一 L3 授权不包含失败重试、Phase B、清理、push 或其他候选。
+本文的接受只冻结精确方案，不自动授权任何实施单元。A0、A1 与 A2 已分别获得一次明确授权并离线实施；A2 不重写 D 的历史 `STOP`，也不包含 D2、Cargo、Docker、网络、lockfile 提升、commit 或 Phase B。C 不包含 D，任一 L3 授权不包含失败重试、Phase B、清理、push 或其他候选。
 
 ## 固定基线
 
@@ -31,12 +32,19 @@
 | `mls-rs` | `=0.56.0` | `default-features = false`；`std`、`private_message`、`out_of_order`、`prior_epoch`、`tree_index` |
 | `mls-rs-crypto-awslc` | `=0.25.0` | `default-features = false`；`non-fips` |
 | `mls-rs-provider-sqlite` | `=0.23.0` | `default-features = false`；`sqlite-bundled` |
-| `mls-rs-codec` | `=0.7.0` | 无额外 feature |
+| `mls-rs-codec` | `=0.7.0` | 无显式 feature；保留 crate 默认，解析必须精确为 `default/std/preallocate` |
 | `serde` | `=1.0.229` | 无额外 feature；仅保留已接受的脱敏 evidence dependency |
 | `serde_json` | `=1.0.151` | 无额外 feature |
 | `tempfile` | `=3.27.0` | 仅 dev dependency |
 
-不得启用 `rfc_compliant`、`fast_serialize`、`rayon`、`external_client`、`sqlcipher*`、`test_util`、`benchmark*`、`fuzz_util`、`post-quantum`、`fips`、FFI/UniFFI 或 `cfg(mls_build_async)`。不得在运行中放宽版本范围、运行 `cargo update`、换 provider、加入 prerelease 或用 feature fallback 猜测可用组合。
+顶层 `mls-rs 0.56.0` 仍不得启用 `rfc_compliant`、`fast_serialize`、`rayon`、`external_client`、`test_util`、`benchmark*` 或 `fuzz_util`；AWS-LC provider 自身只允许 `non-fips`，不得解析出 `default`、`fips` 或 `post-quantum`；SQLite provider 自身只允许 `sqlite/sqlite-bundled`，不得解析出 `default` 或 `sqlcipher*`。FFI/UniFFI 与 `cfg(mls_build_async)` 继续禁止。
+
+固定传递图只包限定接受以下集合与展开，不构成同名 feature 的通用 allowlist：
+
+- `mls-rs-core 0.27.0` 解析 feature 必须精确为 `default/std/rfc_compliant/fast_serialize/x509`；其 `default` 必须仍精确展开为 `std/rfc_compliant/fast_serialize`，`rfc_compliant` 只能展开为 `x509`，`fast_serialize` 只能展开为 `mls-rs-codec/preallocate`；
+- `mls-rs-codec 0.7.0` 必须精确为 `default/std/preallocate`；`mls-rs-identity-x509 0.21.0` 必须精确为 `default/std`；
+- AWS-LC 与 SQLite 对 core 的 normal dependency 必须继续使用 core defaults；AWS-LC 对 `mls-rs-identity-x509` 的 normal dependency 必须继续使用该 crate defaults，identity crate 对 core 必须继续以 `default-features = false` 只启用 `x509`；
+- 任何上述固定 package/version、解析集合、alias、provider dependency edge、provider、source 或禁止 feature 变化都 `STOP`。不得在运行中放宽版本范围、运行 `cargo update`、换 provider、加入 prerelease 或用 feature fallback 猜测可用组合。
 
 ### 镜像、平台与审计工具
 
@@ -132,9 +140,51 @@ runner 无参数、缺 bundle ID、未知 action、`run`、`phase-b`、latest/�
 
 2026-09-01 已按单次明确授权完成 A1：新增精确 crate manifest、无 advisory/license/source 例外的 `deny.toml`、始终以 `2` 拒绝场景命令的 `main.rs`、只允许 `prepare <bundle-id>` 的 Phase A runner、schema 1 / `sw-g2-candidate-phase-a-v1` renderer 与综合离线 checker。
 
-runner 固定只读消费 `sw-g2-rust-audit-tools-v1`，在 future D 中只允许生成/下载/审计依赖图，不编译或运行 MLS/AWS-LC/SQLite；source 与 feature 均为零后才原子提升 lockfile，任何 gate、运行控制、finalizer 或精确残留异常都保留真实 `STOP/INVALID`。离线 checker 已覆盖精确 TOML/feature/allowlist、唯一文件集、Phase B 硬拒绝、bundle contract、容器限制、manifest renderer、无参数/缺 bundle/未知 action/`run`/`phase-b`/latest/路径选择器，以及 `fips`、第二 crypto provider、git source 三类负例。
+runner 固定只读消费 `sw-g2-rust-audit-tools-v1`，在当时 D 与未来另获授权的 D2 中只允许生成/下载/审计依赖图，不编译或运行 MLS/AWS-LC/SQLite；source 与 feature 均为零后才原子提升 lockfile，任何 gate、运行控制、finalizer 或精确残留异常都保留真实 `STOP/INVALID`。A1 离线 checker 当时已覆盖精确 TOML/feature/allowlist、唯一文件集、Phase B 硬拒绝、bundle contract、容器限制、manifest renderer、参数/selector，以及 `fips`、第二 crypto provider、git source 负例；A2 在此基础上扩充包限定解析图负例。
 
 A1 没有新增 `Cargo.lock`，没有执行 runner `prepare`，没有创建 `artifacts/sw-g2-mls-rs/`，没有调用 Docker、Cargo 或网络，也没有构建/运行候选或修改 OpenMLS 历史实现。A1 实施授权本身不包含 commit；提交动作随后另获明确授权并形成 D 要求的 A1 clean revision，没有 push。
+
+## 单元 A2：包限定 feature gate 离线修订
+
+### 决策依据
+
+D 的保留 metadata、feature tree 与 crates.io source 证明，旧 gate 按 feature 名称扫描全部 `mls-rs*` package，混淆了顶层聚合 feature 与 core 同名 alias：
+
+- `mls-rs-core 0.27.0/rfc_compliant` 只展开为 `x509`，不是顶层 `mls-rs 0.56.0/rfc_compliant` 对 `private_message/custom_proposal/out_of_order/psk/x509/prior_epoch/by_ref_proposal` 的聚合；
+- `mls-rs-core 0.27.0/fast_serialize` 只展开为 `mls-rs-codec/preallocate`；直接依赖 `mls-rs-codec =0.7.0` 已通过 crate 默认 feature 启用同一叶子；
+- AWS-LC 无条件依赖 `mls-rs-identity-x509`，后者已显式启用 `mls-rs-core/x509`。只禁止 core alias 不会从固定图移除 X.509 叶子或 AWS-LC 的 X.509 源码面。
+
+因此，A2 接受的是固定 package/version 下的精确 alias 与已存在叶子，不接受顶层同名 feature，不接受 provider 自身 defaults，也不把“RFC compliant”名称升级为完整互操作或安全结论。若未来要求最终二进制不含 X.509 面，或拒绝 codec 预分配路径，必须另行评审 provider/manifest/source；不得借 A2 推导。
+
+语义与风险边界同时冻结：core `fast_serialize` 只是映射 codec `preallocate`；它让 `mls_encode_to_vec` 按 `mls_encoded_len` 预分配，并让 collection 迭代编码先计算长度、写长度前缀、`reserve` 后直接编码，以避免中间 buffer。在所有 `MlsSize` 实现正确时线格式不变，但自定义实现的长度不一致会让长度前缀与实际编码不一致，整数边界、容量溢出和输入驱动分配仍需负例/资源测试；现有证据不能把它写成已证明安全或已知漏洞。core `rfc_compliant` 只是编译 X.509 credential 支持；它不会替应用选择 credential、完成 Authentication Service 绑定或证明跨实现互操作，自定义 `IdentityProvider` 仍须拒绝未批准的 X.509。精确 alias gate 会在上游 feature/依赖边重构时 fail closed，维护代价是每次版本变化都重新核对 source 与固定图，而不是沿用名称放行。
+
+### 允许范围
+
+| 路径 | 允许内容 |
+| --- | --- |
+| `scripts/run-sw-g2-mls-rs-spike.sh` | 将 feature gate 改为固定 package/version、解析集合、alias 展开与 provider dependency edge 联合判定 |
+| `scripts/check-sw-g2-mls-rs-phase-a.sh` | 扩充真实结构 fixture 与顶层同名 feature、core 意外 feature/alias、provider dependency edge、provider default、FIPS/PQ/SQLCipher、FFI、第二 provider、path/git source 负例 |
+| mls-rs 两份授权包、安全候选/决策包、状态/计划与文档索引 | 同步 A2 结论、历史 D 边界与 D2/Phase B 停止线 |
+
+A2 不修改 `tools/spikes/sw-g2-mls-rs/Cargo.toml`、`deny.toml`、manifest schema/filter、版本、provider、source、allowlist 或历史 evidence；不生成或提升 `Cargo.lock`，不调用 Docker/Cargo/网络，不重跑 D，不进入 Phase B，也不 commit 或 push。
+
+### A2 离线验证
+
+```bash
+bash -n scripts/run-sw-g2-mls-rs-spike.sh
+bash -n scripts/check-sw-g2-mls-rs-phase-a.sh
+./scripts/check-sw-g2-mls-rs-phase-a.sh
+./scripts/check-repo.sh
+git diff --check
+```
+
+另以同一抽取 gate 对 D 保留的 `cargo-metadata.json` 做一次只读回归；该回归只证明新谓词识别既有固定图，不改变 D 的 manifest、checksum、退出码或历史 `STOP`。
+
+### A2 实施结果
+
+2026-09-02 已按单次明确授权完成 A2。runner 现在只对固定 package/version 接受上述 core/codec/X.509 alias 与解析集合，并同时冻结 AWS-LC/SQLite provider 自身解析集合、core/X.509 normal dependency edge、唯一 provider、唯一 root path source、其余全 crates.io source 和 FFI 禁止线；顶层同名 feature、provider default、FIPS、post-quantum、SQLCipher、额外 core feature、alias/依赖边漂移、第二 provider 与额外 path/git source 负例继续拒绝。
+
+两个 shell 语法检查、综合离线 checker、D 保留 metadata 的只读 gate 回归、仓库门禁与 diff 检查均通过。没有调用 Docker、Cargo 或网络，没有修改历史 evidence、crate manifest、版本、provider、source、allowlist 或 manifest schema，没有生成/提升 lockfile、重跑 D、进入 Phase B、commit 或 push。
 
 ## 单元 C：通用固定审计工具 bundle
 
@@ -163,22 +213,22 @@ C 成功后必须记录唯一 bundle ID，并在工作区保持干净的情况�
 
 monitor 记录 `206562 ms`、峰值 `1358459 KiB`，未触发 90 分钟或 5 GiB 停止线；原始 runtime control 以父进程正常请求停止记录 `runner_requested_stop`，成功 finalizer 在 manifest 中登记 `completed`。工作区前后干净，精确 run label 的独立查询残留为零。约 `1337960 KiB` evidence、`.work`/cache 与 fixed image 默认保留；没有下载 mls-rs/AWS-LC/SQLite 候选、生成候选 lockfile、执行 D/Phase B、commit、push 或清理。
 
-## 单元 D：mls-rs Phase A
+## 单元 D：mls-rs Phase A（历史授权与结果）
 
-D 只有在以下值全部实际存在并写入当次授权说明后才能申请：
+D 的原授权只有在以下值全部实际存在并写入当次授权说明后才能申请：
 
 - A1 clean revision 的完整 commit；
 - C 的精确 bundle ID、`sw-g2-rust-audit-tools-v1` manifest SHA-256、两个工具版本与二进制 SHA-256；
 - clean worktree、固定 image/platform 与输入摘要；
 - 唯一命令中的真实 `<bundle-id>`，不得使用 placeholder、latest、其他路径或自动发现。
 
-未来唯一命令形态为：
+D 当时冻结的唯一命令形态为：
 
 ```bash
 ./scripts/run-sw-g2-mls-rs-spike.sh prepare <bundle-id>
 ```
 
-本文当前仍含 placeholder，因此不能据此执行 D。
+真实 bundle ID 已在 D 的单独执行授权中给出并消费；本节只保留历史合同，不构成 D2 或任何重跑授权。
 
 ### D 的动作
 
@@ -252,8 +302,8 @@ manifest 使用 schema 1 / `sw-g2-candidate-phase-a-v1`，至少记录：candida
 
 ## 当前停止点与后续授权
 
-精确包已接受并执行到 D；固定 94-package 图已形成完整 source/audit/deny 结果和正式 `STOP/feature-gate`。仓库 mls-rs lockfile 未生成，Phase B 未执行且继续禁止。
+精确包已执行到 D；固定 94-package 图已形成完整 source/audit/deny 结果和正式历史 `STOP/feature-gate`。A2 只修正未来 gate 的包限定语义，不改写 D 的 manifest、checksum、退出码或结论。仓库 mls-rs lockfile 未生成，Phase B 未执行且继续禁止。
 
-单元 D 负向结果已另获提交授权并形成 clean revision。下一步只读判断“继续禁止 core 默认 feature”“接受这些 feature”“更换/patch provider”或“关闭 mls-rs 候选”哪一条进入新设计。任一 gate、版本、provider、source 或运行变化都必须重新评审并单独授权。
+推荐保留 `mls-rs 0.56.0 + AWS-LC 0.25.0 + SQLite 0.23.0` 候选，不 patch/fork 或更换 provider；下一个最小单元只能是 D2 的精确授权设计。D2 必须先冻结是从不含仓库 lockfile 的原 manifest 全新解析，还是只读消费并验证 D 保留的 lockfile，并明确新 run ID、网络/cache、RustSec revision、gate 版本、lockfile 提升条件、历史 evidence 不变性、失败保留与零残留；未选择并接受该方案前不得执行。
 
-笼统的“继续”“按计划做”或接受本文不授权 D 重试或修订。Phase B、失败重试、清理、commit、push、gate/版本/provider/source/allowlist 变化和其他候选始终是独立动作。
+笼统的“继续”“按计划做”或接受本文不授权 D2、Phase B、失败重试、清理、commit、push、gate/版本/provider/source/allowlist 变化和其他候选；这些始终是独立动作。
