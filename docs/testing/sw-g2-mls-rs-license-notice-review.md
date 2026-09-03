@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包
 
-- 状态：Proposed（2026-09-03；R0/helper 已形成；首次 R1 与 R1b 均为有效 `STOP/license-evidence`（不同 raw 文件 `TimeoutError`）；R1c 仅完成替代传输设计，实施、运行、R2、结果收口与 Phase B 均未授权）
+- 状态：Proposed（2026-09-03；R0、R1/R1b、R1c-I 与 R1c-R 已完成；R1c-R 以完整 schema 2 mapping 形成有效 `STOP/license-evidence`，固定 tree 对 `debug_tree` 与 `r-efi` 的声明正文覆盖不足；这不是许可证不存在、法律违规或候选淘汰结论；R2 与 Phase B 禁止）
 - 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置结果：[mls-rs 0.56.0 实施与 Phase A 精确授权包](sw-g2-mls-rs-phase-a-authorization.md)的 D2 固定 94-package 图已正式 `PASS`
@@ -21,12 +21,12 @@
 2. **R1：受限联网补证**：在 R0 形成 clean revision 后，仅访问本文列出的三个 GitHub 仓库和六个不可变 commit，产生新的许可证评审 evidence；不得修改 D/D2 evidence、依赖图、gate、provider 或 source。首次授权已于 2026-09-03 消费，因 `TimeoutError` 形成有效 `STOP/license-evidence`。
 3. **R1b：单次全新补证**：只在首次 R1 结果已记录并形成新的 clean revision 后，使用同一 helper、host/commit/file selector 与资源边界从头产生独立 run；不得复用首次 run 的 partial 文件或隐藏其结果。单次授权已于 2026-09-03 消费，因另一个 raw 文件的 `TimeoutError` 形成第二份有效 `STOP/license-evidence`。
 4. **R1c-P：替代传输设计**：记录 R1b 并精确设计以同一 commit tree blob SHA 和 Git Blobs API 取回同一文件正文；不改变 package、repository、commit、path selector、许可证判定或依赖 source。本单元仅修改文档，已按单次授权实施。
-5. **R1c-I：离线实施与验证**：只在 R1c-P 形成 clean revision 后修改 helper/checker、schema 与 synthetic fixture；不得联网或创建 run。当前未授权。
-6. **R1c-R：单次替代传输补证**：只在 R1c-I 经验证并形成新的 clean revision 后，以冻结 helper/checker SHA 和唯一命令从头产生第三个独立 run；不得复用前两次 partial。当前未授权。
-7. **R2：非实现者复核**：仅在某次 R1 形成有效完整 `PASS` 后，由符合独立性条件的复核者只读检查 D2、全部 R1 run 与仓库 lockfile，另存复核记录；当前执行者不能自我关闭该门禁。当前未授权。
-8. **结果收口**：只有完整 R1 与 R2 均有效 `PASS` 后，才可另行授权把结论同步到状态和决策文档。该动作也不授权 Phase B；Phase B 必须另建精确设计、实施与 L3 运行包。
+5. **R1c-I：离线实施与验证**：只在 R1c-P 形成 clean revision 后修改 helper/checker、schema 与 synthetic fixture；不得联网或创建 run。2026-09-03 已按单次授权完成并形成 clean revision `f9f02b3a8d1e3cc438a2a20bc404bfbb9273b1a7`。
+6. **R1c-R：单次替代传输补证**：只在 R1c-I 经验证并形成新的 clean revision 后，以冻结 helper/checker SHA 和唯一命令从头产生第三个独立 run；不得复用前两次 partial。2026-09-03 的单次 L3 授权已消费，结果为有效 `STOP/license-evidence`。
+7. **R2：非实现者复核**：仅在某次 R1 形成有效完整 `PASS` 后，由符合独立性条件的复核者只读检查 D2、全部 R1 run 与仓库 lockfile，另存复核记录；当前执行者不能自我关闭该门禁。R1c-R 未形成 `PASS`，因此 R2 不具备前置条件且未授权。
+8. **最终结果收口**：只有完整 R1 与 R2 均有效 `PASS` 后，才可另行授权把候选结论同步到决策文档。中间 `STOP` 必须如实同步当前状态，但不构成候选采用或淘汰；Phase B 必须另建精确设计、实施与 L3 运行包。
 
-笼统的“继续”“按计划做”或接受本文不授权 R1c-I、R1c-R、R2、联网、创建新 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/依赖 source/allowlist 变化或其他候选。
+笼统的“继续”“按计划做”或接受本文不授权第四次联网运行、R2、创建或修改 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/依赖 source/allowlist 变化、上游联系或其他候选。
 
 ## 固定 D2 基线
 
@@ -128,9 +128,9 @@ artifacts/sw-g2-mls-rs-license-review/<run-id>/
 
 ### R1 helper 冻结状态
 
-2026-09-03 已离线形成 `scripts/run-sw-g2-mls-rs-license-review.py` 与 `scripts/check-sw-g2-mls-rs-license-review.sh`，当前全文 SHA-256 分别为 `a980c2953a3dd3c1feb7780d534f2875fa14588fe0a2acb0054995a212fe1b54` 与 `0e6cb4017cf17791deea27954951df8377c38a76f6fb23e23e9eee6afa8a87a8`。helper 在任何 artifact 或网络请求前要求显式 40 位 clean revision、R0 revision 为其祖先，并逐项复核 D2 manifest/checksum/三份 lock、94-package metadata、11 个 archive checksum/Cargo/vcs provenance 和上述两个 archive 内文件事实；请求使用关闭 proxy/redirect 的 Python 标准库匿名 HTTPS，仅动态放行由六个固定 commit、验证 tree SHA 与 tree path 派生的 URL。
+2026-09-03 首版 schema 1 helper/checker 的 SHA-256 分别为 `a980c2953a3dd3c1feb7780d534f2875fa14588fe0a2acb0054995a212fe1b54` 与 `0e6cb4017cf17791deea27954951df8377c38a76f6fb23e23e9eee6afa8a87a8`，对应首次 R1/R1b 历史运行。R1c-I 在 clean revision `f9f02b3a8d1e3cc438a2a20bc404bfbb9273b1a7` 上把 `scripts/run-sw-g2-mls-rs-license-review.py` 与 `scripts/check-sw-g2-mls-rs-license-review.sh` 的当前 SHA-256 冻结为 `e9e3c68c566993fda09a4822023537c3a3d4310719a1aa68ef64a3359f03b40b` 与 `78cd343d89db1c1d5303cc7a085de93d0ba176ee59387d55f9598c7a56bc5092`。helper 在任何 artifact 或网络请求前仍要求显式 40 位 clean revision、R0 revision 为其祖先，并逐项复核 D2 manifest/checksum/三份 lock、94-package metadata、11 个 archive checksum/Cargo/vcs provenance 和上述两个 archive 内文件事实。
 
-离线 checker 复核固定 11 package/3 repository/6 commit、40 请求/50 MiB 下载/100 MiB evidence/600 秒上限、D2 32 项 checksum 和 retained archive；synthetic fixture 覆盖正确 mapping、错误 commit、截断 tree、不安全路径、重定向、HTML/NUL/LFS/可执行响应拒绝及 checksum 篡改。无参数、未知 action、非法 revision 和不匹配 revision 均在 artifact/network 前拒绝。首次 R1 的唯一命令固定为 `python3 scripts/run-sw-g2-mls-rs-license-review.py collect 30a5665ee74d04e20d94c05280747ef8ec2b9df0`；其单次授权与结果见下节。
+当前 helper 只允许关闭 proxy/redirect 的 Python 标准库匿名 HTTPS 访问 `api.github.com`，按验证后的 tree entry blob SHA 派生 Git Blobs API URL；严格复核 `100644`/`blob`、entry SHA/size/URL、envelope `.sha`/`.encoding`/`.content`/`.size`、严格 base64、decoded size、Git blob SHA-1、decoded SHA-256 与 evidence checksum。新 run 使用 schema 2 / `sw-g2-mls-rs-license-review-v2`，checker 按 schema 分派并继续复核两份历史 schema 1 `STOP`；synthetic fixture 覆盖 R1c-P 冻结的 blob identity、encoding/base64/size/Git SHA-1、URL/mode、响应类型、decoded 内容、checksum 篡改与 schema 1 回归负例。无参数、未知 action、非法 revision 和不匹配 revision 均在 artifact/network 前拒绝。
 
 ### 首次 R1 结果
 
@@ -162,7 +162,17 @@ Git Blobs API 响应必须是 JSON object，`.sha` 与 tree entry blob SHA 逐�
 
 R1c-I 应把新 run 升级为 schema 2 / `sw-g2-mls-rs-license-review-v2`，旧 R1/R1b schema 1 evidence 原样保留。checker 必须按 manifest schema 分派：继续逐项接受并复核两份既有 schema 1 `STOP`，对 schema 2 只允许 Git Blobs API transport，并验证上述 tree-entry/blob/envelope/decoded 链。synthetic fixture 至少覆盖正确 blob、错误 tree blob SHA、错误响应 `.sha`、非 `base64` encoding、非法 base64、decoded size 漂移、Git blob SHA-1 漂移、tree URL 与派生 URL 不一致、非普通 mode、API HTML/redirect/空 body、decoded NUL/HTML/LFS/binary、checksum 篡改和 schema 1 回归；self-test 继续禁止真实网络。
 
-R1c-P 本轮只记录方案，不修改 helper/checker。后续顺序固定为：单独授权 R1c-I 离线实施与验证；再单独授权 commit 形成 clean revision，并记录新的 helper/checker SHA-256；最后才能以完整 revision、唯一命令、1–10 分钟预计时长、外部读取、新 evidence、结果保留和无重试边界申请一次 R1c-R L3 授权。R1c-R 必须从头新建独立 run，不读取前两次 partial 作为输入，不使用 token/cookie/proxy/browser session，不调用 Cargo/Docker/crates.io，不自动进行第四次运行。
+R1c-P 只记录方案，不修改 helper/checker。后续 R1c-I、commit 与 R1c-R 已按独立授权依序完成；R1c-R 从头新建独立 run，没有读取前两次 partial 作为输入，没有使用 token/cookie/proxy/browser session，也没有调用 Cargo/Docker/crates.io。其结果见下节；不得自动进行第四次运行。
+
+### R1c 实施与结果
+
+R1c-I 只修改 helper/checker，并完成离线 self-test、综合 checker、仓库门禁与差异检查，以 `feat(security): use Git blobs for license evidence` 形成 clean revision `f9f02b3a8d1e3cc438a2a20bc404bfbb9273b1a7`。R1c-R 的唯一命令 `python3 scripts/run-sw-g2-mls-rs-license-review.py collect f9f02b3a8d1e3cc438a2a20bc404bfbb9273b1a7` 随后按一次性 L3 授权执行一次且未重试，创建 run `20260903-124253-90340.y7_6lakz`，以 schema 2 / `sw-g2-mls-rs-license-review-v2` 的有效 `STOP/license-evidence`、退出码 `20` 收口。失败消息为 `upstream evidence does not cover every declared SPDX alternative`。
+
+该 run 完成全部 6 个 commit、11 个 package mapping 和 38/40 次匿名请求；38 次请求均成功，下载 `676608` bytes，运行 `23526 ms`，没有启动后台进程。Git Blobs API transport、tree entry identity、envelope/base64/size、Git blob SHA-1、decoded SHA-256 和 final checksum 链全部通过；写入 manifest 前 evidence 为 `846635` bytes，final evidence 位于 `artifacts/sw-g2-mls-rs-license-review/20260903-124253-90340.y7_6lakz/`，共 70 个普通文件、`968673` bytes。manifest SHA-256 为 `f523347df20de4c654976f7b16107ad8e86227db90853327d36e225ce6270203`；69 项 checksum 清单 SHA-256 为 `ea356f519af8a3a1bb7c4a0859bc8f862d27673b4fcd602de5a1fe5b271c7db4`，逐项自校验全部通过。
+
+9 个 `awslabs/mls-rs` package 的固定 tree 均同时覆盖 `Apache-2.0` 与 `MIT` 正文。`debug_tree 0.4.0` 声明 `MIT`，保存的 `Cargo.toml` 与其引用的 `README.md` 未检测到 MIT 正文；`r-efi 6.0.0` 声明 `MIT OR Apache-2.0 OR LGPL-2.1-or-later`，保存的 `AUTHORS`、`Cargo.toml` 与 `README.md` 只检测到 MIT 正文，缺完整 `Apache-2.0` 与 `LGPL-2.1-or-later` 正文。六个 commit 的 `notice_present` 均为 `false`；固定 tree 不含 NOTICE 本身不自动构成失败，后续仍需结合分发义务判断。
+
+R1c-R 已排除前两次 run 的 raw 传输故障作为本次停止原因，并把缺口收敛为固定 commit/tree 与冻结 selector 下的实质工程证据不足。该结论不证明许可证在其他来源中不存在，不判定法律违规，也不自动淘汰候选；但按照冻结的 R1 合同不能形成 `PASS`，因此不得进入 R2 或 Phase B，也不得通过自动第四次请求、扩大 selector、改变版本/source 或补写 evidence 制造通过。
 
 ### R1 判定
 
@@ -201,7 +211,7 @@ R1c-P 本轮只记录方案，不修改 helper/checker。后续顺序固定为�
 复核者还必须验证：
 
 1. R1 inventory 与固定 lock/metadata/vcs provenance 的 11 行逐项一致；
-2. commit/tree API 原始响应、raw URL 和文件 SHA 能从 manifest/checksum 复现，所有来源都落在允许 host、repository 与 commit；
+2. commit/tree/blob API 原始响应、tree entry 到 decoded 文件的 identity/SHA 链能从 manifest/checksum 复现，所有来源都落在对应 schema 允许的 host、repository 与 commit；
 3. upstream Cargo manifest/workspace 继承与 registry package 的 name/version/license 一致；
 4. package mapping 对每个 SPDX alternative、copyright 和 NOTICE 存在性给出证据或明确缺口；
 5. 区分“archive 未随包携带文件”“上游固定 commit 有文件”“工程证据完整”和“目标分发法律结论”，不得把前一项自动推导为后一项；
@@ -213,6 +223,8 @@ R2 不修改 D2/R1 原始 evidence，只在 R1 run 下新增独立 `review/` 目
 
 ## 当前停止点与最小后续单元
 
-R0/helper 已固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单。首次 R1 与 R1b 均因不同 raw 文件的 `TimeoutError` 形成有效 `STOP/license-evidence` 并原样保留；两者都未完成 package mapping，只支持 raw 传输不稳定判断，不是许可证或候选负向结论。R1c 仅形成替代传输设计，R1c-I、R1c-R、R2 和 Phase B 均未授权。
+R0/helper 已固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单。首次 R1 与 R1b 均因不同 raw 文件的 `TimeoutError` 形成有效传输负向 evidence 并原样保留；R1c-I/R 已完成，schema 2 的 blob identity 与 11 行 mapping 均有效，但固定 tree 对 `debug_tree` 的 MIT 及 `r-efi` 的 Apache-2.0/LGPL-2.1-or-later 正文覆盖不足，因此 R1 仍为 `STOP/license-evidence`。
 
-下一个最小单元是另获 commit 授权，使 R1b 结果与 R1c-P 方案形成 clean revision；随后再单独申请 R1c-I，仅离线修改 helper/checker、升级 schema 并补齐 synthetic fixture。只有 R1c-I 经验证和另行 commit 形成新的完整 revision 后，才能申请一次 R1c-R L3；只有某次完整 R1 `PASS` 后，项目所有者才可指定非实现者执行 R2。R1/R2 均关闭前不得设计或执行 Phase B。
+下一个最小单元应是另行授权的 **R1d-P：固定 tree 许可证缺口处置设计**，只形成文档，不联网、不联系上游、不修改 evidence、selector、版本、依赖 source、gate 或分发产物。该设计需分别评估不可变官方补充来源、上游澄清/修复、目标分发包如何携带适用正文以及独立法律评审边界，并冻结每条路径的证据与停止条件；不得预设任一路径已经合规，也不得把缺口自动转换为候选淘汰。任何上游联系、额外取证、依赖/分发修改或候选切换都必须另行精确授权。
+
+当前没有自动第四次 R1、R2 或 Phase B 授权。只有后续工程证据达到完整 R1 `PASS` 后，项目所有者才可指定符合独立性条件的复核者执行 R2；R1/R2 均关闭前不得设计或执行 Phase B。
