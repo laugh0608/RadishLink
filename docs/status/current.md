@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 单元 D 的固定 94-package 图保留正式历史 `STOP`，A2/A3 已形成 clean revision。2026-09-02 单元 D2 对同一固定图形成 schema 2/v2 正式 Phase A `PASS`，仓库 lockfile 已提升并与 seed/evidence 一致；11 个 package 的随包许可证证据仍不足以覆盖全部声明正文及适用 copyright/NOTICE。首次 R1 与 R1b 因不同 raw 文件 `TimeoutError` 形成有效传输负向 evidence；R1c-I 随后改用同一 tree entry blob SHA 与 Git Blobs API，R1c-R 完成 6 commit/11 package mapping 并以有效 `STOP/license-evidence` 收口：9 个 `mls-rs` package 覆盖 Apache-2.0/MIT，`debug_tree` 缺 MIT 正文，`r-efi` 只覆盖 MIT、缺 Apache-2.0/LGPL-2.1-or-later 完整正文。该结果是固定 tree 的工程证据缺口，不是许可证不存在、法律违规或候选淘汰结论；R2 前置不满足，Phase B 禁止。OpenMLS 0.9.0 的 A6 已由 `ac01b4d` 收口；2026-09-01 单元 E 在固定 264-package 图上形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，`cargo-audit` 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。OpenMLS 0.9.0 不进入 Phase B，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 单元 D 的固定 94-package 图保留正式历史 `STOP`，A2/A3 已形成 clean revision。2026-09-02 单元 D2 对同一固定图形成 schema 2/v2 正式 Phase A `PASS`，仓库 lockfile 已提升并与 seed/evidence 一致；11 个 package 的随包许可证证据仍不足以覆盖全部声明正文及适用 copyright/NOTICE。首次 R1 与 R1b 因不同 raw 文件 `TimeoutError` 形成有效传输负向 evidence；R1c-I 随后改用同一 tree entry blob SHA 与 Git Blobs API，R1c-R 完成 6 commit/11 package mapping 并以有效 `STOP/license-evidence` 收口：9 个 `mls-rs` package 覆盖 Apache-2.0/MIT，`debug_tree` 缺 MIT 正文，`r-efi` 只覆盖 MIT、缺 Apache-2.0/LGPL-2.1-or-later 完整正文。R1d-L 独立评审随后形成 `STOP/license-disposition`：`debug_tree` 首选绑定固定对象的 R1d-U 上游澄清，`r-efi` 首选独立法律评审接受 MIT alternative 后进入 R1d-G/R1d-D；当前公开仓库没有两包 payload，且尚未形成 mls-rs POC 产品镜像，但未来 Linux/Android/iOS/服务端/源码包仍须按实际 SBOM 与分发物关闭。该结果不重判 R1c，不是许可证不存在、法律违规或候选淘汰结论；R2 前置不满足，Phase B 禁止。OpenMLS 0.9.0 的 A6 已由 `ac01b4d` 收口；2026-09-01 单元 E 在固定 264-package 图上形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，`cargo-audit` 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。OpenMLS 0.9.0 不进入 Phase B，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -41,7 +41,7 @@
 - [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确实施/Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)已执行到单元 D2。run `20260901-135918-13430.mvBCS2` 的 94-package 图 source/audit/deny 为零、feature 为一，保留正式历史 `STOP/feature-gate`；A2 已依据保留 metadata/source 把后续 gate 改为固定 package/version、精确解析集合、alias 展开和 provider dependency edge 联合判定，只接受 core 的 `rfc_compliant -> x509` 与 `fast_serialize -> mls-rs-codec/preallocate` 既有展开，不接受顶层同名 feature 或 provider defaults。A3 固定只读 seed lock SHA-256 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`，拒绝 D `.work`、重新解析与旧 mutable cache。D2 run `20260902-130415-49997.8P5Td6` 对同一 94-package 图形成 schema 2/v2 正式 `PASS`：source/audit/deny/feature 全零，RustSec revision `5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5` 下未发现 vulnerability 或 warning，32 项 checksum、运行控制和零容器残留已复核；仓库 lockfile 已提升且与 seed/evidence 摘要一致。工具许可证门通过不等于人工分发义务完成；11 个 package 的 archive 证据不足以覆盖全部声明正文及适用 copyright/NOTICE，非实现者 evidence 复核也未完成，Phase B 禁止。OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)记录历史单元与 2026-09-01 单元 E。仓库与 evidence lockfile SHA-256 均为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；单元 E run `20260901-123158-75973.3gVtsH` 的 schema 4/v4 manifest、26 项 checksum、独立 audit 与零容器残留已复核，正式结论为许可证门 `STOP`。OpenMLS 0.9.0 的重跑、Phase B、allowlist/advisory ignore 变更、bundle 重建和 evidence 清理均未授权；
 - [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
-- mls-rs [许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0/helper 已固定 11 个 package、3 个 repository、6 个不可变 commit、受限网络来源、证据合同和独立复核清单。首次 R1/R1b 的 raw `TimeoutError` run 原样保留；R1c-I 已在 clean revision `f9f02b3a8d1e3cc438a2a20bc404bfbb9273b1a7` 实施 schema 2 blob identity 链，R1c-R run `20260903-124253-90340.y7_6lakz` 的 38 次请求全部成功并完成 11 行 mapping，但因 `debug_tree` 与 `r-efi` 的固定 tree 未覆盖全部声明正文形成有效 `STOP/license-evidence`。R1d-P 已冻结独立判断、不可变补证、上游澄清、合同修订、分发清单和版本/候选变化的分流条件，但未执行任一路径。不得自动第四次运行、扩大 selector 或修改 evidence；R2 前置不满足。D2 重跑、Phase B、gate/版本/provider/依赖 source 变化仍须分别精确授权；`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件继续只读评审；
+- mls-rs [许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0/helper 已固定 11 个 package、3 个 repository、6 个不可变 commit、受限网络来源、证据合同和独立复核清单。首次 R1/R1b 的 raw `TimeoutError` run 原样保留；R1c-I 已在 clean revision `f9f02b3a8d1e3cc438a2a20bc404bfbb9273b1a7` 实施 schema 2 blob identity 链，R1c-R run `20260903-124253-90340.y7_6lakz` 的 38 次请求全部成功并完成 11 行 mapping，但因 `debug_tree` 与 `r-efi` 的固定 tree 未覆盖全部声明正文形成有效 `STOP/license-evidence`。[R1d-L 独立许可证处置评审](../testing/sw-g2-mls-rs-license-disposition-review.md)已复核 checksum/mapping、依赖适用条件和六类渠道并形成 `STOP/license-disposition`；两包分别进入 R1d-U 与“独立法律评审 → R1d-G/R1d-D”候选路径。不得自动第四次运行、扩大 selector、修改 evidence 或把 R1d-L 当作 R2；R2 前置不满足。D2 重跑、Phase B、gate/版本/provider/依赖 source 变化仍须分别精确授权；`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件继续只读评审；
 - 无射频软件计划不能替代首个测试地区的法规核对，二者可以并行研究但分别关门。
 
 ## 决策门状态
@@ -72,6 +72,8 @@
 14. **R1c-R 形成实质证据缺口 `STOP`**：9 个 `awslabs/mls-rs` package 覆盖 Apache-2.0/MIT 正文；`debug_tree 0.4.0` 的固定 tree 未检测到声明的 MIT 正文，`r-efi 6.0.0` 只检测到 MIT，缺完整 Apache-2.0 与 LGPL-2.1-or-later 正文，六个 commit 均无 NOTICE。该结果排除了本次传输失败，但不证明其他来源不存在许可证、不判定违法且不自动淘汰候选。
 15. **R2 与 Phase B 继续阻断**：R1c-R 为有效 `STOP/license-evidence` 而非 `PASS`，不满足 R2 前置；不得自动第四次运行、扩大 selector、改变版本/source、补写 evidence 或进入 Phase B。
 16. **R1d-P 固定 tree 缺口处置设计已形成**：区分 SPDX `OR` 的独立许可证/分发判断与 R1“收齐全部 alternative”工程合同，冻结 `R1d-L/E/U/G/D/V` 六条路径及各自 provenance、独立性、外部状态、gate、分发和重跑停止线；本轮只修改三份文档，没有联网、联系上游、创建 evidence、修改 helper/gate/版本/source/分发产物或进入 R2/Phase B。
+17. **R1d-L 独立复核有效但保持 `STOP`**：任务 `/root/r1d_l_independent_review` 未参与 R1 helper/checker、evidence 执行或此前结果撰写，独立重算 R1c manifest 与 69 项 checksum，复核 11 行 mapping、两包 archive、D2 metadata/lock 与当前分发事实；输入和独立性无失真，故不是 `INVALID`，但授权、归属和渠道义务未关闭，结果为 `STOP/license-disposition`，不是法律意见也不替代 R2。
+18. **两包处置已分流**：`debug_tree 0.4.0` 的固定 metadata 声明 MIT，但缺适用于固定源码的完整 MIT notice/holder，首选 R1d-U 并在有效追溯回复后进入 R1d-E/R1d-D；`r-efi 6.0.0` 的 `AUTHORS` 已含完整 MIT 正文与归属，但其 MIT alternative 尚需独立法律评审接受，接受后首选 R1d-G/R1d-D，不接受则进入 R1d-E。R1c 历史 `STOP`、R2 与 Phase B 停止线不变。
 
 ## 上一批次（2026-09-02）
 
@@ -151,13 +153,14 @@
 
 ## 下一步事项
 
-1. **提交 R1d-P 处置设计**：另获 commit 授权，使六条路径、分流条件和停止线形成 clean revision；不提交、修改或清理 ignored evidence。
-2. **指定独立评审者执行 R1d-L**：只读现有 evidence，覆盖公开源码仓库、内部 POC 镜像、未来公开 Linux 设备镜像、Android/iOS 伴侣应用、服务端部署和源码包，形成逐 package × 渠道的许可证选择、正文/归属/NOTICE/源码或修改义务矩阵；当前执行者不得自评。
-3. **按 R1d-L 结果逐项授权处置**：对 `debug_tree` 与 `r-efi` 分别选择不可变补证、上游澄清、工程合同修订、分发清单或版本/候选变化，不能用一条宽泛例外合并放行。
-4. **禁止自动第四次运行**：任何额外取证、上游联系、依赖/分发修改或候选切换必须另行精确授权，不能以扩大 selector 或补写 evidence 制造历史 R1c `PASS`。
-5. **新证据轨通过后才能安排 R2**：只有后续工程证据达到有效完整 `PASS` 后，才由项目所有者指定符合 R2 独立性条件的复核者，只读复核 D2 与全部许可证 evidence；R1d-L 不能代替 R2。
-6. **继续阻断 Phase B**：D2 已对固定图形成 Phase A `PASS`，但许可证证据轨/R2 未完成，不存在 Phase B 设计、实现或执行授权；`SW-G2` 继续未通过。
-7. **并行保留低风险规划**：继续评审 `SW-V1/V2` 授权边界、硬件分层路线和已有硬件复用条件；不重跑容器、不采购/刷写硬件、不产生射频发射。
+1. **提交 R1d-L 处置评审**：另获 commit 授权，使独立资格、输入摘要、两包 × 六渠道矩阵、`STOP` 与分流条件形成 clean revision；不提交、修改或清理 ignored evidence。
+2. **为 `debug_tree` 设计 R1d-U-P**：只起草绑定 `0.4.0`、registry checksum、固定 commit 的上游问题、维护者/追溯适用性接受标准和失败转 R1d-V 条件；设计不授权外部发送或联网取证。
+3. **为 `r-efi` 取得独立法律判断**：先确认能否按具体渠道选择 MIT alternative 并保留完整 `AUTHORS`；接受后另行设计 R1d-G-P/R1d-D-P，不接受或保持全部 alternative 合同时设计 R1d-E-P。不得把该判断与 `debug_tree` 合并为宽泛例外。
+4. **冻结实际分发输入后再实现**：未来 Linux/Android/iOS/服务端/源码包须分别给出 target、artifact 类型、vendor/source/cache、修改状态、SBOM 与正文/归属位置；未知或漂移保持 `STOP`。
+5. **禁止自动第四次运行**：任何额外取证、上游联系、依赖/分发修改或候选切换必须另行精确授权，不能以扩大 selector 或补写 evidence 制造历史 R1c `PASS`。
+6. **新证据轨通过后才能安排 R2**：只有后续工程证据达到有效完整 `PASS` 后，才由项目所有者指定符合 R2 独立性条件的复核者，只读复核 D2 与全部许可证 evidence；R1d-L 不能代替 R2。
+7. **继续阻断 Phase B**：D2 已对固定图形成 Phase A `PASS`，但许可证证据轨/R2 未完成，不存在 Phase B 设计、实现或执行授权；`SW-G2` 继续未通过。
+8. **并行保留低风险规划**：继续评审 `SW-V1/V2` 授权边界、硬件分层路线和已有硬件复用条件；不重跑容器、不采购/刷写硬件、不产生射频发射。
 
 ## 尚未冻结
 
