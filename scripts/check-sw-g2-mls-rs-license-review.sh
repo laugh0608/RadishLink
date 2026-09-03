@@ -16,7 +16,7 @@ for command_name in bash cmp dirname find git mktemp python3 pwd rg rm sort; do
   fi
 done
 if [ ! -f "${runner_path}" ] || [ -L "${runner_path}" ]; then
-  echo "R1 helper is missing or is a symbolic link" >&2
+  echo "R1c helper is missing or is a symbolic link" >&2
   exit 1
 fi
 if [ ! -d "${self_test_parent}" ] || [ -L "${self_test_parent}" ]; then
@@ -79,8 +79,12 @@ assert module["DOWNLOAD_LIMIT_BYTES"] == 50 * 1024 * 1024
 assert module["EVIDENCE_LIMIT_BYTES"] == 100 * 1024 * 1024
 assert module["DEADLINE_SECONDS"] == 600
 assert module["ALLOWED_BLOB_MODES"] == {"100644"}
-assert module["SCHEMA_VERSION"] == 1
-assert module["MANIFEST_CONTRACT"] == "sw-g2-mls-rs-license-review-v1"
+assert module["SCHEMA_VERSION"] == 2
+assert module["MANIFEST_CONTRACT"] == "sw-g2-mls-rs-license-review-v2"
+assert module["LEGACY_SCHEMA_VERSION"] == 1
+assert module["LEGACY_MANIFEST_CONTRACT"] == "sw-g2-mls-rs-license-review-v1"
+assert module["API_HOST"] == "api.github.com"
+assert module["LEGACY_RAW_HOST"] == "raw.githubusercontent.com"
 
 d2_dir = repo_root / "artifacts" / "sw-g2-mls-rs" / module["D2_RUN_ID"]
 manifest_path = d2_dir / "manifest.json"
@@ -123,24 +127,62 @@ assert archive_license_like[("r-efi", "6.0.0")][0][
 ] == ["MIT"]
 assert archive_license_like[("r-efi", "6.0.0")][0]["applicable_to_package"] is True
 assert archive_license_like[("r-efi", "6.0.0")][0]["covers_declared_expression"] is False
+
+review_root = repo_root / "artifacts" / "sw-g2-mls-rs-license-review"
+run_dirs = sorted(
+    path
+    for path in review_root.iterdir()
+    if path.is_dir() and not path.is_symlink() and not path.name.startswith(".")
+)
+assert set(module["HISTORICAL_SCHEMA1_RUNS"]) <= {path.name for path in run_dirs}
+for run_dir in run_dirs:
+    reviewed = module["validate_review_evidence"](repo_root, run_dir)
+    schema = module["manifest_schema"](reviewed)
+    if schema == 1:
+        expected = module["HISTORICAL_SCHEMA1_RUNS"][run_dir.name]
+        assert reviewed["outcome"] == "STOP"
+        assert reviewed["stage"] == "license-evidence"
+        assert reviewed["network"]["request_count"] == expected["request_count"]
+        assert reviewed["network"]["downloaded_bytes"] == expected["downloaded_bytes"]
+    else:
+        assert schema == 2
+        assert reviewed["network"]["transport"] == "git-blobs-api"
+        assert reviewed["network"]["allowed_hosts"] == [module["API_HOST"]]
 PY
 
 for required_guard in \
   'ProxyHandler({})' \
   'NoRedirectHandler' \
   'api.github.com' \
-  'raw.githubusercontent.com' \
+  '/git/blobs/' \
+  'git-blobs-api' \
+  'base64.b64decode' \
+  'git_blob_sha1' \
+  'usedforsecurity=False' \
+  'HISTORICAL_SCHEMA1_RUNS' \
   'R0_REVISION = "147462a2d91c5bb3eae4a0985aa8ddf1fc658199"' \
   'D2_REVISION = "64cf079a7b14a3ce90be92b93e56e2ad80555d80"' \
   'D2_RUN_ID = "20260902-130415-49997.8P5Td6"' \
   'LOCK_SHA256 = "c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7"'; do
   if ! rg -Fq -- "${required_guard}" "${runner_path}"; then
-    echo "R1 helper guard is missing: ${required_guard}" >&2
+    echo "R1c helper guard is missing: ${required_guard}" >&2
     exit 1
   fi
 done
-if rg -n -- 'Authorization|Cookie|Bearer|urlretrieve|requests\.|httpx\.' "${runner_path}" >/dev/null; then
-  echo "R1 helper contains a prohibited credential or network-client pattern" >&2
+if [ "$(rg -Foc -- 'raw.githubusercontent.com' "${runner_path}")" -ne 1 ]; then
+  echo "R1c helper must retain raw.githubusercontent.com only for frozen schema 1 validation" >&2
+  exit 1
+fi
+if rg -n \
+  -- 'def raw_url|\bRAW_HOST\b|session\.get\([^)]*, "raw"\)' \
+  "${runner_path}" >/dev/null; then
+  echo "R1c helper retains an active raw transport path" >&2
+  exit 1
+fi
+if rg -n \
+  -- 'Authorization|Cookie|Bearer|urlretrieve|requests\.|httpx\.' \
+  "${runner_path}" >/dev/null; then
+  echo "R1c helper contains a prohibited credential or network-client pattern" >&2
   exit 1
 fi
 
@@ -178,7 +220,7 @@ expect_exit 2 python3 "${runner_path}" collect INVALID
 expect_exit 10 python3 "${runner_path}" collect 0000000000000000000000000000000000000000
 snapshot_artifacts "${self_test_dir}/artifacts.after"
 if ! cmp -s "${self_test_dir}/artifacts.before" "${self_test_dir}/artifacts.after"; then
-  echo "rejected invocations changed the R1 artifact root" >&2
+  echo "rejected invocations changed the R1c artifact root" >&2
   exit 1
 fi
 

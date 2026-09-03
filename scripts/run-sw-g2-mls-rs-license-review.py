@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -20,7 +22,7 @@ import time
 import tomllib
 from typing import Any, Callable, Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import urlencode, urlsplit
 from urllib.request import (
     HTTPSHandler,
     HTTPRedirectHandler,
@@ -31,8 +33,10 @@ from urllib.request import (
 from unittest.mock import patch
 
 
-SCHEMA_VERSION = 1
-MANIFEST_CONTRACT = "sw-g2-mls-rs-license-review-v1"
+SCHEMA_VERSION = 2
+MANIFEST_CONTRACT = "sw-g2-mls-rs-license-review-v2"
+LEGACY_SCHEMA_VERSION = 1
+LEGACY_MANIFEST_CONTRACT = "sw-g2-mls-rs-license-review-v1"
 EVIDENCE_ID = "SW-EXP-003"
 R0_REVISION = "147462a2d91c5bb3eae4a0985aa8ddf1fc658199"
 D2_RUN_ID = "20260902-130415-49997.8P5Td6"
@@ -47,8 +51,8 @@ EVIDENCE_LIMIT_BYTES = 100 * 1024 * 1024
 DEADLINE_SECONDS = 600
 SINGLE_RESPONSE_LIMIT_BYTES = 20 * 1024 * 1024
 API_HOST = "api.github.com"
-RAW_HOST = "raw.githubusercontent.com"
-USER_AGENT = "RadishLink-license-review/1"
+LEGACY_RAW_HOST = "raw.githubusercontent.com"
+USER_AGENT = "RadishLink-license-review/2"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 LICENSE_NAME = re.compile(
@@ -56,6 +60,20 @@ LICENSE_NAME = re.compile(
     re.IGNORECASE,
 )
 ALLOWED_BLOB_MODES = {"100644"}
+HISTORICAL_SCHEMA1_RUNS = {
+    "20260903-120514-82051.tt412fp1": {
+        "manifest_sha256": "9fc406d7411c491dfaec6c1c171441bee7fb17f39b81d621fe3df4c760173fc9",
+        "checksums_sha256": "e6722f2e374faae491f2c610ff1bf7220013107cf59bdcd053c2362e461848fe",
+        "request_count": 5,
+        "downloaded_bytes": 142464,
+    },
+    "20260903-121508-84631.nx_b_jte": {
+        "manifest_sha256": "b0ed5c9e1c523d39f1e98e4d92accc1983f2cf27045323697221c5f66788f530",
+        "checksums_sha256": "465e3b7eb937397fa93c52c0451eba25780c39541484e5f6465a4117ca23c523",
+        "request_count": 3,
+        "downloaded_bytes": 131504,
+    },
+}
 
 
 class ReviewError(RuntimeError):
@@ -102,9 +120,10 @@ class CommitSpec:
         query = urlencode({"recursive": "1"})
         return f"https://{API_HOST}/repos/{self.repository}/git/trees/{tree_sha}?{query}"
 
-    def raw_url(self, path: str) -> str:
-        encoded_path = quote(path, safe="/")
-        return f"https://{RAW_HOST}/{self.repository}/{self.commit}/{encoded_path}"
+    def blob_url(self, blob_sha: str) -> str:
+        if not HEX40.fullmatch(blob_sha):
+            raise InvalidReview("GitHub blob SHA is invalid")
+        return f"https://{API_HOST}/repos/{self.repository}/git/blobs/{blob_sha}"
 
 
 @dataclass(frozen=True)
@@ -256,6 +275,11 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def git_blob_sha1(payload: bytes) -> str:
+    header = f"blob {len(payload)}\0".encode("ascii")
+    return hashlib.sha1(header + payload, usedforsecurity=False).hexdigest()
 
 
 def require_regular_file(path: Path, label: str) -> None:
@@ -581,7 +605,7 @@ def local_preflight(repo_root: Path, expected_revision: str) -> dict[str, Any]:
     if head != expected_revision:
         raise InvalidReview("HEAD does not match the explicitly authorized clean revision")
     if run_git(repo_root, "status", "--porcelain=v1"):
-        raise InvalidReview("R1 collection requires a clean worktree")
+        raise InvalidReview("R1c collection requires a clean worktree")
     ancestor = subprocess.run(
         ["git", "merge-base", "--is-ancestor", R0_REVISION, head],
         cwd=repo_root,
@@ -675,6 +699,8 @@ class HttpSession:
         self.allowed_urls.add(url)
 
     def get(self, url: str, kind: str) -> HttpPayload:
+        if kind != "api":
+            raise InvalidReview("R1c transport only permits GitHub API responses")
         if url not in self.allowed_urls:
             raise InvalidReview(f"request URL is outside the derived allowlist: {url}")
         validate_url_shape(url)
@@ -682,13 +708,13 @@ class HttpSession:
             raise StopReview("HTTP request limit reached")
         elapsed = time.monotonic() - self.start_monotonic
         if elapsed >= DEADLINE_SECONDS:
-            raise StopReview("R1 deadline reached")
+            raise StopReview("R1c deadline reached")
         self.request_count += 1
         request = Request(
             url,
             method="GET",
             headers={
-                "Accept": "application/vnd.github+json" if kind == "api" else "text/plain",
+                "Accept": "application/vnd.github+json",
                 "User-Agent": USER_AGENT,
                 "X-GitHub-Api-Version": "2022-11-28",
             },
@@ -721,6 +747,10 @@ class HttpSession:
                     f"HTTPError: {error.code}",
                 )
             )
+            if len(body) > SINGLE_RESPONSE_LIMIT_BYTES:
+                raise StopReview("single HTTP error response exceeded its byte limit") from error
+            if self.downloaded_bytes > DOWNLOAD_LIMIT_BYTES:
+                raise StopReview("total HTTP download limit reached") from error
             raise StopReview(f"HTTP request returned {error.code}: {url}") from error
         except (URLError, TimeoutError, OSError) as error:
             self.observations.append(
@@ -760,6 +790,8 @@ class FakeSession:
         self.allowed_urls.add(url)
 
     def get(self, url: str, kind: str) -> HttpPayload:
+        if kind != "api":
+            raise InvalidReview("R1c fake transport only permits GitHub API responses")
         if url not in self.allowed_urls:
             raise InvalidReview("fake request escaped the derived allowlist")
         validate_url_shape(url)
@@ -814,7 +846,7 @@ def validate_url_shape(url: str) -> None:
     parsed = urlsplit(url)
     if parsed.scheme != "https" or parsed.username or parsed.password or parsed.fragment:
         raise InvalidReview("request URL must be anonymous HTTPS without a fragment")
-    if parsed.hostname not in {API_HOST, RAW_HOST}:
+    if parsed.hostname != API_HOST:
         raise InvalidReview("request URL host is not allowed")
     if parsed.port not in {None, 443}:
         raise InvalidReview("request URL port is not allowed")
@@ -826,11 +858,7 @@ def validate_url_shape(url: str) -> None:
         or "" in pure.parts[1:]
     ):
         raise InvalidReview("request URL path is unsafe")
-    if parsed.hostname == RAW_HOST:
-        parts = parsed.path.strip("/").split("/")
-        if parsed.query or len(parts) < 4 or not HEX40.fullmatch(parts[2]):
-            raise InvalidReview("raw request URL must contain an immutable commit and no query")
-    if parsed.hostname == API_HOST and parsed.query not in {"", "recursive=1"}:
+    if parsed.query not in {"", "recursive=1"}:
         raise InvalidReview("API request URL query is not allowed")
 
 
@@ -838,28 +866,30 @@ def validate_http_body(kind: str, content_type: str, body: bytes) -> None:
     if not body:
         raise StopReview("HTTP response is empty")
     lowered = content_type.lower()
-    if kind == "api":
-        if lowered not in {"application/json", "application/vnd.github+json"}:
-            raise StopReview("GitHub API response is not JSON")
-        try:
-            json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise StopReview("GitHub API response is invalid JSON") from error
-        return
-    if lowered in {"text/html", "application/zip", "application/gzip", "application/x-gzip"}:
-        raise StopReview("raw response has a prohibited content type")
-    if lowered not in {"text/plain", "application/octet-stream"}:
-        raise StopReview("raw response is not an allowed text content type")
+    if kind != "api":
+        raise InvalidReview("R1c HTTP validation only permits GitHub API responses")
+    if lowered not in {"application/json", "application/vnd.github+json"}:
+        raise StopReview("GitHub API response is not JSON")
+    try:
+        json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise StopReview("GitHub API response is invalid JSON") from error
+
+
+def validate_decoded_text(body: bytes) -> str:
+    if not body:
+        raise StopReview("decoded Git blob is empty")
     if b"\x00" in body:
-        raise StopReview("raw response contains binary NUL bytes")
+        raise StopReview("decoded Git blob contains binary NUL bytes")
     try:
         text = body.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise StopReview("raw response is not UTF-8 text") from error
+        raise StopReview("decoded Git blob is not UTF-8 text") from error
     if text.startswith("version https://git-lfs.github.com/spec/v1"):
-        raise StopReview("raw response is a Git LFS pointer")
+        raise StopReview("decoded Git blob is a Git LFS pointer")
     if text.lstrip().lower().startswith(("<!doctype html", "<html")):
-        raise StopReview("raw response is HTML")
+        raise StopReview("decoded Git blob is HTML")
+    return text
 
 
 def validate_commit_payload(payload: HttpPayload, spec: CommitSpec) -> str:
@@ -931,6 +961,82 @@ def join_tree_path(directory: str, name: str) -> str:
 
 def is_regular_tree_blob(entry: dict[str, Any]) -> bool:
     return entry.get("type") == "blob" and entry.get("mode") in ALLOWED_BLOB_MODES
+
+
+def validate_selected_blob_entry(
+    spec: CommitSpec,
+    path: str,
+    entry: dict[str, Any],
+) -> tuple[str, int, str]:
+    safe_tree_path(path)
+    if entry.get("type") != "blob" or entry.get("mode") != "100644":
+        raise StopReview(f"selected tree entry is not a mode 100644 blob: {path}")
+    blob_sha = entry.get("sha")
+    if not isinstance(blob_sha, str) or not HEX40.fullmatch(blob_sha):
+        raise InvalidReview(f"selected tree entry blob SHA is invalid: {path}")
+    size = entry.get("size")
+    if (
+        isinstance(size, bool)
+        or not isinstance(size, int)
+        or not 0 <= size <= SINGLE_RESPONSE_LIMIT_BYTES
+    ):
+        raise InvalidReview(f"selected tree entry size is invalid: {path}")
+    api_url = spec.blob_url(blob_sha)
+    tree_url = entry.get("url")
+    if tree_url is not None and tree_url != api_url:
+        raise InvalidReview(f"selected tree entry URL differs from the derived blob URL: {path}")
+    return blob_sha, size, api_url
+
+
+def validate_blob_payload(
+    payload: HttpPayload,
+    spec: CommitSpec,
+    path: str,
+    entry: dict[str, Any],
+) -> tuple[bytes, dict[str, Any]]:
+    blob_sha, tree_size, api_url = validate_selected_blob_entry(spec, path, entry)
+    if payload.url != api_url:
+        raise InvalidReview(f"GitHub blob response URL differs from the derived URL: {path}")
+    data = json.loads(payload.body.decode("utf-8"))
+    if not isinstance(data, dict):
+        raise InvalidReview(f"GitHub blob response is not an object: {path}")
+    if data.get("sha") != blob_sha:
+        raise InvalidReview(f"GitHub blob response SHA differs from the tree entry: {path}")
+    if data.get("encoding") != "base64":
+        raise InvalidReview(f"GitHub blob response encoding is not base64: {path}")
+    content = data.get("content")
+    if not isinstance(content, str):
+        raise InvalidReview(f"GitHub blob response content is not a string: {path}")
+    response_size = data.get("size")
+    if isinstance(response_size, bool) or not isinstance(response_size, int) or response_size < 0:
+        raise InvalidReview(f"GitHub blob response size is invalid: {path}")
+    compact_content = content.replace("\r", "").replace("\n", "")
+    try:
+        decoded = base64.b64decode(compact_content.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, binascii.Error, ValueError) as error:
+        raise InvalidReview(f"GitHub blob response contains invalid base64: {path}") from error
+    if response_size != tree_size or len(decoded) != tree_size:
+        raise InvalidReview(f"GitHub blob decoded size differs from the tree entry: {path}")
+    if git_blob_sha1(decoded) != blob_sha:
+        raise InvalidReview(f"decoded Git blob SHA-1 differs from the tree entry: {path}")
+    validate_decoded_text(decoded)
+    repository_path = f"{spec.repository}/{spec.commit}/{path}"
+    return decoded, {
+        "repository": spec.repository,
+        "commit": spec.commit,
+        "tree_path": path,
+        "tree_entry_type": "blob",
+        "tree_entry_mode": "100644",
+        "tree_entry_size": tree_size,
+        "tree_entry_url": entry.get("url"),
+        "blob_sha": blob_sha,
+        "api_url": api_url,
+        "envelope_path": f"blobs/{repository_path}.json",
+        "envelope_sha256": sha256_bytes(payload.body),
+        "decoded_path": f"upstream/{repository_path}",
+        "decoded_sha256": sha256_bytes(decoded),
+        "decoded_size": len(decoded),
+    }
 
 
 def select_initial_paths(
@@ -1067,18 +1173,51 @@ def save_http_payload(run_dir: Path, relative: str, payload: HttpPayload) -> Non
         raise StopReview("evidence budget exceeded")
 
 
+def fetch_selected_blob(
+    run_dir: Path,
+    spec: CommitSpec,
+    path: str,
+    tree: dict[str, dict[str, Any]],
+    session: HttpSession | FakeSession,
+    decoded_payloads: dict[str, bytes],
+    blob_records: dict[str, dict[str, Any]],
+) -> None:
+    if path in decoded_payloads:
+        return
+    entry = tree.get(path)
+    if entry is None:
+        raise StopReview(f"selected tree path is absent: {path}")
+    _, _, api_url = validate_selected_blob_entry(spec, path, entry)
+    session.allow(api_url)
+    payload = session.get(api_url, "api")
+    envelope_path = f"blobs/{spec.repository}/{spec.commit}/{path}.json"
+    save_http_payload(run_dir, envelope_path, payload)
+    decoded, record = validate_blob_payload(payload, spec, path, entry)
+    if record["envelope_path"] != envelope_path:
+        raise InvalidReview("derived blob envelope path drifted")
+    atomic_write_bytes(run_dir / record["decoded_path"], decoded)
+    if directory_usage_bytes(run_dir) > EVIDENCE_LIMIT_BYTES:
+        raise StopReview("evidence budget exceeded")
+    decoded_payloads[path] = decoded
+    blob_records[path] = record
+
+
 def collect_remote(
     run_dir: Path,
     packages: tuple[PackageSpec, ...],
     commits: tuple[CommitSpec, ...],
     session: HttpSession | FakeSession,
+    all_mappings: list[dict[str, Any]] | None = None,
+    commit_records: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     packages_by_commit: dict[tuple[str, str], list[PackageSpec]] = {}
     for package in packages:
         packages_by_commit.setdefault((package.repository, package.commit), []).append(package)
 
-    all_mappings: list[dict[str, Any]] = []
-    commit_records: list[dict[str, Any]] = []
+    if all_mappings is None:
+        all_mappings = []
+    if commit_records is None:
+        commit_records = []
     for commit_spec in commits:
         session.allow(commit_spec.commit_url)
         commit_payload = session.get(commit_spec.commit_url, "api")
@@ -1096,18 +1235,40 @@ def collect_remote(
         selected = select_initial_paths(tree, current_packages)
         union_paths = set().union(*selected.values())
 
-        raw_payloads: dict[str, bytes] = {}
+        decoded_payloads: dict[str, bytes] = {}
+        blob_records: dict[str, dict[str, Any]] = {}
+        commit_record = {
+            "repository": commit_spec.repository,
+            "commit": commit_spec.commit,
+            "tree_sha": tree_sha,
+            "tree_truncated": False,
+            "commit_url": commit_spec.commit_url,
+            "tree_url": tree_url,
+            "commit_response_path": commit_file,
+            "tree_response_path": tree_file,
+            "commit_response_sha256": sha256_bytes(commit_payload.body),
+            "tree_response_sha256": sha256_bytes(tree_payload.body),
+            "transport": "git-blobs-api",
+            "blobs": [],
+            "notice_present": False,
+            "notice_paths": [],
+        }
+        commit_records.append(commit_record)
         for path in sorted(union_paths):
-            url = commit_spec.raw_url(path)
-            session.allow(url)
-            payload = session.get(url, "raw")
-            relative = f"upstream/{commit_spec.repository}/{commit_spec.commit}/{path}"
-            save_http_payload(run_dir, relative, payload)
-            raw_payloads[path] = payload.body
+            fetch_selected_blob(
+                run_dir,
+                commit_spec,
+                path,
+                tree,
+                session,
+                decoded_payloads,
+                blob_records,
+            )
+            commit_record["blobs"] = [blob_records[item] for item in sorted(blob_records)]
 
         referenced_by_package: dict[str, list[dict[str, str]]] = {}
         for package in current_packages:
-            references = manifest_identity_and_references(package, raw_payloads)
+            references = manifest_identity_and_references(package, decoded_payloads)
             referenced_by_package[package.name] = references
             for reference in references:
                 reference_path = reference["path"]
@@ -1117,24 +1278,27 @@ def collect_remote(
                         f"manifest-referenced file is absent or non-regular: {reference_path}"
                     )
                 selected[package.name].add(reference_path)
-                if reference_path not in raw_payloads:
-                    url = commit_spec.raw_url(reference_path)
-                    session.allow(url)
-                    payload = session.get(url, "raw")
-                    relative = (
-                        f"upstream/{commit_spec.repository}/{commit_spec.commit}/{reference_path}"
-                    )
-                    save_http_payload(run_dir, relative, payload)
-                    raw_payloads[reference_path] = payload.body
+                fetch_selected_blob(
+                    run_dir,
+                    commit_spec,
+                    reference_path,
+                    tree,
+                    session,
+                    decoded_payloads,
+                    blob_records,
+                )
+                commit_record["blobs"] = [
+                    blob_records[item] for item in sorted(blob_records)
+                ]
 
         for package in current_packages:
             paths = sorted(selected[package.name])
             classifications: set[str] = set()
             notice_paths: list[str] = []
             copyright_paths: list[str] = []
-            evidence_files: list[dict[str, str]] = []
+            evidence_files: list[dict[str, Any]] = []
             for path in paths:
-                body = raw_payloads[path]
+                body = decoded_payloads[path]
                 text = body.decode("utf-8")
                 classifications.update(classify_license_text(text))
                 basename = PurePosixPath(path).name
@@ -1142,13 +1306,7 @@ def collect_remote(
                     notice_paths.append(path)
                 if basename.lower().startswith("copyright") or "copyright" in text.lower():
                     copyright_paths.append(path)
-                evidence_files.append(
-                    {
-                        "path": path,
-                        "url": commit_spec.raw_url(path),
-                        "sha256": sha256_bytes(body),
-                    }
-                )
+                evidence_files.append(dict(blob_records[path]))
             required = required_license_ids(package.license)
             missing = sorted(required - classifications)
             all_mappings.append(
@@ -1182,20 +1340,8 @@ def collect_remote(
                 for path in item["notice_paths"]
             }
         )
-        commit_records.append(
-            {
-                "repository": commit_spec.repository,
-                "commit": commit_spec.commit,
-                "tree_sha": tree_sha,
-                "tree_truncated": False,
-                "commit_url": commit_spec.commit_url,
-                "tree_url": tree_url,
-                "commit_response_sha256": sha256_bytes(commit_payload.body),
-                "tree_response_sha256": sha256_bytes(tree_payload.body),
-                "notice_present": bool(commit_notice_paths),
-                "notice_paths": commit_notice_paths,
-            }
-        )
+        commit_record["notice_present"] = bool(commit_notice_paths)
+        commit_record["notice_paths"] = commit_notice_paths
 
     return all_mappings, commit_records
 
@@ -1240,6 +1386,386 @@ def verify_checksum_text(
         require_regular_file(target, "generated checksum target")
         if sha256_file(target) != expected:
             raise InvalidReview(f"generated checksum mismatch: {relative}")
+
+
+def manifest_schema(manifest: dict[str, Any]) -> int:
+    identity = (manifest.get("schema_version"), manifest.get("manifest_contract"))
+    if identity == (LEGACY_SCHEMA_VERSION, LEGACY_MANIFEST_CONTRACT):
+        return LEGACY_SCHEMA_VERSION
+    if identity == (SCHEMA_VERSION, MANIFEST_CONTRACT):
+        return SCHEMA_VERSION
+    raise InvalidReview("license review manifest schema or contract is unsupported")
+
+
+def evidence_file(run_dir: Path, relative: str, label: str) -> Path:
+    if not isinstance(relative, str):
+        raise InvalidReview(f"{label} path is not a string")
+    pure = PurePosixPath(relative)
+    if pure.is_absolute() or ".." in pure.parts or "" in pure.parts or pure.as_posix() != relative:
+        raise InvalidReview(f"{label} path is unsafe")
+    target = run_dir.joinpath(*pure.parts)
+    require_regular_file(target, label)
+    return target
+
+
+def validate_evidence_checksums(repo_root: Path, run_dir: Path) -> None:
+    checksum_path = run_dir / "checksums.sha256"
+    require_regular_file(checksum_path, "license review checksums")
+    checksum_text = checksum_path.read_text(encoding="utf-8")
+    verify_checksum_text(repo_root, checksum_text)
+    expected_prefix = run_dir.relative_to(repo_root).as_posix() + "/"
+    listed: set[str] = set()
+    for line in checksum_text.splitlines():
+        match = re.fullmatch(r"[0-9a-f]{64}  ([^\x00\r\n]+)", line)
+        if match is None:
+            raise InvalidReview("license review checksum line is malformed")
+        relative = match.group(1)
+        if not relative.startswith(expected_prefix) or relative in listed:
+            raise InvalidReview("license review checksum path escaped or is duplicated")
+        listed.add(relative)
+    all_paths = list(run_dir.rglob("*"))
+    if any(path.is_symlink() for path in all_paths):
+        raise InvalidReview("license review evidence contains a symbolic link")
+    actual = {
+        path.relative_to(repo_root).as_posix()
+        for path in all_paths
+        if path.is_file() and path != checksum_path
+    }
+    if listed != actual:
+        raise InvalidReview("license review checksum coverage differs from final files")
+
+
+def validate_network_contract(manifest: dict[str, Any], allowed_hosts: list[str]) -> None:
+    network = manifest.get("network")
+    if not isinstance(network, dict):
+        raise InvalidReview("license review network contract is missing")
+    required = {
+        "method": "GET",
+        "allowed_hosts": allowed_hosts,
+        "anonymous": True,
+        "proxies_disabled": True,
+        "redirects_disabled": True,
+        "request_limit": REQUEST_LIMIT,
+        "download_limit_bytes": DOWNLOAD_LIMIT_BYTES,
+        "retry": False,
+    }
+    for key, value in required.items():
+        if network.get(key) != value:
+            raise InvalidReview(f"license review network field drifted: {key}")
+    requests = network.get("requests")
+    if not isinstance(requests, list) or network.get("request_count") != len(requests):
+        raise InvalidReview("license review request count drifted")
+    if len(requests) > REQUEST_LIMIT:
+        raise InvalidReview("license review request limit was exceeded")
+    downloaded = 0
+    for observation in requests:
+        if not isinstance(observation, dict):
+            raise InvalidReview("license review HTTP observation is invalid")
+        if observation.get("method") != "GET" or observation.get("host") not in allowed_hosts:
+            raise InvalidReview("license review HTTP observation escaped the contract")
+        byte_count = observation.get("byte_count")
+        if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count < 0:
+            raise InvalidReview("license review HTTP byte count is invalid")
+        downloaded += byte_count
+        digest = observation.get("sha256")
+        if not isinstance(digest, str) or not HEX64.fullmatch(digest):
+            raise InvalidReview("license review HTTP digest is invalid")
+    if network.get("downloaded_bytes") != downloaded or downloaded > DOWNLOAD_LIMIT_BYTES:
+        raise InvalidReview("license review downloaded byte count drifted")
+    runtime = manifest.get("runtime")
+    if not isinstance(runtime, dict):
+        raise InvalidReview("license review runtime contract is missing")
+    if runtime.get("deadline_seconds") != DEADLINE_SECONDS:
+        raise InvalidReview("license review deadline drifted")
+    if runtime.get("evidence_limit_bytes") != EVIDENCE_LIMIT_BYTES:
+        raise InvalidReview("license review evidence limit drifted")
+    if runtime.get("background_processes_started") != 0:
+        raise InvalidReview("license review unexpectedly started a background process")
+    elapsed = runtime.get("elapsed_milliseconds")
+    evidence_bytes = runtime.get("evidence_bytes_before_manifest")
+    if (
+        isinstance(elapsed, bool)
+        or not isinstance(elapsed, int)
+        or not 0 <= elapsed <= DEADLINE_SECONDS * 1000
+    ):
+        raise InvalidReview("license review elapsed time is invalid")
+    if (
+        isinstance(evidence_bytes, bool)
+        or not isinstance(evidence_bytes, int)
+        or not 0 <= evidence_bytes <= EVIDENCE_LIMIT_BYTES
+    ):
+        raise InvalidReview("license review evidence byte count is invalid")
+
+
+def validate_schema1_manifest(run_dir: Path, manifest: dict[str, Any]) -> None:
+    run_id = run_dir.name
+    expected = HISTORICAL_SCHEMA1_RUNS.get(run_id)
+    if expected is None:
+        raise InvalidReview("schema 1 evidence is not one of the two frozen historical runs")
+    required = {
+        "run_id": run_id,
+        "outcome": "STOP",
+        "stage": "license-evidence",
+        "exit_code": 20,
+        "package_count": len(PACKAGES),
+        "repository_count": 3,
+        "commit_count": len(COMMITS),
+        "commits": [],
+        "package_license_mapping": [],
+    }
+    for key, value in required.items():
+        if manifest.get(key) != value:
+            raise InvalidReview(f"historical schema 1 manifest field drifted: {key}")
+    validate_network_contract(manifest, [API_HOST, LEGACY_RAW_HOST])
+    network = manifest["network"]
+    if network.get("request_count") != expected["request_count"]:
+        raise InvalidReview("historical schema 1 request count drifted")
+    if network.get("downloaded_bytes") != expected["downloaded_bytes"]:
+        raise InvalidReview("historical schema 1 downloaded byte count drifted")
+    requests = network["requests"]
+    if sum(item.get("error") == "TimeoutError" for item in requests) != 1:
+        raise InvalidReview("historical schema 1 timeout evidence drifted")
+    for observation in requests:
+        parsed = urlsplit(observation.get("url", ""))
+        if parsed.hostname != observation.get("host") or parsed.path != observation.get("path"):
+            raise InvalidReview("historical schema 1 observation URL drifted")
+        if parsed.hostname == API_HOST:
+            validate_url_shape(observation["url"])
+        elif parsed.hostname == LEGACY_RAW_HOST:
+            parts = parsed.path.strip("/").split("/")
+            if (
+                parsed.scheme != "https"
+                or parsed.query
+                or len(parts) < 4
+                or not HEX40.fullmatch(parts[2])
+            ):
+                raise InvalidReview("historical schema 1 raw URL is not immutable")
+    observations = json.loads(
+        evidence_file(run_dir, "http-observations.json", "HTTP observations").read_text(
+            encoding="utf-8"
+        )
+    )
+    mappings = json.loads(
+        evidence_file(run_dir, "package-license-mapping.json", "package mapping").read_text(
+            encoding="utf-8"
+        )
+    )
+    if observations != requests or mappings != []:
+        raise InvalidReview("historical schema 1 sidecar content drifted")
+
+
+def validate_schema2_manifest(run_dir: Path, manifest: dict[str, Any]) -> None:
+    if manifest.get("network", {}).get("transport") != "git-blobs-api":
+        raise InvalidReview("schema 2 transport is not Git Blobs API")
+    validate_network_contract(manifest, [API_HOST])
+    observations = manifest["network"]["requests"]
+    for observation in observations:
+        url = observation.get("url", "")
+        validate_url_shape(url)
+        parsed = urlsplit(url)
+        if (
+            observation.get("host") != parsed.hostname
+            or observation.get("path") != parsed.path
+            or observation.get("query") != parsed.query
+        ):
+            raise InvalidReview("schema 2 HTTP observation URL fields drifted")
+        if observation.get("status") == 200:
+            if observation.get("content_type") not in {
+                "application/json",
+                "application/vnd.github+json",
+            }:
+                raise InvalidReview("schema 2 successful response is not JSON")
+            if observation.get("byte_count", 0) == 0 or "error" in observation:
+                raise InvalidReview("schema 2 successful response observation is invalid")
+    if (run_dir / "http-observations.json").exists():
+        recorded = json.loads(
+            evidence_file(run_dir, "http-observations.json", "HTTP observations").read_text(
+                encoding="utf-8"
+            )
+        )
+        if recorded != observations:
+            raise InvalidReview("schema 2 HTTP observation sidecar drifted")
+    mappings = manifest.get("package_license_mapping")
+    commits = manifest.get("commits")
+    if not isinstance(mappings, list) or not isinstance(commits, list):
+        raise InvalidReview("schema 2 mappings or commit records are invalid")
+    if (run_dir / "package-license-mapping.json").exists():
+        recorded = json.loads(
+            evidence_file(run_dir, "package-license-mapping.json", "package mapping").read_text(
+                encoding="utf-8"
+            )
+        )
+        if recorded != mappings:
+            raise InvalidReview("schema 2 package mapping sidecar drifted")
+    observation_digests = {
+        (item.get("url"), item.get("sha256"))
+        for item in observations
+        if item.get("status") == 200
+    }
+    all_blob_records: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for record in commits:
+        if not isinstance(record, dict) or record.get("transport") != "git-blobs-api":
+            raise InvalidReview("schema 2 commit transport record is invalid")
+        spec = CommitSpec(record.get("repository", ""), record.get("commit", ""))
+        if not HEX40.fullmatch(spec.commit):
+            raise InvalidReview("schema 2 commit identity is invalid")
+        commit_body = evidence_file(
+            run_dir, record.get("commit_response_path"), "commit response"
+        ).read_bytes()
+        tree_body = evidence_file(
+            run_dir, record.get("tree_response_path"), "tree response"
+        ).read_bytes()
+        if sha256_bytes(commit_body) != record.get("commit_response_sha256"):
+            raise InvalidReview("schema 2 commit response digest drifted")
+        if sha256_bytes(tree_body) != record.get("tree_response_sha256"):
+            raise InvalidReview("schema 2 tree response digest drifted")
+        commit_payload = make_payload(record.get("commit_url", ""), "api", commit_body)
+        tree_sha = validate_commit_payload(commit_payload, spec)
+        if tree_sha != record.get("tree_sha") or record.get("tree_truncated") is not False:
+            raise InvalidReview("schema 2 tree identity drifted")
+        tree_url = spec.tree_url(tree_sha)
+        if record.get("tree_url") != tree_url:
+            raise InvalidReview("schema 2 tree URL drifted")
+        tree_payload = make_payload(tree_url, "api", tree_body)
+        tree = validate_tree_payload(tree_payload, tree_sha)
+        if (spec.commit_url, sha256_bytes(commit_body)) not in observation_digests:
+            raise InvalidReview("schema 2 commit response lacks its HTTP observation")
+        if (tree_url, sha256_bytes(tree_body)) not in observation_digests:
+            raise InvalidReview("schema 2 tree response lacks its HTTP observation")
+        blobs = record.get("blobs")
+        if not isinstance(blobs, list):
+            raise InvalidReview("schema 2 blob records are missing")
+        for blob_record in blobs:
+            if not isinstance(blob_record, dict):
+                raise InvalidReview("schema 2 blob record is invalid")
+            path = blob_record.get("tree_path")
+            entry = tree.get(path)
+            if entry is None:
+                raise InvalidReview("schema 2 blob path is absent from its tree")
+            envelope = evidence_file(
+                run_dir, blob_record.get("envelope_path"), "blob envelope"
+            ).read_bytes()
+            decoded = evidence_file(
+                run_dir, blob_record.get("decoded_path"), "decoded blob"
+            ).read_bytes()
+            api_url = blob_record.get("api_url")
+            validate_http_body("api", "application/json", envelope)
+            validated_decoded, validated_record = validate_blob_payload(
+                make_payload(api_url, "api", envelope),
+                spec,
+                path,
+                entry,
+            )
+            if validated_record != blob_record or validated_decoded != decoded:
+                raise InvalidReview("schema 2 blob evidence chain drifted")
+            if (api_url, sha256_bytes(envelope)) not in observation_digests:
+                raise InvalidReview("schema 2 blob envelope lacks its HTTP observation")
+            key = (spec.repository, spec.commit, path)
+            if key in all_blob_records:
+                raise InvalidReview("schema 2 blob path is duplicated")
+            all_blob_records[key] = blob_record
+    mapped_blob_records: set[tuple[str, str, str]] = set()
+    for mapping in mappings:
+        if not isinstance(mapping, dict) or not isinstance(mapping.get("evidence_files"), list):
+            raise InvalidReview("schema 2 package evidence mapping is invalid")
+        for blob_record in mapping["evidence_files"]:
+            key = (
+                blob_record.get("repository"),
+                blob_record.get("commit"),
+                blob_record.get("tree_path"),
+            )
+            if all_blob_records.get(key) != blob_record:
+                raise InvalidReview("schema 2 package mapping differs from its blob chain")
+            mapped_blob_records.add(key)
+    if manifest.get("outcome") == "PASS" and mapped_blob_records != set(all_blob_records):
+        raise InvalidReview("schema 2 blob chain is not fully represented in package mappings")
+
+
+def validate_review_evidence(repo_root: Path, run_dir: Path) -> dict[str, Any]:
+    if run_dir.is_symlink() or not run_dir.is_dir():
+        raise InvalidReview("license review run must be a regular directory")
+    manifest_path = run_dir / "manifest.json"
+    checksum_path = run_dir / "checksums.sha256"
+    require_regular_file(manifest_path, "license review manifest")
+    require_regular_file(checksum_path, "license review checksums")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise InvalidReview("license review manifest is not an object")
+    schema = manifest_schema(manifest)
+    if schema == LEGACY_SCHEMA_VERSION:
+        expected = HISTORICAL_SCHEMA1_RUNS.get(run_dir.name)
+        if expected is None:
+            raise InvalidReview("unexpected historical schema 1 run")
+        if sha256_file(manifest_path) != expected["manifest_sha256"]:
+            raise InvalidReview("historical schema 1 manifest checksum drifted")
+        if sha256_file(checksum_path) != expected["checksums_sha256"]:
+            raise InvalidReview("historical schema 1 checksum-list checksum drifted")
+        validate_schema1_manifest(run_dir, manifest)
+    else:
+        required = {
+            "run_id": run_dir.name,
+            "package_count": len(PACKAGES),
+            "repository_count": len({item.repository for item in PACKAGES}),
+            "commit_count": len(COMMITS),
+            "r0_revision": R0_REVISION,
+        }
+        for key, value in required.items():
+            if manifest.get(key) != value:
+                raise InvalidReview(f"schema 2 manifest field drifted: {key}")
+        if not isinstance(manifest.get("repository_revision"), str) or not HEX40.fullmatch(
+            manifest["repository_revision"]
+        ):
+            raise InvalidReview("schema 2 repository revision is invalid")
+        commit_items = manifest.get("commits", [])
+        commit_identities = {
+            (item.get("repository"), item.get("commit"))
+            for item in commit_items
+            if isinstance(item, dict)
+        }
+        expected_commits = {(item.repository, item.commit) for item in COMMITS}
+        if len(commit_identities) != len(commit_items) or not commit_identities <= expected_commits:
+            raise InvalidReview("schema 2 commit inventory escaped or is duplicated")
+        mapping_items = manifest.get("package_license_mapping", [])
+        mapping_identities = {
+            (item.get("package"), item.get("version"), item.get("registry_checksum"))
+            for item in mapping_items
+            if isinstance(item, dict)
+        }
+        expected_mappings = {(item.name, item.version, item.checksum) for item in PACKAGES}
+        if len(mapping_identities) != len(mapping_items) or not mapping_identities <= expected_mappings:
+            raise InvalidReview("schema 2 package mapping inventory escaped or is duplicated")
+        outcome_contracts = {
+            "PASS": ({"license-evidence-collected"}, 0, type(None)),
+            "STOP": ({"license-evidence", "resource-limit"}, 20, dict),
+            "INVALID": ({"evidence-contract"}, 30, dict),
+        }
+        outcome = manifest.get("outcome")
+        if outcome not in outcome_contracts:
+            raise InvalidReview("schema 2 outcome is invalid")
+        stages, exit_code, failure_type = outcome_contracts[outcome]
+        if (
+            manifest.get("stage") not in stages
+            or manifest.get("exit_code") != exit_code
+            or not isinstance(manifest.get("failure"), failure_type)
+        ):
+            raise InvalidReview("schema 2 outcome contract drifted")
+        d2 = manifest.get("d2")
+        if not isinstance(d2, dict) or d2.get("run_id") != D2_RUN_ID:
+            raise InvalidReview("schema 2 D2 identity drifted")
+        if d2.get("manifest_sha256") != D2_MANIFEST_SHA256:
+            raise InvalidReview("schema 2 D2 manifest digest drifted")
+        if d2.get("checksums_sha256") != D2_CHECKSUMS_SHA256:
+            raise InvalidReview("schema 2 D2 checksum-list digest drifted")
+        if d2.get("lock_sha256") != LOCK_SHA256:
+            raise InvalidReview("schema 2 D2 lock digest drifted")
+        if manifest.get("outcome") == "PASS":
+            if commit_identities != expected_commits:
+                raise InvalidReview("schema 2 PASS commit inventory drifted")
+            if mapping_identities != expected_mappings:
+                raise InvalidReview("schema 2 PASS package mapping inventory drifted")
+        validate_schema2_manifest(run_dir, manifest)
+    validate_evidence_checksums(repo_root, run_dir)
+    return manifest
 
 
 def finalize_run(
@@ -1290,9 +1816,9 @@ def collect(repo_root: Path, expected_revision: str) -> int:
     preflight = local_preflight(repo_root, expected_revision)
     partial_dir, final_dir, run_id = prepare_artifact_directories(repo_root)
     log_lines = [
-        f"{start_time} R1 collect start",
+        f"{start_time} R1c collect start",
         f"revision={expected_revision}",
-        "network=anonymous HTTPS GET; api.github.com, raw.githubusercontent.com",
+        "network=anonymous HTTPS GET; api.github.com Git commit/tree/blob APIs",
         "retry=disabled",
     ]
     session = HttpSession(start_monotonic)
@@ -1304,7 +1830,14 @@ def collect(repo_root: Path, expected_revision: str) -> int:
     commit_records: list[dict[str, Any]] = []
     try:
         atomic_write_json(partial_dir / "inventory.json", preflight)
-        mappings, commit_records = collect_remote(partial_dir, PACKAGES, COMMITS, session)
+        collect_remote(
+            partial_dir,
+            PACKAGES,
+            COMMITS,
+            session,
+            mappings,
+            commit_records,
+        )
         atomic_write_json(partial_dir / "package-license-mapping.json", mappings)
         atomic_write_json(partial_dir / "http-observations.json", session.observations)
         missing = [item["package"] for item in mappings if item["missing_license_texts"]]
@@ -1339,7 +1872,7 @@ def collect(repo_root: Path, expected_revision: str) -> int:
         failure = {"type": "StopReview", "message": "runtime or evidence budget exceeded"}
     helper_path = Path(__file__).resolve()
     checker_path = repo_root / "scripts" / "check-sw-g2-mls-rs-license-review.sh"
-    require_regular_file(checker_path, "R1 offline checker")
+    require_regular_file(checker_path, "R1c offline checker")
     end_time = utc_now()
     manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -1362,7 +1895,8 @@ def collect(repo_root: Path, expected_revision: str) -> int:
         "package_license_mapping": mappings,
         "network": {
             "method": "GET",
-            "allowed_hosts": [API_HOST, RAW_HOST],
+            "transport": "git-blobs-api",
+            "allowed_hosts": [API_HOST],
             "anonymous": True,
             "proxies_disabled": True,
             "redirects_disabled": True,
@@ -1386,8 +1920,11 @@ def collect(repo_root: Path, expected_revision: str) -> int:
         },
     }
     log_lines.append(f"{end_time} outcome={outcome} stage={stage} exit_code={exit_code}")
+    if manifest_schema(manifest) != SCHEMA_VERSION:
+        raise InvalidReview("R1c final manifest schema drifted")
+    validate_schema2_manifest(partial_dir, manifest)
     finalize_run(repo_root, partial_dir, final_dir, manifest, log_lines)
-    print(f"SW-EXP-003 mls-rs license review R1: {outcome} {final_dir.relative_to(repo_root)}")
+    print(f"SW-EXP-003 mls-rs license review R1c: {outcome} {final_dir.relative_to(repo_root)}")
     return exit_code
 
 
@@ -1405,13 +1942,26 @@ def expect_error(error_type: type[Exception], callback: Callable[[], Any]) -> No
 
 
 def self_test() -> int:
-    with patch.object(socket, "create_connection", side_effect=AssertionError("network forbidden in self-test")):
+    with patch.object(
+        socket,
+        "create_connection",
+        side_effect=AssertionError("network forbidden in self-test"),
+    ):
         assert validate_revision("a" * 40) == "a" * 40
         expect_error(argparse.ArgumentTypeError, lambda: validate_revision("A" * 40))
         expect_error(InvalidReview, lambda: validate_url_shape("http://api.github.com/x"))
         expect_error(InvalidReview, lambda: validate_url_shape("https://example.com/x"))
-        expect_error(InvalidReview, lambda: validate_url_shape("https://raw.githubusercontent.com/a/b/main/LICENSE"))
+        expect_error(
+            InvalidReview,
+            lambda: validate_url_shape(f"https://{LEGACY_RAW_HOST}/a/b/main/LICENSE"),
+        )
         expect_error(InvalidReview, lambda: validate_url_shape("https://api.github.com/a/../b"))
+        assert manifest_schema(
+            {"schema_version": LEGACY_SCHEMA_VERSION, "manifest_contract": LEGACY_MANIFEST_CONTRACT}
+        ) == LEGACY_SCHEMA_VERSION
+        assert manifest_schema(
+            {"schema_version": SCHEMA_VERSION, "manifest_contract": MANIFEST_CONTRACT}
+        ) == SCHEMA_VERSION
 
         commit_sha = "b" * 40
         tree_sha = "c" * 40
@@ -1426,39 +1976,82 @@ def self_test() -> int:
         )
         commit = CommitSpec(package.repository, package.commit)
         commit_body = json.dumps({"sha": commit_sha, "tree": {"sha": tree_sha}}).encode("utf-8")
-        tree_entries = [
-            {"path": "Cargo.toml", "type": "blob", "mode": "100644", "sha": "1" * 40},
-            {"path": "LICENSE-APACHE", "type": "blob", "mode": "100644", "sha": "2" * 40},
-            {"path": "LICENSE-MIT", "type": "blob", "mode": "100644", "sha": "3" * 40},
-            {"path": "NOTICE", "type": "blob", "mode": "100644", "sha": "4" * 40},
-            {"path": "crate/Cargo.toml", "type": "blob", "mode": "100644", "sha": "5" * 40},
-            {"path": "crate/src/lib.rs", "type": "blob", "mode": "100644", "sha": "6" * 40},
-            {"path": "crate/OTHER-LINK", "type": "blob", "mode": "120000", "sha": "7" * 40},
-            {"path": "crate/README.md", "type": "blob", "mode": "100644", "sha": "8" * 40},
-        ]
-        tree_body = json.dumps({"sha": tree_sha, "truncated": False, "tree": tree_entries}).encode("utf-8")
         root_manifest = b'''[workspace]\nmembers = ["crate"]\n[workspace.package]\nlicense = "Apache-2.0 OR MIT"\nrepository = "https://github.com/owner/repo"\n'''
         package_manifest = b'''[package]\nname = "demo"\nversion = "1.2.3"\nlicense.workspace = true\nrepository.workspace = true\nreadme = "README.md"\n'''
         apache = b"Apache License\nVersion 2.0, January 2004\n"
         mit = b'''MIT License\nPermission is hereby granted, free of charge\nTHE SOFTWARE IS PROVIDED "AS IS"\n'''
         notice = b"Copyright Example\n"
-        responses: dict[str, HttpPayload] = {
-            commit.commit_url: make_payload(commit.commit_url, "api", commit_body),
-            commit.tree_url(tree_sha): make_payload(commit.tree_url(tree_sha), "api", tree_body),
-        }
-        raw_bodies = {
+        decoded_bodies = {
             "Cargo.toml": root_manifest,
             "LICENSE-APACHE": apache,
             "LICENSE-MIT": mit,
             "NOTICE": notice,
             "crate/Cargo.toml": package_manifest,
+            "crate/src/lib.rs": b"pub fn demo() {}\n",
             "crate/README.md": b"Demo package\n",
         }
-        for path, body in raw_bodies.items():
-            url = commit.raw_url(path)
-            responses[url] = make_payload(url, "raw", body)
 
-        with tempfile.TemporaryDirectory(prefix="radishlink-mls-rs-license-review-self-test.") as temporary:
+        def tree_entry(path: str, body: bytes, mode: str = "100644") -> dict[str, Any]:
+            blob_sha = git_blob_sha1(body)
+            return {
+                "path": path,
+                "type": "blob",
+                "mode": mode,
+                "sha": blob_sha,
+                "size": len(body),
+                "url": commit.blob_url(blob_sha),
+            }
+
+        def blob_envelope(
+            entry: dict[str, Any],
+            body: bytes,
+            *,
+            response_sha: str | None = None,
+            encoding: str = "base64",
+            content: str | None = None,
+            size: int | None = None,
+        ) -> bytes:
+            return json.dumps(
+                {
+                    "sha": response_sha if response_sha is not None else entry["sha"],
+                    "encoding": encoding,
+                    "content": (
+                        base64.encodebytes(body).decode("ascii")
+                        if content is None
+                        else content
+                    ),
+                    "size": len(body) if size is None else size,
+                }
+            ).encode("utf-8")
+
+        tree_entries = [tree_entry(path, body) for path, body in decoded_bodies.items()]
+        tree_entries.append(
+            {
+                "path": "crate/OTHER-LINK",
+                "type": "blob",
+                "mode": "120000",
+                "sha": "7" * 40,
+                "size": 8,
+                "url": commit.blob_url("7" * 40),
+            }
+        )
+        tree_body = json.dumps(
+            {"sha": tree_sha, "truncated": False, "tree": tree_entries}
+        ).encode("utf-8")
+        responses: dict[str, HttpPayload] = {
+            commit.commit_url: make_payload(commit.commit_url, "api", commit_body),
+            commit.tree_url(tree_sha): make_payload(commit.tree_url(tree_sha), "api", tree_body),
+        }
+        for entry in tree_entries:
+            if entry["mode"] != "100644":
+                continue
+            body = decoded_bodies[entry["path"]]
+            url = commit.blob_url(entry["sha"])
+            responses[url] = make_payload(url, "api", blob_envelope(entry, body))
+
+        with tempfile.TemporaryDirectory(
+            prefix="radishlink-mls-rs-license-review-self-test."
+        ) as temporary:
             run_dir = Path(temporary) / "run"
             run_dir.mkdir(mode=0o700)
             session = FakeSession(responses)
@@ -1473,18 +2066,62 @@ def self_test() -> int:
                     "path": "crate/README.md",
                 }
             ]
-            assert "crate/src/lib.rs" not in {item["path"] for item in mappings[0]["evidence_files"]}
-            assert "crate/OTHER-LINK" not in {item["path"] for item in mappings[0]["evidence_files"]}
-            assert all(item["host"] in {API_HOST, RAW_HOST} for item in session.observations)
+            assert "crate/src/lib.rs" not in {
+                item["tree_path"] for item in mappings[0]["evidence_files"]
+            }
+            assert "crate/OTHER-LINK" not in {
+                item["tree_path"] for item in mappings[0]["evidence_files"]
+            }
+            assert all(item["host"] == API_HOST for item in session.observations)
             assert all(item["path"].startswith("/") for item in session.observations)
+            assert all(
+                item["api_url"].startswith(f"https://{API_HOST}/")
+                for item in records[0]["blobs"]
+            )
+            assert all(
+                item["blob_sha"] == git_blob_sha1(decoded_bodies[item["tree_path"]])
+                for item in records[0]["blobs"]
+            )
+
+            manifest = {
+                "schema_version": SCHEMA_VERSION,
+                "manifest_contract": MANIFEST_CONTRACT,
+                "outcome": "PASS",
+                "commits": records,
+                "package_license_mapping": mappings,
+                "network": {
+                    "transport": "git-blobs-api",
+                    "method": "GET",
+                    "allowed_hosts": [API_HOST],
+                    "anonymous": True,
+                    "proxies_disabled": True,
+                    "redirects_disabled": True,
+                    "request_count": session.request_count,
+                    "request_limit": REQUEST_LIMIT,
+                    "downloaded_bytes": session.downloaded_bytes,
+                    "download_limit_bytes": DOWNLOAD_LIMIT_BYTES,
+                    "retry": False,
+                    "requests": session.observations,
+                },
+                "runtime": {
+                    "elapsed_milliseconds": 1,
+                    "deadline_seconds": DEADLINE_SECONDS,
+                    "evidence_bytes_before_manifest": directory_usage_bytes(run_dir),
+                    "evidence_limit_bytes": EVIDENCE_LIMIT_BYTES,
+                    "background_processes_started": 0,
+                },
+            }
+            validate_schema2_manifest(run_dir, manifest)
 
             final_dir = Path(temporary) / "final"
-            manifest = {"schema_version": 1, "manifest_contract": MANIFEST_CONTRACT}
             finalize_run(Path(temporary), run_dir, final_dir, manifest, ["self-test"])
             checksum_text = (final_dir / "checksums.sha256").read_text(encoding="utf-8")
             verify_checksum_text(Path(temporary), checksum_text)
             (final_dir / "run.log").write_text("tampered\n", encoding="utf-8")
-            expect_error(InvalidReview, lambda: verify_checksum_text(Path(temporary), checksum_text))
+            expect_error(
+                InvalidReview,
+                lambda: verify_checksum_text(Path(temporary), checksum_text),
+            )
 
         wrong_commit = make_payload(
             commit.commit_url,
@@ -1494,15 +2131,91 @@ def self_test() -> int:
         expect_error(InvalidReview, lambda: validate_commit_payload(wrong_commit, commit))
         expect_error(InvalidReview, lambda: safe_tree_path("crate//LICENSE"))
         expect_error(InvalidReview, lambda: safe_tree_path("crate/../LICENSE"))
+        valid_entry = tree_entries[0]
+        invalid_tree_sha = dict(valid_entry, sha="A" * 40)
+        expect_error(
+            InvalidReview,
+            lambda: validate_selected_blob_entry(commit, valid_entry["path"], invalid_tree_sha),
+        )
+        mismatched_tree_url = dict(valid_entry, url=commit.blob_url("f" * 40))
+        expect_error(
+            InvalidReview,
+            lambda: validate_selected_blob_entry(commit, valid_entry["path"], mismatched_tree_url),
+        )
+        response_sha_drift = make_payload(
+            valid_entry["url"],
+            "api",
+            blob_envelope(valid_entry, root_manifest, response_sha="f" * 40),
+        )
+        expect_error(
+            InvalidReview,
+            lambda: validate_blob_payload(
+                response_sha_drift,
+                commit,
+                valid_entry["path"],
+                valid_entry,
+            ),
+        )
+        wrong_encoding = make_payload(
+            valid_entry["url"],
+            "api",
+            blob_envelope(valid_entry, root_manifest, encoding="utf-8"),
+        )
+        expect_error(
+            InvalidReview,
+            lambda: validate_blob_payload(
+                wrong_encoding,
+                commit,
+                valid_entry["path"],
+                valid_entry,
+            ),
+        )
+        invalid_base64 = make_payload(
+            valid_entry["url"],
+            "api",
+            blob_envelope(valid_entry, root_manifest, content="not base64!"),
+        )
+        expect_error(
+            InvalidReview,
+            lambda: validate_blob_payload(
+                invalid_base64,
+                commit,
+                valid_entry["path"],
+                valid_entry,
+            ),
+        )
+        size_drift = make_payload(
+            valid_entry["url"],
+            "api",
+            blob_envelope(valid_entry, root_manifest, size=len(root_manifest) + 1),
+        )
+        expect_error(
+            InvalidReview,
+            lambda: validate_blob_payload(size_drift, commit, valid_entry["path"], valid_entry),
+        )
+        sha1_drift_entry = dict(
+            valid_entry,
+            sha="f" * 40,
+            url=commit.blob_url("f" * 40),
+        )
+        sha1_drift = make_payload(
+            sha1_drift_entry["url"],
+            "api",
+            blob_envelope(sha1_drift_entry, root_manifest),
+        )
+        expect_error(
+            InvalidReview,
+            lambda: validate_blob_payload(
+                sha1_drift,
+                commit,
+                valid_entry["path"],
+                sha1_drift_entry,
+            ),
+        )
         executable_license_tree = {
             "Cargo.toml": tree_entries[0],
             "crate/Cargo.toml": tree_entries[4],
-            "crate/LICENSE": {
-                "path": "crate/LICENSE",
-                "type": "blob",
-                "mode": "100755",
-                "sha": "9" * 40,
-            },
+            "crate/LICENSE": tree_entry("crate/LICENSE", mit, mode="100755"),
         }
         expect_error(
             StopReview,
@@ -1525,14 +2238,15 @@ def self_test() -> int:
             json.dumps({"sha": tree_sha, "truncated": True, "tree": []}).encode("utf-8"),
         )
         expect_error(InvalidReview, lambda: validate_tree_payload(truncated, tree_sha))
-        expect_error(StopReview, lambda: validate_http_body("raw", "text/html", b"<html>x</html>"))
-        expect_error(StopReview, lambda: validate_http_body("raw", "text/plain", b"x\x00y"))
+        expect_error(StopReview, lambda: validate_http_body("api", "text/html", b"<html>x</html>"))
+        expect_error(StopReview, lambda: validate_http_body("api", "application/json", b""))
+        expect_error(StopReview, lambda: validate_decoded_text(b"x\x00y"))
+        expect_error(StopReview, lambda: validate_decoded_text(b"<html>x</html>"))
         expect_error(
             StopReview,
-            lambda: validate_http_body(
-                "raw", "text/plain", b"version https://git-lfs.github.com/spec/v1\n"
-            ),
+            lambda: validate_decoded_text(b"version https://git-lfs.github.com/spec/v1\n"),
         )
+        expect_error(StopReview, lambda: validate_decoded_text(b"\xff\xfe"))
         assert not is_regular_tree_blob({"path": "LICENSE", "type": "blob", "mode": "100755"})
         assert classify_license_text(mit.decode("utf-8")) == {"MIT"}
         assert classify_license_text(apache.decode("utf-8")) == {"Apache-2.0"}
@@ -1551,7 +2265,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="action", required=True)
     subparsers.add_parser("self-test", help="run synthetic offline checks only")
-    collect_parser = subparsers.add_parser("collect", help="perform one authorized R1 collection")
+    collect_parser = subparsers.add_parser(
+        "collect", help="perform one separately authorized R1c collection"
+    )
     collect_parser.add_argument("expected_revision", type=validate_revision)
     return parser
 
@@ -1566,7 +2282,7 @@ def main() -> int:
         try:
             return collect(repo_root, arguments.expected_revision)
         except InvalidReview as error:
-            print(f"INVALID before R1 network/evidence: {error}", file=sys.stderr)
+            print(f"INVALID before R1c network/evidence: {error}", file=sys.stderr)
             return 10
     parser.error("unsupported action")
     return 2
