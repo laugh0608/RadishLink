@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包
 
-- 状态：Proposed（2026-09-02；R0 离线盘点与设计已形成，R1 联网补证、R2 非实现者复核、结果收口与 Phase B 均未授权）
+- 状态：Proposed（2026-09-03；R0 离线盘点与设计及 R1 helper 已形成，R1 联网补证、R2 非实现者复核、结果收口与 Phase B 均未授权）
 - 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置结果：[mls-rs 0.56.0 实施与 Phase A 精确授权包](sw-g2-mls-rs-phase-a-authorization.md)的 D2 固定 94-package 图已正式 `PASS`
@@ -10,7 +10,7 @@
 
 本文把 D2 后尚未关闭的两项门禁拆成可复核、可停止、逐单元授权的方案：
 
-1. 为 crate archive 中未携带许可证/NOTICE 类文件的 11 个 package，按 registry checksum、`.cargo_vcs_info.json` commit 与 `path_in_vcs` 收集不可变上游证据；
+1. 为 crate archive 未携带足以覆盖 Cargo 声明及适用归属/NOTICE 的完整证据的 11 个 package，按 registry checksum、`.cargo_vcs_info.json` commit 与 `path_in_vcs` 收集不可变上游证据；
 2. 由未参与 A2/A3、D2 runner 实施、D2 执行或本轮结果撰写的复核者，独立核对 D2 与许可证补证。
 
 本文不判断组合、链接、商店发布或任何目标渠道在法律上合规，不把 Cargo license metadata 或 SPDX 表达式当作许可证正文，也不因 D2 四门全零推导完整第三方安全审计、候选采用、`SW-G2 PASS` 或 Phase B 授权。若目标分发方式需要法律意见，仍须由有资格的独立评审者给出；工程记录不得代替该结论。
@@ -43,7 +43,10 @@ R1/R2 开始前必须重新只读复核上述值。任一摘要、package 数、
 
 ## R0 离线许可证缺口盘点
 
-D2 固定图含 1 个本地 path package 与 93 个 crates.io package。93 个 registry package 的 Cargo license metadata 均非空，`cargo-deny 0.20.2` 的 licenses/advisories 结果为 `ok`；这只证明固定 metadata 表达式通过当前工具门。保留的 11 个下列 crate archive 中未找到名称匹配 `LICENSE`、`LICENCE`、`NOTICE`、`COPYING`、`COPYRIGHT`、`AUTHORS` 或同类形式的文件。
+D2 固定图含 1 个本地 path package 与 93 个 crates.io package。93 个 registry package 的 Cargo license metadata 均非空，`cargo-deny 0.20.2` 的 licenses/advisories 结果为 `ok`；这只证明固定 metadata 表达式通过当前工具门。保留 archive 的精确复核表明，下列 11 个 package 都缺少足以覆盖其 Cargo 声明及适用 copyright/NOTICE 的完整随包证据；其中 9 个 archive 没有名称匹配 `LICENSE`、`LICENCE`、`NOTICE`、`COPYING`、`COPYRIGHT`、`AUTHORS` 或同类形式的文件，另有两个必须单独解释：
+
+- `debug_tree 0.4.0` 的 `doc/build/LICENSE.adoc`（SHA-256 `56cd47a25f2bbb4f2f870c933aa04c47a2b68dea497f974c5c9c215583dec3dc`）是归属于 Asciidoctor Project 的文档构建资产 MIT 正文，不是 `debug_tree` package 自身的许可证证据；
+- `r-efi 6.0.0` 的 `AUTHORS`（SHA-256 `d027e91dbc9cdbb2f1190068e498bd6b61cff022b6a032b191021ba658d96111`）包含项目 MIT 正文、copyright/作者清单及 Apache-2.0/LGPL-2.1-or-later 短告知，但没有后二者完整许可证正文。
 
 表中 registry checksum 来自已提交的固定 `Cargo.lock`；repository/license 来自 D2 `cargo-metadata.json`；commit 与仓库内路径来自每个 archive 自带的 `.cargo_vcs_info.json`。commit 是发布包的本地 provenance，R1 仍须通过对应官方仓库的不可变 commit API 验证；浮动 tag、branch 或仓库默认分支不能替代。
 
@@ -61,7 +64,7 @@ D2 固定图含 1 个本地 path package 与 93 个 crates.io package。93 个 r
 | `mls-rs-provider-sqlite 0.23.0` | `e8e52c2b3b9c3421fe4bd96266016306595a66c1f4830ee2f1a19d50b209895e` | `Apache-2.0 OR MIT` | `awslabs/mls-rs` / `a0eb41def0cf227034bde19b7c11e62ab2a74a03` / `mls-rs-provider-sqlite` |
 | `r-efi 6.0.0` | `f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf` | `MIT OR Apache-2.0 OR LGPL-2.1-or-later` | `r-efi/r-efi` / `7e1b0322d31d625f81a5656096330934f9cd835d` / `.` |
 
-这 11 项不是“无许可证”或工具 gate 失败。缺口是 crate archive 本身不足以独立给出正文、copyright、NOTICE 与目标分发义务；同一仓库/commit 的多个 package 可以共享上游文件，但 mapping 必须逐 package 明示，不能只用仓库级推断替代。
+这 11 项不是“无许可证”或工具 gate 失败。缺口是 crate archive 本身不足以独立覆盖 Cargo 声明的全部正文、适用 copyright/NOTICE 与目标分发义务；同一仓库/commit 的多个 package 可以共享上游文件，但 mapping 必须逐 package 明示，不能只用仓库级推断替代。文件名命中、第三方资产正文或短告知均不得自动计为 package 的完整许可证正文。
 
 ## R1 受限联网补证方案
 
@@ -119,6 +122,12 @@ artifacts/sw-g2-mls-rs-license-review/<run-id>/
 
 批准时应固定一次性命令或临时 helper 的全文与 SHA-256。预计 1–10 分钟、HTTPS 请求不超过 40 次、下载不超过 50 MiB、evidence 不超过 100 MiB；10 分钟或 100 MiB 为用户态停止线。没有后台服务、端口、容器、系统设置或远程写入；成功与负向 evidence 默认保留，不修改/清理 D/D2 或其他历史 evidence。HTTP、rate limit、tree 截断、摘要、解析、资源、finalizer 或零后台进程检查失败时保留真实 `STOP/INVALID`，不自动重试、不改用 token、mirror、branch、tag 或搜索引擎。
 
+### R1 helper 冻结状态
+
+2026-09-03 已离线形成 `scripts/run-sw-g2-mls-rs-license-review.py` 与 `scripts/check-sw-g2-mls-rs-license-review.sh`，当前全文 SHA-256 分别为 `a980c2953a3dd3c1feb7780d534f2875fa14588fe0a2acb0054995a212fe1b54` 与 `0e6cb4017cf17791deea27954951df8377c38a76f6fb23e23e9eee6afa8a87a8`。helper 在任何 artifact 或网络请求前要求显式 40 位 clean revision、R0 revision 为其祖先，并逐项复核 D2 manifest/checksum/三份 lock、94-package metadata、11 个 archive checksum/Cargo/vcs provenance 和上述两个 archive 内文件事实；请求使用关闭 proxy/redirect 的 Python 标准库匿名 HTTPS，仅动态放行由六个固定 commit、验证 tree SHA 与 tree path 派生的 URL。
+
+离线 checker 复核固定 11 package/3 repository/6 commit、40 请求/50 MiB 下载/100 MiB evidence/600 秒上限、D2 32 项 checksum 和 retained archive；synthetic fixture 覆盖正确 mapping、错误 commit、截断 tree、不安全路径、重定向、HTML/NUL/LFS/可执行响应拒绝及 checksum 篡改。无参数、未知 action、非法 revision 和不匹配 revision 均在 artifact/network 前拒绝。未来 R1 的唯一候选命令形状为 `python3 scripts/run-sw-g2-mls-rs-license-review.py collect <R1-clean-revision>`；`<R1-clean-revision>` 必须在本轮文件另获 commit 授权并形成 clean revision 后替换为完整 SHA，再连同 helper/checker 摘要申请一次 L3 授权。这里记录命令形状不授权执行。
+
 ### R1 判定
 
 `PASS` 必须同时满足：
@@ -168,6 +177,6 @@ R2 不修改 D2/R1 原始 evidence，只在 R1 run 下新增独立 `review/` 目
 
 ## 当前停止点与最小后续单元
 
-R0 已只读固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单；没有联网、创建 R1 evidence、修改 D/D2 evidence、运行 Cargo/Docker、进入 Phase B、commit 或 push。
+R0 已只读固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单；R1 helper/checker 已离线实现并验证，同时把两个 archive 内同名文件的适用范围修正为精确事实。没有联网、创建 R1 evidence、修改 D/D2 evidence、运行 Cargo/Docker、进入 Phase B、commit 或 push。
 
-下一个最小单元是在本包形成 clean revision 后，为 R1 形成一次性命令/helper 全文与 SHA-256，并连同上述 host/commit、10 分钟/100 MiB、无 token、失败不重试和 evidence 保留边界申请单次 L3 联网授权。R1 `PASS` 后再由项目所有者指定非实现者执行 R2；R1/R2 均关闭前不得设计或执行 Phase B。
+下一个最小单元是另获 commit 授权，使本轮 helper/checker 与事实修正形成 clean revision；随后以该完整 revision 替换命令占位符，并连同上述两个文件摘要、host/commit、40 请求/50 MiB 下载、10 分钟/100 MiB、无 token、失败不重试和 evidence 保留边界申请单次 L3 联网授权。R1 `PASS` 后再由项目所有者指定非实现者执行 R2；R1/R2 均关闭前不得设计或执行 Phase B。

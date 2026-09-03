@@ -1,6 +1,6 @@
 # RadishLink 当前状态
 
-更新日期：2026-09-02
+更新日期：2026-09-03
 
 ## 当前阶段
 
@@ -20,7 +20,7 @@
 - 仓库采用 `topic -> dev -> master -> dev` 治理闭环；`master` 是稳定主线，`dev` 是常态集成分支。
 - GitHub 公开仓库 `laugh0608/RadishLink` 已完成初始化；`master` 是 GitHub 默认稳定主线，`dev` 是常态集成分支。merge commit 与 rebase merge 已开启、squash merge 已关闭；仅匹配 `master` 的 active Ruleset 已要求 PR、解决会话和 strict `Candidate Quality`，并禁止删除与 non-fast-forward 更新。
 - GitHub Private Vulnerability Reporting 已启用；安全漏洞按根目录 `SECURITY.md` 使用私密入口报告，不通过公开 Issue 或 Pull Request 披露。
-- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 单元 D 的固定 94-package 图保留正式历史 `STOP`，A2/A3 已形成 clean revision。2026-09-02 单元 D2 对同一固定图形成 schema 2/v2 正式 Phase A `PASS`，仓库 lockfile 已提升并与 seed/evidence 一致；人工许可证/NOTICE 与非实现者 evidence 复核未完成，Phase B 禁止。OpenMLS 0.9.0 的 A6 已由 `ac01b4d` 收口；2026-09-01 单元 E 在固定 264-package 图上形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，`cargo-audit` 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。OpenMLS 0.9.0 不进入 Phase B，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
+- `PLAN-G0`、`SW-G0` 与 `SW-G1` 已于 2026-08-24 接受，`SW-G3` 与 `SW-G4/SW-V0` 已于 2026-08-28 接受并完成；`mls-rs 0.56.0` 单元 D 的固定 94-package 图保留正式历史 `STOP`，A2/A3 已形成 clean revision。2026-09-02 单元 D2 对同一固定图形成 schema 2/v2 正式 Phase A `PASS`，仓库 lockfile 已提升并与 seed/evidence 一致；11 个 package 的随包许可证证据仍不足以覆盖全部声明正文及适用 copyright/NOTICE，R1 helper 已离线形成但联网补证与非实现者复核未执行，Phase B 禁止。OpenMLS 0.9.0 的 A6 已由 `ac01b4d` 收口；2026-09-01 单元 E 在固定 264-package 图上形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，`cargo-audit` 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate。OpenMLS 0.9.0 不进入 Phase B，`SW-G2` 未通过；`SW-V0 PASS` 只接受 harness 有效，不代表 E2EE 路线、产品软件实现、P0 或其他证据轨通过。
 
 ## 关键风险
 
@@ -31,17 +31,17 @@
 5. **媒体复杂度风险**：实时语音、视频、路由切换、拥塞控制和端到端加密必须联合验证，单独跑通 `iperf3` 不等于产品可用。
 6. **设计漂移风险**：`SW-EXP-001` 探针早于已接受的消息语义、故障模型和证据格式；后续实现若直接继承探针 JSON、摘要 ACK 或 snapshot，会偏离 `SW-G1` 并把测试技术栈误当成产品协议。
 7. **低成本硬件捷径风险**：直接用三块 MCU 重写 Core 会偏离嵌入式 Linux 基线，也无法覆盖目标媒体、持久化和升级边界；MCU 只进入交互与低功耗辅助域。
-8. **E2EE 候选依赖风险**：`OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定图已命中活跃 RustSec advisory，其中包含 AArch64 constant-time 错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 也未通过初始许可证门。OpenMLS 0.9.0 单元 E 的独立 audit 未发现 vulnerability，但报告 `proc-macro-error2 2.0.1` 的 `RUSTSEC-2026-0173` unmaintained 信息项，且当前许可证门正式拒绝 `hpke-rs* 0.7.0` 的 `MPL-2.0`。`mls-rs 0.56.0` D2 虽已通过固定图 Phase A，仍没有完整第三方安全审计；11 个 crate archive 缺少随包许可证/NOTICE 类文件，目标分发义务和非实现者复核未关闭，不能直接进入场景验证。
+8. **E2EE 候选依赖风险**：`OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 固定图已命中活跃 RustSec advisory，其中包含 AArch64 constant-time 错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 也未通过初始许可证门。OpenMLS 0.9.0 单元 E 的独立 audit 未发现 vulnerability，但报告 `proc-macro-error2 2.0.1` 的 `RUSTSEC-2026-0173` unmaintained 信息项，且当前许可证门正式拒绝 `hpke-rs* 0.7.0` 的 `MPL-2.0`。`mls-rs 0.56.0` D2 虽已通过固定图 Phase A，仍没有完整第三方安全审计；11 个 package 的 archive 证据不足以覆盖全部声明正文及适用 copyright/NOTICE，目标分发义务和非实现者复核未关闭，不能直接进入场景验证。
 
 ## 当前优先级与暂停线
 
 - 暂停 HaLow 硬件采购、射频发射、量产硬件和生产技术栈冻结；
 - 2026-08-20 的 Docker A—B—C 结果登记为 `SW-EXP-001`，不是 `SW-V*` 或 P0 阶段验收；
 - [项目执行计划](project-execution-plan.md)的 `PLAN-G0`、[D0/P0 软件工作计划](d0-t0-p0-plan.md)的 `SW-G0`、[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 与[确定性故障设计](../testing/sw-g3-deterministic-validation-design.md)的 `SW-G3` 已接受；[`SW-G2` E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)仍为 Draft；OpenMLS 0.8.1 Phase A 在许可证与 advisory 门 `STOP`，prepared run 的 Phase B 禁止执行；
-- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确实施/Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)已执行到单元 D2。run `20260901-135918-13430.mvBCS2` 的 94-package 图 source/audit/deny 为零、feature 为一，保留正式历史 `STOP/feature-gate`；A2 已依据保留 metadata/source 把后续 gate 改为固定 package/version、精确解析集合、alias 展开和 provider dependency edge 联合判定，只接受 core 的 `rfc_compliant -> x509` 与 `fast_serialize -> mls-rs-codec/preallocate` 既有展开，不接受顶层同名 feature 或 provider defaults。A3 固定只读 seed lock SHA-256 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`，拒绝 D `.work`、重新解析与旧 mutable cache。D2 run `20260902-130415-49997.8P5Td6` 对同一 94-package 图形成 schema 2/v2 正式 `PASS`：source/audit/deny/feature 全零，RustSec revision `5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5` 下未发现 vulnerability 或 warning，32 项 checksum、运行控制和零容器残留已复核；仓库 lockfile 已提升且与 seed/evidence 摘要一致。工具许可证门通过不等于人工分发义务完成；11 个 crate archive 缺少随包许可证/NOTICE 类文件，非实现者 evidence 复核也未完成，Phase B 禁止。OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)记录历史单元与 2026-09-01 单元 E。仓库与 evidence lockfile SHA-256 均为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；单元 E run `20260901-123158-75973.3gVtsH` 的 schema 4/v4 manifest、26 项 checksum、独立 audit 与零容器残留已复核，正式结论为许可证门 `STOP`。OpenMLS 0.9.0 的重跑、Phase B、allowlist/advisory ignore 变更、bundle 重建和 evidence 清理均未授权；
+- [`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确实施/Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)已执行到单元 D2。run `20260901-135918-13430.mvBCS2` 的 94-package 图 source/audit/deny 为零、feature 为一，保留正式历史 `STOP/feature-gate`；A2 已依据保留 metadata/source 把后续 gate 改为固定 package/version、精确解析集合、alias 展开和 provider dependency edge 联合判定，只接受 core 的 `rfc_compliant -> x509` 与 `fast_serialize -> mls-rs-codec/preallocate` 既有展开，不接受顶层同名 feature 或 provider defaults。A3 固定只读 seed lock SHA-256 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`，拒绝 D `.work`、重新解析与旧 mutable cache。D2 run `20260902-130415-49997.8P5Td6` 对同一 94-package 图形成 schema 2/v2 正式 `PASS`：source/audit/deny/feature 全零，RustSec revision `5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5` 下未发现 vulnerability 或 warning，32 项 checksum、运行控制和零容器残留已复核；仓库 lockfile 已提升且与 seed/evidence 摘要一致。工具许可证门通过不等于人工分发义务完成；11 个 package 的 archive 证据不足以覆盖全部声明正文及适用 copyright/NOTICE，非实现者 evidence 复核也未完成，Phase B 禁止。OpenMLS 的[Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)记录历史单元与 2026-09-01 单元 E。仓库与 evidence lockfile SHA-256 均为 `850c46666991222ccbd5d1e6c29a86ab78bd2c322fdd4cdaa933be890b067e49`；单元 E run `20260901-123158-75973.3gVtsH` 的 schema 4/v4 manifest、26 项 checksum、独立 audit 与零容器残留已复核，正式结论为许可证门 `STOP`。OpenMLS 0.9.0 的重跑、Phase B、allowlist/advisory ignore 变更、bundle 重建和 evidence 清理均未授权；
 - [`SW-G4 / SW-V0` Harness](../testing/sw-g4-sw-v0-harness-authorization.md)实施与 Docker 运行已分别授权并完成；当前没有重跑、修改 schema/profile 或扩展 `SW-V1/V2/V3` 的持续授权，也不安装密码依赖；
 - [低成本硬件验证计划](../hardware/hardware-validation-plan.md)当前停在 `HW-G0`；未通过 `HW-G2` 不采购，未通过 `HW-G3` 不刷写或启动实体台架；
-- mls-rs [许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线固定 11 个 package、3 个 repository、6 个不可变 commit、受限网络来源、证据合同和独立复核清单；下一步只为 R1 固定一次性命令/helper 全文与摘要并申请单次 L3 联网授权。R1/R2、D2 重跑、Phase B、gate/版本/provider/source 变化仍须分别精确授权；`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件继续只读评审；
+- mls-rs [许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线固定 11 个 package、3 个 repository、6 个不可变 commit、受限网络来源、证据合同和独立复核清单；R1 helper/checker 已离线形成并通过 synthetic/D2/archive 检查，下一步先另获 commit 授权形成 clean revision，再以该 revision 和两个文件摘要申请单次 L3 联网授权。R1/R2、D2 重跑、Phase B、gate/版本/provider/source 变化仍须分别精确授权；`SW-V1/V2` 后续授权边界、硬件分层路线和已有硬件复用条件继续只读评审；
 - 无射频软件计划不能替代首个测试地区的法规核对，二者可以并行研究但分别关门。
 
 ## 决策门状态
@@ -54,7 +54,13 @@
 4. `SW-G3`：接受 profile schema、固定 seed、单变量故障矩阵、D0 数值、观察窗、证据和 `PASS/FAIL/INVALID` 判定。
 5. `SW-G4/SW-V0`：授权清单内实现、无依赖单元门禁和 Docker harness 自检完成；四个 profile 各三次 canonical run 均通过且归一化一致。
 
-## 今日推进（2026-09-02）
+## 今日推进（2026-09-03）
+
+1. **R1 helper 已离线实施**：新增 Python 标准库 helper 与综合 checker，固定 11 package/3 repository/6 commit、R0/D2/三份 lock/retained archive 前置复核、匿名 HTTPS 动态 allowlist、40 请求/50 MiB 下载/100 MiB evidence/600 秒边界、无 retry 及 schema 1 finalizer；无参数和不匹配 revision 在 artifact/network 前拒绝。
+2. **archive 事实已精确修正**：9 个目标 archive 没有 license-like 文件；`debug_tree` 的 `doc/build/LICENSE.adoc` 是 Asciidoctor 文档构建资产而非 package 许可证，`r-efi` 的 `AUTHORS` 含 MIT 正文及 Apache/LGPL 短告知但缺后二者完整正文。11 个 package 仍都需要 R1 上游补证，但不能再表述为“11 个 archive 完全没有同名文件”。
+3. **离线 checker 通过**：D2 32 项 checksum、固定 manifest/lock/metadata、11 个 archive checksum/Cargo/vcs 与两个同名文件事实通过；synthetic fixture 覆盖正确 mapping、错误 commit、截断 tree、不安全 path、redirect/HTML/NUL/LFS/可执行文件与 checksum 篡改。没有联网、创建 R1 evidence、运行 Cargo/Docker、进入 Phase B、修改 D/D2 evidence、commit 或 push。
+
+## 上一批次（2026-09-02）
 
 1. **mls-rs A2 包限定 gate 已离线实施**：旧 gate 按 feature 名称扫描全部 `mls-rs*` package，混淆了顶层聚合 feature 与 core alias；新 gate 固定六个关键 package/version、各自解析集合、core/codec/X.509 alias 和 provider normal dependency edge。
 2. **安全边界未放宽为名称 allowlist**：仅接受 `mls-rs-core 0.27.0/rfc_compliant -> x509` 与 `fast_serialize -> mls-rs-codec/preallocate` 的既有展开；顶层 `mls-rs` 同名 feature、AWS-LC/SQLite provider defaults、FIPS、post-quantum、SQLCipher、FFI、第二 provider 与非 crates.io source 仍拒绝。
@@ -69,9 +75,9 @@
 11. **固定图 Phase A 正式 `PASS`**：schema 2 / `sw-g2-candidate-phase-a-v2` 证明 D final seed 合同、lock 摘要与 94-package 数未漂移，`lockfile_seeded: true`、`lockfile_written: true`、`mutable_cache_reused: false`；source/audit/deny/feature 全零。
 12. **advisory、证据与运行控制闭合**：`cargo-audit 0.22.2` 在 RustSec revision `5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5` 的 1239 条 advisory 中未发现 vulnerability 或 warning；`cargo-deny` 三类检查均为 `ok`。manifest SHA-256 为 `b42b4bd34142e71f44c020ec3c84ab0c329b2865b0e822efbf0adb53f0440a5f`，32 项 checksum 已独立复核；monitor 记录 `40525 ms`、峰值 `229278 KiB`，精确容器残留为零。
 13. **固定 lockfile 已提升**：`tools/spikes/sw-g2-mls-rs/Cargo.lock` 与 seed/evidence 逐字一致，SHA-256 为 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`；本轮约 `254556 KiB` evidence/`.work`/cache 与既有 fixed image、bundle 保留。
-14. **人工许可证/NOTICE 门仍未关闭**：93 个 crates.io package 均有非空 license metadata，工具许可证门通过；但 11 个 crate archive 没有随包 license/notice 类文件。它们不是据此判定“无许可证”，而是当前 evidence 不足以关闭许可证正文、copyright、NOTICE 与目标分发义务；非实现者 evidence 复核也未完成。
+14. **人工许可证/NOTICE 门仍未关闭**：93 个 crates.io package 均有非空 license metadata，工具许可证门通过；但 11 个 package 的 archive 证据不足以覆盖全部声明正文、适用 copyright/NOTICE 与目标分发义务。它们不是据此判定“无许可证”；非实现者 evidence 复核也未完成。两个 archive 内同名文件的精确范围在 2026-09-03 离线 helper 实施时进一步修正。
 15. **D2 边界保持**：没有编译或运行候选、生成密钥/数据库、修改历史 evidence、清理、commit 或 push。D 的历史 `STOP` 不被改写，D2 `PASS` 不等于候选采用、完整安全审计、`SW-G2` 通过或 Phase B 授权。
-16. **许可证/NOTICE R0 已离线形成**：从固定 lock、D2 metadata 与保留 `.cargo_vcs_info.json` 固定 11 个 archive 缺文件 package 的 registry checksum、Cargo license、repository、commit 与 `path_in_vcs`；它们收敛为 `martypapa/debug-tree`、`awslabs/mls-rs`、`r-efi/r-efi` 三个仓库和六个不可变 commit。
+16. **许可证/NOTICE R0 已离线形成**：从固定 lock、D2 metadata 与保留 `.cargo_vcs_info.json` 固定 11 个随包证据不足 package 的 registry checksum、Cargo license、repository、commit 与 `path_in_vcs`；它们收敛为 `martypapa/debug-tree`、`awslabs/mls-rs`、`r-efi/r-efi` 三个仓库和六个不可变 commit。
 17. **R1 网络与证据合同已冻结**：只允许匿名 HTTPS 访问六个固定 GitHub commit API、其验证后的非截断 tree 和同 commit raw manifest/license/NOTICE 类文本；禁止 token、cookie、浮动 branch/tag、crates.io、Git/Cargo/Docker。新 evidence 使用 schema 1 / `sw-g2-mls-rs-license-review-v1`，10 分钟/100 MiB、失败不重试并保留真实结果。
 18. **R2 独立性与复核清单已冻结**：复核者必须未参与 A2/A3、D2 实施/执行和本轮结果撰写；须独立复核 D2 manifest/checksum/lock/gates/runtime/零残留及 R1 provenance/license/NOTICE mapping。当前执行者不能自我关闭该门禁。
 19. **R0 边界保持**：没有联网、创建 R1 evidence、修改 D/D2 evidence、运行 Cargo/Docker、进入 Phase B、commit 或 push。R1/R2 均未授权，`SW-G2` 继续未通过。
