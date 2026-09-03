@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包
 
-- 状态：Proposed（2026-09-03；R0 离线盘点与设计及 R1 helper 已形成，R1 联网补证、R2 非实现者复核、结果收口与 Phase B 均未授权）
+- 状态：Proposed（2026-09-03；R0/helper 已形成；首次 R1 为有效 `STOP/license-evidence`（`TimeoutError`）；R1b、R2、结果收口与 Phase B 均未授权）
 - 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置结果：[mls-rs 0.56.0 实施与 Phase A 精确授权包](sw-g2-mls-rs-phase-a-authorization.md)的 D2 固定 94-package 图已正式 `PASS`
@@ -18,11 +18,12 @@
 ## 授权单位
 
 1. **R0：离线盘点与设计**：只读 D2 final evidence、固定 `Cargo.lock` 与保留 crate source，固定本包的 package、commit、网络来源、证据合同、判定和复核清单；只修改必要文档。2026-09-02 已按单次授权实施。
-2. **R1：受限联网补证**：在 R0 形成 clean revision 后，仅访问本文列出的三个 GitHub 仓库和六个不可变 commit，产生新的许可证评审 evidence；不得修改 D/D2 evidence、依赖图、gate、provider 或 source。当前未授权。
-3. **R2：非实现者复核**：在 R1 形成有效 final evidence 后，由符合独立性条件的复核者只读检查 D2、R1 与仓库 lockfile，另存复核记录；当前执行者不能自我关闭该门禁。当前未授权。
-4. **结果收口**：只有 R1 与 R2 均有效 `PASS` 后，才可另行授权把结论同步到状态和决策文档。该动作也不授权 Phase B；Phase B 必须另建精确设计、实施与 L3 运行包。
+2. **R1：受限联网补证**：在 R0 形成 clean revision 后，仅访问本文列出的三个 GitHub 仓库和六个不可变 commit，产生新的许可证评审 evidence；不得修改 D/D2 evidence、依赖图、gate、provider 或 source。首次授权已于 2026-09-03 消费，因 `TimeoutError` 形成有效 `STOP/license-evidence`。
+3. **R1b：单次全新补证**：只在首次 R1 结果已记录并形成新的 clean revision 后，使用同一 helper、host/commit/file selector 与资源边界从头产生独立 run；不得复用首次 run 的 partial 文件或隐藏其结果。当前未授权。
+4. **R2：非实现者复核**：仅在某次 R1 形成有效完整 `PASS` 后，由符合独立性条件的复核者只读检查 D2、全部 R1 run 与仓库 lockfile，另存复核记录；当前执行者不能自我关闭该门禁。当前未授权。
+5. **结果收口**：只有完整 R1 与 R2 均有效 `PASS` 后，才可另行授权把结论同步到状态和决策文档。该动作也不授权 Phase B；Phase B 必须另建精确设计、实施与 L3 运行包。
 
-笼统的“继续”“按计划做”或接受本文不授权 R1、R2、联网、创建新 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/source/allowlist 变化或其他候选。
+笼统的“继续”“按计划做”或接受本文不授权 R1b、R2、联网、创建新 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/source/allowlist 变化或其他候选。
 
 ## 固定 D2 基线
 
@@ -126,7 +127,19 @@ artifacts/sw-g2-mls-rs-license-review/<run-id>/
 
 2026-09-03 已离线形成 `scripts/run-sw-g2-mls-rs-license-review.py` 与 `scripts/check-sw-g2-mls-rs-license-review.sh`，当前全文 SHA-256 分别为 `a980c2953a3dd3c1feb7780d534f2875fa14588fe0a2acb0054995a212fe1b54` 与 `0e6cb4017cf17791deea27954951df8377c38a76f6fb23e23e9eee6afa8a87a8`。helper 在任何 artifact 或网络请求前要求显式 40 位 clean revision、R0 revision 为其祖先，并逐项复核 D2 manifest/checksum/三份 lock、94-package metadata、11 个 archive checksum/Cargo/vcs provenance 和上述两个 archive 内文件事实；请求使用关闭 proxy/redirect 的 Python 标准库匿名 HTTPS，仅动态放行由六个固定 commit、验证 tree SHA 与 tree path 派生的 URL。
 
-离线 checker 复核固定 11 package/3 repository/6 commit、40 请求/50 MiB 下载/100 MiB evidence/600 秒上限、D2 32 项 checksum 和 retained archive；synthetic fixture 覆盖正确 mapping、错误 commit、截断 tree、不安全路径、重定向、HTML/NUL/LFS/可执行响应拒绝及 checksum 篡改。无参数、未知 action、非法 revision 和不匹配 revision 均在 artifact/network 前拒绝。未来 R1 的唯一候选命令形状为 `python3 scripts/run-sw-g2-mls-rs-license-review.py collect <R1-clean-revision>`；`<R1-clean-revision>` 必须在本轮文件另获 commit 授权并形成 clean revision 后替换为完整 SHA，再连同 helper/checker 摘要申请一次 L3 授权。这里记录命令形状不授权执行。
+离线 checker 复核固定 11 package/3 repository/6 commit、40 请求/50 MiB 下载/100 MiB evidence/600 秒上限、D2 32 项 checksum 和 retained archive；synthetic fixture 覆盖正确 mapping、错误 commit、截断 tree、不安全路径、重定向、HTML/NUL/LFS/可执行响应拒绝及 checksum 篡改。无参数、未知 action、非法 revision 和不匹配 revision 均在 artifact/network 前拒绝。首次 R1 的唯一命令固定为 `python3 scripts/run-sw-g2-mls-rs-license-review.py collect 30a5665ee74d04e20d94c05280747ef8ec2b9df0`；其单次授权与结果见下节。
+
+### 首次 R1 结果
+
+首次 R1 在 clean revision `30a5665ee74d04e20d94c05280747ef8ec2b9df0` 上执行唯一命令，run `20260903-120514-82051.tt412fp1` 于 `2026-09-03T12:05:14Z` 开始、`12:05:49Z` 结束，以 schema 1 / `sw-g2-mls-rs-license-review-v1` 的 `STOP/license-evidence`、退出码 `20` 收口。它完成 5/40 次匿名请求、下载 `142464` bytes，运行 `34408 ms`，未启动后台进程；前四次取得 `awslabs/mls-rs` commit `3a185cd2cf4c89c3cd30adf294d7c18d2735725e`、非截断 tree `062619fcb6fb7ee67e76172700dcdb7a12fe62d7`、根 `Cargo.toml` 与 `LICENSE-apache`，第五次读取同 commit `LICENSE-mit` 时发生 `TimeoutError`，没有 HTTP status、响应 body 或自动重试。
+
+final evidence 位于 `artifacts/sw-g2-mls-rs-license-review/20260903-120514-82051.tt412fp1/`；manifest SHA-256 为 `9fc406d7411c491dfaec6c1c171441bee7fb17f39b81d621fe3df4c760173fc9`，9 项 checksum 清单 SHA-256 为 `e6722f2e374faae491f2c610ff1bf7220013107cf59bdcd053c2362e461848fe`，逐项自校验全部通过，final 普通文件总大小 `164108` bytes。该 run 是完整收口的有效负向运行证据，不是 `INVALID`；但 package mapping 尚为空，失败发生在证据采集未完成时，因此它只证明一次传输超时，不能证明 `LICENSE-mit` 或其他许可证正文不存在，不能形成许可证、NOTICE、候选淘汰或 `SW-G2` 结论。
+
+### R1b 单次方案
+
+R1b 仅用于区分首次 run 的瞬时传输失败与可重复来源缺口，不修改 helper、每请求 30 秒 timeout、判定、schema、host、六个 commit、文件选择、40 请求/50 MiB 下载/100 MiB evidence/600 秒上限或失败分类。首次 run 必须原样保留并在后续 R2/结果记录中并列出现；R1b 从头请求并新建独立 run，不消费首次 run 文件、不续传、不使用 token/cookie/proxy/browser session，不调用 Cargo/Docker/crates.io，不自动进行第三次运行。
+
+本结果记录另获 commit 授权并形成 clean revision 后，R1b 的唯一候选命令形状为 `python3 scripts/run-sw-g2-mls-rs-license-review.py collect <R1b-clean-revision>`；该 revision 与 `30a5665ee74d04e20d94c05280747ef8ec2b9df0` 之间只允许包含本次结果文档，helper/checker SHA-256 必须仍为 `a980c2953a3dd3c1feb7780d534f2875fa14588fe0a2acb0054995a212fe1b54` / `0e6cb4017cf17791deea27954951df8377c38a76f6fb23e23e9eee6afa8a87a8`。形成完整 SHA 后，还必须连同 1–10 分钟预计时长、外部读取和新 evidence 副作用、结果保留与无自动重试边界单独申请一次 L3 授权；本方案不授权 commit 或执行。
 
 ### R1 判定
 
@@ -177,6 +190,6 @@ R2 不修改 D2/R1 原始 evidence，只在 R1 run 下新增独立 `review/` 目
 
 ## 当前停止点与最小后续单元
 
-R0 已只读固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单；R1 helper/checker 已离线实现并验证，同时把两个 archive 内同名文件的适用范围修正为精确事实。没有联网、创建 R1 evidence、修改 D/D2 evidence、运行 Cargo/Docker、进入 Phase B、commit 或 push。
+R0/helper 已固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单。首次 R1 因 `TimeoutError` 形成有效 `STOP/license-evidence` 并原样保留；它未完成 package mapping，不是许可证或候选负向结论。R1b、R2 和 Phase B 均未授权。
 
-下一个最小单元是另获 commit 授权，使本轮 helper/checker 与事实修正形成 clean revision；随后以该完整 revision 替换命令占位符，并连同上述两个文件摘要、host/commit、40 请求/50 MiB 下载、10 分钟/100 MiB、无 token、失败不重试和 evidence 保留边界申请单次 L3 联网授权。R1 `PASS` 后再由项目所有者指定非实现者执行 R2；R1/R2 均关闭前不得设计或执行 Phase B。
+下一个最小单元是另获 commit 授权，使首次 R1 结果与 R1b 方案形成 clean revision；随后以该完整 revision 替换 R1b 命令占位符并申请一次 L3 授权。只有 R1b 形成完整 `PASS` 后，项目所有者才可指定非实现者执行 R2；R1/R2 均关闭前不得设计或执行 Phase B。
