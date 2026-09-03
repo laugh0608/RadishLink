@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包
 
-- 状态：Proposed（2026-09-03；R0、R1/R1b、R1c-I 与 R1c-R 已完成；R1c-R 以完整 schema 2 mapping 形成有效 `STOP/license-evidence`，固定 tree 对 `debug_tree` 与 `r-efi` 的声明正文覆盖不足；这不是许可证不存在、法律违规或候选淘汰结论；R2 与 Phase B 禁止）
+- 状态：Proposed（2026-09-03；R0、R1/R1b、R1c-I/R 与 R1d-P 已完成；R1c-R 以完整 schema 2 mapping 形成有效 `STOP/license-evidence`，R1d-P 已冻结固定 tree 缺口的独立判断、补证、上游澄清、分发与版本变更路径；没有执行这些路径；R2 与 Phase B 禁止）
 - 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置结果：[mls-rs 0.56.0 实施与 Phase A 精确授权包](sw-g2-mls-rs-phase-a-authorization.md)的 D2 固定 94-package 图已正式 `PASS`
@@ -23,10 +23,11 @@
 4. **R1c-P：替代传输设计**：记录 R1b 并精确设计以同一 commit tree blob SHA 和 Git Blobs API 取回同一文件正文；不改变 package、repository、commit、path selector、许可证判定或依赖 source。本单元仅修改文档，已按单次授权实施。
 5. **R1c-I：离线实施与验证**：只在 R1c-P 形成 clean revision 后修改 helper/checker、schema 与 synthetic fixture；不得联网或创建 run。2026-09-03 已按单次授权完成并形成 clean revision `f9f02b3a8d1e3cc438a2a20bc404bfbb9273b1a7`。
 6. **R1c-R：单次替代传输补证**：只在 R1c-I 经验证并形成新的 clean revision 后，以冻结 helper/checker SHA 和唯一命令从头产生第三个独立 run；不得复用前两次 partial。2026-09-03 的单次 L3 授权已消费，结果为有效 `STOP/license-evidence`。
-7. **R2：非实现者复核**：仅在某次 R1 形成有效完整 `PASS` 后，由符合独立性条件的复核者只读检查 D2、全部 R1 run 与仓库 lockfile，另存复核记录；当前执行者不能自我关闭该门禁。R1c-R 未形成 `PASS`，因此 R2 不具备前置条件且未授权。
-8. **最终结果收口**：只有完整 R1 与 R2 均有效 `PASS` 后，才可另行授权把候选结论同步到决策文档。中间 `STOP` 必须如实同步当前状态，但不构成候选采用或淘汰；Phase B 必须另建精确设计、实施与 L3 运行包。
+7. **R1d-P：固定 tree 缺口处置设计**：只基于既有 R1c evidence，冻结独立许可证判断、不可变补证、上游澄清、分发清单、工程合同与版本/候选变化的分流条件；只修改本文、当前状态与文档索引。2026-09-03 已按单次授权实施，没有执行任一处置路径。
+8. **R2：非实现者复核**：仅在某次 R1 或另行接受的后续证据合同形成有效完整 `PASS` 后，由符合独立性条件的复核者只读检查 D2、全部 R1 run 与仓库 lockfile，另存复核记录；当前执行者不能自我关闭该门禁。R1c-R 未形成 `PASS`，因此 R2 不具备前置条件且未授权。
+9. **最终结果收口**：只有许可证证据轨与 R2 均有效 `PASS` 后，才可另行授权把候选结论同步到决策文档。中间 `STOP` 必须如实同步当前状态，但不构成候选采用或淘汰；Phase B 必须另建精确设计、实施与 L3 运行包。
 
-笼统的“继续”“按计划做”或接受本文不授权第四次联网运行、R2、创建或修改 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/依赖 source/allowlist 变化、上游联系或其他候选。
+笼统的“继续”“按计划做”或接受本文不授权 R1d-L/E/U/G/D/V 任一路径、第四次联网运行、R2、创建或修改 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/依赖 source/allowlist 变化、上游联系或其他候选。
 
 ## 固定 D2 基线
 
@@ -187,6 +188,43 @@ R1c-R 已排除前两次 run 的 raw 传输故障作为本次停止原因，并�
 
 固定 tree 中没有 NOTICE 不自动等于许可证失败；它必须被明确记录并交由 R2 判断是否存在随分发 NOTICE 义务。无法支持 Cargo 声明的许可证表达式、仓库/commit/path 不匹配、正文或归属含义矛盾、只能依赖浮动页面或无法解释适用范围时，R1 为 `STOP`。证据缺失、tree 截断、checksum/finalizer 失败或输入漂移时为 `INVALID`。R1 的 `PASS` 只表示上游证据采集完整，不是法律合规结论。
 
+## R1d-P 固定 tree 许可证缺口处置设计
+
+### 固定事实与不可越界结论
+
+R1d-P 只消费 R1c-R final evidence、本文已固定的 R0/D2 输入及当前仓库文档，不重新解析依赖、不联网，也不把本轮文档写入 evidence。以下事实保持不变：
+
+- 9 个 `awslabs/mls-rs` package 的固定 tree 同时保留 `Apache-2.0` 与 `MIT` 正文；
+- `debug_tree 0.4.0` 的固定 commit/tree、`Cargo.toml` 与其引用的 `README.md` 未检测到声明的 `MIT` 正文；archive 内 `doc/build/LICENSE.adoc` 是文档构建资产，不得替代 package 许可证；
+- `r-efi 6.0.0` 的固定 tree 在 `AUTHORS` 中保留 MIT 正文和 Apache/LGPL 短告知，但没有完整 `Apache-2.0` 与 `LGPL-2.1-or-later` 正文；
+- 六个 commit 的 `notice_present` 均为 `false`；这要求目标分发复核，不能单独推导许可证失败；
+- R1c-R 的 transport、identity、mapping 与 checksum 有效，其 `STOP` 不得改写、删除或追认为 `PASS`。
+
+`MIT OR Apache-2.0 OR LGPL-2.1-or-later` 中的 `OR` 表达许可证选择分支，但当前冻结的 R1 工程合同更保守，要求保留每个 declared alternative 的正文。RadishLink 是否可以为特定分发物选择其中一条分支、选择后需要携带什么正文/归属，以及这能否替代“全部 alternative”工程合同，属于独立许可证与产品分发判断。R1d-P 不自行回答该问题、不变更 gate，也不以 SPDX metadata、通用许可证模板或执行者推断代替适用授权与归属证据。
+
+### 处置路径
+
+| 单元 | 目的与必要输出 | 前置与停止条件 | 本包是否授权 |
+| --- | --- | --- | --- |
+| `R1d-L` 独立许可证处置判断 | 由项目所有者指定、未参与 R1 helper/evidence/本结果撰写的适格评审者，只读形成逐 package × 目标分发渠道矩阵；明确可选择的许可证分支、正文/归属/NOTICE/源码或修改义务、仍缺的精确证据及法律意见边界 | 必须覆盖当前公开源码仓库、内部 POC 镜像、未来公开 Linux 设备镜像、Android/iOS 伴侣应用、服务端部署与源码包；不适用项须说明理由。无法从既有证据确认适用授权、归属或选择权时为 `STOP`。它不是 R2，也不能修改 R1c evidence 或直接形成工程 `PASS` | 否 |
+| `R1d-E` 不可变官方补证 | 只在 `R1d-L` 明确指出所缺对象后，收集能绑定到固定 package/version/commit 的官方不可变记录，并保存请求、对象身份、正文、摘要与逐 package mapping 到全新 evidence | 必须先冻结 host、精确 URL/object、为何适用于固定 commit、请求/时间/大小上限、schema/checker 与失败保留；浮动页面、搜索摘要、第三方转载或仅有通用模板均 `STOP`。属于新的 L3 外部读取 | 否 |
+| `R1d-U` 上游澄清或修复 | 向 `debug_tree` / `r-efi` 维护者提出最小公开问题，请其明确 package/version/commit 的许可证选择、适用正文、归属和 NOTICE；保存问题与回复的不可变引用 | 外部写入必须另行授权并预审不含隐私或凭据的消息全文；新 commit 本身不自动追溯覆盖旧 commit，回复未明确适用对象或授权范围时仍 `STOP` | 否 |
+| `R1d-G` 工程证据合同修订 | 仅当 `R1d-L` 明确支持特定 `OR` 分支选择时，另案决定是否从“收齐全部 alternative”改为“冻结并证明一个可选分支及其全部义务”，定义新 schema、迁移、未知字段和负例 | 这是许可证 gate/证据合同变化，必须独立设计、评审与授权；不得回写 R1/R1b/R1c 或改变其历史 outcome。缺少逐 package 选择、目标渠道、正文/归属与 reviewer 依据时不得实施 | 否 |
+| `R1d-D` 下游分发清单与正文 | 在许可证判断和来源证据关闭后，设计产品第三方清单、逐组件版本/来源/选择分支、完整正文、copyright/NOTICE 与安装包/源码包/应用内入口的一致生成和校验 | 复制标准正文不能单独建立其对固定 package 的适用性；没有已接受的 provenance、选择与义务矩阵时不得创建分发产物。实现会改变产品分发面，须另行授权和测试 | 否 |
+| `R1d-V` 版本/source/候选变化 | 仅在固定基线无法关闭时评估带完整许可证材料的新版本、其他 source 或替代候选 | 必须固定新 version/commit/checksum/lock，重新执行适用 Phase A、advisory、license 与非实现者复核；不得继承 D2/R1c `PASS` 部分，也不得自动淘汰当前候选 | 否 |
+
+`R1d-E`、`R1d-U` 与 `R1d-V` 是互斥选择还是组合路径，必须由 `R1d-L` 的逐 package 缺口决定，不预设全部执行。尤其是：`r-efi` 可能存在“明确选择 MIT 分支”的处置空间，但只有独立评审和后续合同决定可以接受；`debug_tree` 即使 metadata 声明 MIT，也仍需要把适用授权、正文与归属如何进入目标分发物说清。两者不得用同一条宽泛例外合并放行。
+
+### 推荐顺序与判定
+
+1. R1d-P 先形成 clean revision，保持 R1c run 和 helper/checker SHA 不变；
+2. 下一最小单元为 `R1d-L`，只读既有 evidence 并形成独立处置矩阵，不联网、不联系上游、不创建分发文件；
+3. 项目所有者依据矩阵逐 package 选择 `R1d-E`、`R1d-U`、`R1d-G`、`R1d-D` 或 `R1d-V` 的精确设计单元；每个单元分别授权，不能用一次授权包揽外部读取、外部写入、gate 和依赖变化；
+4. 后续新 evidence/合同只有在 provenance、正文、选择、归属、NOTICE、目标渠道与 checksum 全部闭合时才可 `PASS`；不确定项为 `STOP`，输入/身份/checksum/独立性失真为 `INVALID`；
+5. R1c-R 永久保留为历史 `STOP`。只有新的证据轨 `PASS` 后才恢复 R2 前置；R2 仍须由符合原独立性条件的复核者执行，且不等同于 `R1d-L`；R2 前不得设计或执行 Phase B。
+
+R1d-P 的完成只表示处置路径、输出和停止条件已冻结，不表示任何许可证分支已选定、缺失正文已获得、分发方案已合规或候选已通过。本轮不创建新的 evidence/schema/checker，不修改 helper、gate、版本、provider、依赖 source、lockfile、分发产物或历史 run。
+
 ## R2 非实现者复核
 
 ### 独立性条件
@@ -223,8 +261,8 @@ R2 不修改 D2/R1 原始 evidence，只在 R1 run 下新增独立 `review/` 目
 
 ## 当前停止点与最小后续单元
 
-R0/helper 已固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单。首次 R1 与 R1b 均因不同 raw 文件的 `TimeoutError` 形成有效传输负向 evidence 并原样保留；R1c-I/R 已完成，schema 2 的 blob identity 与 11 行 mapping 均有效，但固定 tree 对 `debug_tree` 的 MIT 及 `r-efi` 的 Apache-2.0/LGPL-2.1-or-later 正文覆盖不足，因此 R1 仍为 `STOP/license-evidence`。
+R0/helper 已固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单。首次 R1 与 R1b 均因不同 raw 文件的 `TimeoutError` 形成有效传输负向 evidence 并原样保留；R1c-I/R 已完成，schema 2 的 blob identity 与 11 行 mapping 均有效，但固定 tree 对 `debug_tree` 的 MIT 及 `r-efi` 的 Apache-2.0/LGPL-2.1-or-later 正文覆盖不足，因此 R1 仍为 `STOP/license-evidence`。R1d-P 已冻结 `R1d-L/E/U/G/D/V` 的分流、证据和停止条件，但没有执行任一路径。
 
-下一个最小单元应是另行授权的 **R1d-P：固定 tree 许可证缺口处置设计**，只形成文档，不联网、不联系上游、不修改 evidence、selector、版本、依赖 source、gate 或分发产物。该设计需分别评估不可变官方补充来源、上游澄清/修复、目标分发包如何携带适用正文以及独立法律评审边界，并冻结每条路径的证据与停止条件；不得预设任一路径已经合规，也不得把缺口自动转换为候选淘汰。任何上游联系、额外取证、依赖/分发修改或候选切换都必须另行精确授权。
+下一个最小单元是先使 R1d-P 三份文档形成 clean revision，再由项目所有者另行指定适格独立评审者执行 **R1d-L**。R1d-L 只读既有 evidence，必须先获得目标分发形态与渠道输入；不联网、不联系上游、不创建或修改 evidence、gate、版本、依赖 source 或分发产物，也不能代替后续 R2。
 
-当前没有自动第四次 R1、R2 或 Phase B 授权。只有后续工程证据达到完整 R1 `PASS` 后，项目所有者才可指定符合独立性条件的复核者执行 R2；R1/R2 均关闭前不得设计或执行 Phase B。
+当前没有 R1d-L/E/U/G/D/V、自动第四次 R1、R2 或 Phase B 授权。只有后续新证据轨达到有效完整 `PASS` 后，项目所有者才可指定符合 R2 独立性条件的复核者执行 R2；许可证证据轨与 R2 均关闭前不得设计或执行 Phase B。
