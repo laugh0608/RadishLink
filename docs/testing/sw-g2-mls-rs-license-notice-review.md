@@ -1,6 +1,6 @@
 # SW-EXP-003 mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包
 
-- 状态：Proposed（2026-09-03；R0、R1/R1b、R1c-I/R、R1d-P 与 R1d-L 已完成；R1c-R 以完整 schema 2 mapping 形成有效 `STOP/license-evidence`，R1d-L 独立评审以 `STOP/license-disposition` 收口：`debug_tree` 首选 R1d-U，`r-efi` 首选独立法律评审接受 MIT alternative 后进入 R1d-G/R1d-D；R2 与 Phase B 禁止）
+- 状态：Proposed（2026-09-03；R0、R1/R1b、R1c-I/R、R1d-P/L、`debug_tree` R1d-U-P/I 已完成；R1c-R 以完整 schema 2 mapping 形成有效 `STOP/license-evidence`，R1d-L 独立评审以 `STOP/license-disposition` 收口：`debug_tree` 已具备未执行的 R1d-U-X/R 受限入口，`r-efi` 首选独立法律评审接受 MIT alternative 后进入 R1d-G/R1d-D；R2 与 Phase B 禁止）
 - 日期：2026-09-02
 - 证据编号：`SW-EXP-003`
 - 前置结果：[mls-rs 0.56.0 实施与 Phase A 精确授权包](sw-g2-mls-rs-phase-a-authorization.md)的 D2 固定 94-package 图已正式 `PASS`
@@ -29,7 +29,7 @@
 
 笼统的“继续”“按计划做”或接受本文不授权 R1d-L/E/U/G/D/V 任一路径、第四次联网运行、R2、创建或修改 evidence、commit、push、Phase B、D2 重跑、gate/版本/provider/依赖 source/allowlist 变化、上游联系或其他候选。
 
-该段记录本文形成时的授权边界；R1d-L 后续已由项目所有者另行指定并授权独立任务完成，结果见[R1d-L 独立许可证处置评审](sw-g2-mls-rs-license-disposition-review.md)。R1d-E/U/G/D/V、R2 与 Phase B 仍未据此获得授权。
+该段记录本文形成时的授权边界；R1d-L 后续已由项目所有者另行指定并授权独立任务完成，结果见[R1d-L 独立许可证处置评审](sw-g2-mls-rs-license-disposition-review.md)。`debug_tree` R1d-U-P 与只离线实现的 R1d-U-I 也已分别授权完成；它们不授权或代表 R1d-U-X 外部写入、R1d-U-R 只读收集、回复接受性判断、R1d-E/G/D/V、R2 或 Phase B。
 
 ## 固定 D2 基线
 
@@ -229,6 +229,16 @@ R1d-P 只消费 R1c-R final evidence、本文已固定的 R0/D2 输入及当前�
 
 R1d-P 的完成只表示处置路径、输出和停止条件已冻结，不表示任何许可证分支已选定、缺失正文已获得、分发方案已合规或候选已通过。本轮不创建新的 evidence/schema/checker，不修改 helper、gate、版本、provider、依赖 source、lockfile、分发产物或历史 run。
 
+## `debug_tree` R1d-U-I 离线实施结果
+
+R1d-U-P 在 clean revision `2879dfb32f21107914073fc820cd2450ca3951dc` 冻结后，R1d-U-I 只新增 `scripts/run-sw-g2-mls-rs-license-upstream-clarification.py` 与 `scripts/check-sw-g2-mls-rs-license-upstream-clarification.sh`，并以 clean revision `9c6d4dcef5d58f8708b28d6ce3ac743b895d71a8` 收口。helper/checker SHA-256 分别为 `e1bcdfa7f2f7bff1e6d59fe771a5830815b07760d804ee373fd059572b163b27` 与 `c585f8bd60a6b5b38045f5788bb24c6f227c95898035d426831e5aa47d3dee52`。
+
+helper 使用 schema `1` / `sw-g2-mls-rs-license-upstream-clarification-v1`，按 revision `2879dfb` 与文档 SHA-256 `eaa3550927a44b910bc798563217d86146a77a66fd54bda00f708c0a26c4920d` 固定 R1d-U-P 原文，再固定 R1c manifest、package/version/checksum/repository/commit/tree、Issue 标题/正文摘要和公开账号 identity。设计文件因此是执行输入，后续状态同步不得直接改写其 bytes；状态与结果记录进入本文和当前状态。
+
+未来另获授权的 R1d-U-X 入口只允许 `api.github.com`、20 次请求、最多一次 `POST`、5 MiB 下载、20 MiB final、300 秒墙钟、30 秒单请求、零 retry、零 redirect/proxy/background，并在 POST 前记录 intent；POST 后响应不确定时 final 为 `INVALID/ambiguous-external-write` 且不重发。R1d-U-R 是引用已 final X run 的独立零写 run，最多 10 次 `GET`；无活动、超分页/资源或已收集活动都保持 `STOP`，helper 不自动把回复判成接受，也不自动追问。
+
+offline self-test 与 checker 覆盖固定消息/对象/账号漂移、重复 Issue、零/多 POST、歧义写入、redirect/HTML、分页/资源上限、schema/unknown field、回复资格与完整 notice/holder/追溯适用/不可变 commit 接受布尔值、checksum/凭据/final 后修改等正负例。R1d-U-I 没有联网、读取 GitHub session、创建 clarification artifact、执行 R1d-U-X/R、运行 Cargo/Docker、修改历史 R1c evidence 或进入 R2/Phase B。
+
 ## R2 非实现者复核
 
 ### 独立性条件
@@ -269,4 +279,4 @@ R0/helper 已固定 11 个 package、3 个 repository、6 个 commit、registry 
 
 R1d-L 已确认两包不能用宽泛例外合并：`debug_tree 0.4.0` 缺绑定固定对象的适用 MIT notice/holder；其 [R1d-U-P 上游澄清设计](sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)已冻结唯一公开 Issue 的精确全文、新 evidence 要求、回复接受标准和失败转 R1d-V 条件，但尚未联网或发送。`r-efi 6.0.0` 的 `AUTHORS` 已有完整 MIT 正文与归属，须先取得有资格的独立法律评审对按渠道选择 MIT alternative 的明确结论，接受后再设计 R1d-G-P/R1d-D-P，不接受或保持全部 alternative 合同时设计 R1d-E-P。外部发送、联网补证、合同实施和分发产物仍须分别精确授权。
 
-R1d-L 与 R1d-U-P 的单次授权已经完成；当前没有 R1d-U-I 实施、R1d-U-X 外部写入、R1d-U-R 只读回复收集、R1d-E/G/D/V、自动第四次 R1、R2 或 Phase B 授权。只有后续新证据/合同轨达到有效完整 `PASS` 后，项目所有者才可指定符合 R2 独立性条件的复核者执行 R2；许可证证据轨与 R2 均关闭前不得设计或执行 Phase B。
+R1d-L、R1d-U-P 与只离线实施的 R1d-U-I 单次授权已经完成；当前没有 R1d-U-X 外部写入、R1d-U-R 只读回复收集、回复接受性判断、R1d-E/G/D/V、自动第四次 R1、R2 或 Phase B 授权。只有后续新证据/合同轨达到有效完整 `PASS` 后，项目所有者才可指定符合 R2 独立性条件的复核者执行 R2；许可证证据轨与 R2 均关闭前不得设计或执行 Phase B。
