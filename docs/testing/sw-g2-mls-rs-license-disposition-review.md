@@ -131,9 +131,9 @@ R1d-L 最终判定为 `STOP/license-disposition`：独立性、输入和 checksu
 
 两包必须分流：
 
-1. `debug_tree`：下一设计单元为 `R1d-U-P`，只起草并评审绑定 `0.4.0`/checksum/commit 的上游问题和回复接受标准；外部发送、R1d-E 收集与 R1d-D 实现均须分别授权。无有效追溯回复时转 `R1d-V`。
+1. `debug_tree`：[R1d-U-P 上游澄清设计](sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)已冻结绑定 `0.4.0`/checksum/commit 的唯一公开 Issue 全文、新 evidence 要求、回复接受标准和失败转 R1d-V 条件；外部发送、R1d-E 收集与 R1d-D 实现均须分别授权。无有效追溯回复时转 `R1d-V`。
 2. `r-efi`：先取得有资格的独立法律评审对“按渠道选择 MIT alternative、保留完整 `AUTHORS`”的明确结论；接受后设计 `R1d-G-P`，再设计 `R1d-D-P`。若不接受选择或仍要求全部 alternatives，则另案设计 `R1d-E-P`。
 3. 六类未来渠道在实际构建前必须冻结 artifact 类型、目标 triple、是否 vendor/source/cache、分发对象、修改状态、SBOM 与正文/归属展示位置；未知字段或内容漂移必须拒绝，不能默认继承本矩阵。
 4. R1c-R 永久保留历史 `STOP`；只有新证据/合同轨有效 `PASS` 后才恢复 R2 前置。R1d-L 不替代 R2，R2 前不得进入 Phase B。
 
-本轮没有联网、联系上游、运行 Cargo/Docker、创建或修改 evidence、修改 helper/checker/gate/版本/provider/依赖 source/lockfile/分发产物、进入 R2/Phase B、清理 artifact、commit 或 push。
+R1d-L 本轮没有联网、联系上游、运行 Cargo/Docker、创建或修改 evidence、修改 helper/checker/gate/版本/provider/依赖 source/lockfile/分发产物、进入 R2/Phase B、清理 artifact、commit 或 push。R1d-U-P 是后续独立文档单元，不改变本评审的输入、执行事实或结果。

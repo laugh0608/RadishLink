@@ -267,6 +267,6 @@ R2 不修改 D2/R1 原始 evidence，只在 R1 run 下新增独立 `review/` 目
 
 R0/helper 已固定 11 个 package、3 个 repository、6 个 commit、registry checksum、网络 allowlist、证据合同和独立复核清单。首次 R1 与 R1b 均因不同 raw 文件的 `TimeoutError` 形成有效传输负向 evidence 并原样保留；R1c-I/R 已完成，schema 2 的 blob identity 与 11 行 mapping 均有效，但固定 tree 对 `debug_tree` 的 MIT 及 `r-efi` 的 Apache-2.0/LGPL-2.1-or-later 正文覆盖不足，因此 R1 仍为 `STOP/license-evidence`。R1d-P 已冻结 `R1d-L/E/U/G/D/V` 的分流、证据和停止条件；R1d-L 随后由独立任务 `/root/r1d_l_independent_review` 完成 checksum/mapping、两包固定证据、依赖适用条件和六类渠道复核，以 `STOP/license-disposition` 收口。完整资格、输入、矩阵和边界见[R1d-L 独立许可证处置评审](sw-g2-mls-rs-license-disposition-review.md)。
 
-R1d-L 已确认两包不能用宽泛例外合并：`debug_tree 0.4.0` 缺绑定固定对象的适用 MIT notice/holder，下一设计单元为 `R1d-U-P`，只起草上游问题、回复接受标准和失败转 R1d-V 条件；`r-efi 6.0.0` 的 `AUTHORS` 已有完整 MIT 正文与归属，须先取得有资格的独立法律评审对按渠道选择 MIT alternative 的明确结论，接受后再设计 R1d-G-P/R1d-D-P，不接受或保持全部 alternative 合同时设计 R1d-E-P。外部发送、联网补证、合同实施和分发产物仍须分别精确授权。
+R1d-L 已确认两包不能用宽泛例外合并：`debug_tree 0.4.0` 缺绑定固定对象的适用 MIT notice/holder；其 [R1d-U-P 上游澄清设计](sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)已冻结唯一公开 Issue 的精确全文、新 evidence 要求、回复接受标准和失败转 R1d-V 条件，但尚未联网或发送。`r-efi 6.0.0` 的 `AUTHORS` 已有完整 MIT 正文与归属，须先取得有资格的独立法律评审对按渠道选择 MIT alternative 的明确结论，接受后再设计 R1d-G-P/R1d-D-P，不接受或保持全部 alternative 合同时设计 R1d-E-P。外部发送、联网补证、合同实施和分发产物仍须分别精确授权。
 
-R1d-L 的单次授权已经完成；当前没有 R1d-E/U/G/D/V、自动第四次 R1、R2 或 Phase B 授权。只有后续新证据/合同轨达到有效完整 `PASS` 后，项目所有者才可指定符合 R2 独立性条件的复核者执行 R2；许可证证据轨与 R2 均关闭前不得设计或执行 Phase B。
+R1d-L 与 R1d-U-P 的单次授权已经完成；当前没有 R1d-U-I 实施、R1d-U-X 外部写入、R1d-U-R 只读回复收集、R1d-E/G/D/V、自动第四次 R1、R2 或 Phase B 授权。只有后续新证据/合同轨达到有效完整 `PASS` 后，项目所有者才可指定符合 R2 独立性条件的复核者执行 R2；许可证证据轨与 R2 均关闭前不得设计或执行 Phase B。
