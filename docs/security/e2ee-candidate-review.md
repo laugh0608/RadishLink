@@ -1,6 +1,6 @@
 # 端到端加密候选评审
 
-资料核对日期：2026-09-02
+上游资料核对日期：2026-09-02；项目状态同步日期：2026-09-05
 
 ## 用途与非目标
 
@@ -47,7 +47,7 @@ Signal 的 [PQXDH](https://signal.org/docs/specifications/pqxdh/)面向接收端
 - `OpenMLS 0.8.1 + openmls_rust_crypto 0.5.1` 的固定图已在 Phase A 命中 advisory 与许可证停止线：实际检查图含 3 个未获准的 `MPL-2.0` `hpke-rs*` crate，并包含与 AArch64 直接相关的 `RUSTSEC-2026-0212`；该 prepared run 禁止进入 Phase B；
 - `OpenMLS 0.9.0` 的稳定发布只解除 prerelease 停止线，不能证明旧 advisory、许可证和持久化风险已经关闭；[`SW-EXP-004` Phase A](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)在修复 SQLite 对齐、固定审计 bundle 与 evidence finalizer 后，由单元 E 对 264-package 固定图形成正式结果：source/audit/feature 为零，独立 `cargo-audit` 未发现 vulnerability 但报告 `RUSTSEC-2026-0173` unmaintained 信息项，`cargo-deny` 的 sources/advisories 为 `ok`，当前许可证 allowlist 拒绝三个 `hpke-rs* 0.7.0` 的 `MPL-2.0`。因此 Phase A 为 `STOP`，不得进入 Phase B；官方安全策略只覆盖主 `openmls` crate，crypto provider 与 storage backend 仍必须独立审计；
 - `mls-rs` D 的旧 gate 按名称全局拒绝 `rfc_compliant` / `fast_serialize`，但 core 同名 feature 实际只展开为 `x509` 与 `mls-rs-codec/preallocate`；直接 codec 默认已启用同一预分配叶子，AWS-LC 又通过 `mls-rs-identity-x509` 引入 X.509 支持面。A2 因此只接受固定 package/version 的精确 alias、解析集合与依赖边；顶层聚合 feature、provider defaults、FIPS/PQ/SQLCipher 和 X.509 credential 选择仍不接受。预分配路径的长度计算、分配上限和恶意输入资源消耗，以及自定义身份 provider 对未批准 X.509 credential 的拒绝，仍需候选运行和负例验证；
-- `mls-rs` D2 run `20260902-130415-49997.8P5Td6` 的固定 94-package 图已在当前 source/audit/deny/feature gate 下正式 `PASS`，仓库 lockfile 与 seed/evidence 一致；但工具许可证门只验证 metadata/表达式。11 个 crate archive 缺少随包许可证/NOTICE 类文件，当前 evidence 尚不能关闭许可证正文、copyright、NOTICE 与目标分发义务；非实现者 evidence 复核也未完成；
+- `mls-rs` D2 run `20260902-130415-49997.8P5Td6` 的固定 94-package 图已在当前 source/audit/deny/feature gate 下正式 `PASS`，仓库 lockfile 与 seed/evidence 一致；但工具许可证门只验证 metadata/表达式。11 个 crate archive 的随包证据不足以覆盖全部声明正文及适用归属；R1c-R 已补齐 9 个 mls-rs package 的正文，debug_tree 与 r-efi 仍有固定对象处置缺口。R1d-L 已完成且保持 STOP，但不替代尚未满足前置的 R2；
 - 两成员组的离线并发 commit、乱序 epoch、分区合并和设备恢复复杂度必须以三节点故障矩阵验证；
 - Authentication Service、KeyPackage 发布/过期、Delivery Service 和联系人验证如何去中心化仍需设计；
 - 必须固定 provider、cipher suite、credential、extension、持久化事务和敏感 debug feature 策略；
@@ -72,4 +72,8 @@ libsodium、RustCrypto、OpenSSL、Noise primitives 或单独 AEAD 都可以成�
 
 ## 当前建议
 
-暂不二选一，也不在 `SW-V*` 引入密码依赖。当前按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)保留 OpenMLS 0.8.1 与 0.9.0 两份 Phase A 负向证据；0.9.0 单元 E 已正式 `STOP`，不重跑、不进入 Phase B，也不放宽 `MPL-2.0` allowlist。[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受，单元 D 的正式历史 `STOP` 保留，D2 已对同一固定图正式 `PASS`。推荐保持现有版本/provider/source，不 patch/fork、不更换 provider；仓库 lockfile 已固定提升，不重新解析传递版本，也不复用旧 mutable cache。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线固定 11 个 package、3 个 repository、6 个 commit 和复核合同；R1 联网补证与 R2 独立复核须分别精确授权，关闭前 Phase B 继续禁止。`libsignal v0.101.0` 在许可证和 Linux ARM64 集成面关闭前仍只做静态核对。只有候选通过精确依赖、advisory、许可证、命令、副作用和运行授权，才以同一套已接受 `SW-G3` A—B—C 故障矩阵比较安全、状态复杂度、平台和许可证，再由 ADR 冻结；在此之前项目继续使用“E2EE 候选/待验证”。
+候选均未通过 `SW-G2`；保持固定版本、provider、source 和 lockfile，不自动 patch/fork、重解析或重跑。OpenMLS 两轮 Phase A 负向、mls-rs D2 正向以及 R1c/R1d 后续状态统一见[当前状态](../status/current.md)与[许可证处置评审](../testing/sw-g2-mls-rs-license-disposition-review.md)，不从旧的 R0 状态推导仍需首次 R1。
+
+当前重点是按[`SW-G2` 决策包](e2ee-sw-g2-decision-package.md)形成实际渠道的许可证评审输入，并设计离线并发、状态事务与 relay-clear proof 的最小适配证明。mls-rs 尚未完成完整第三方安全审计的风险单独保留；审计工具、测试和工程非实现者复核均不能消除这一缺口。debug_tree 上游澄清的 X/R 未执行，r-efi 等待独立法律判断，R2 与 Phase B 继续禁止。libsignal 在许可证与 Linux ARM64 集成面关闭前只做静态核对。
+
+政策修订候选不等于许可证已接受，也不授权集成密码依赖。只有各项前置和精确授权满足后，才执行被批准场景，并由 ADR 形成采用结论。

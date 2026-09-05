@@ -1,7 +1,7 @@
 # SW-G2 E2EE 与身份候选决策包
 
 - 状态：Draft（OpenMLS 0.8.1 与 0.9.0 固定图均为 Phase A 负向 `STOP`；mls-rs D 保留历史 `STOP`，D2 对同一固定图正式 `PASS`；人工许可证/NOTICE 与非实现者 evidence 复核未完成，Phase B 禁止）
-- 资料核对日期：2026-09-02
+- 上游资料核对日期：2026-09-02；项目状态同步日期：2026-09-05
 - 适用 gate：`SW-G2`
 - 前置决策：`SW-G0/SW-G1` 已接受
 
@@ -13,7 +13,7 @@
 
 1. 保留 `OpenMLS 0.8.1` Phase A 作为固定候选图的负向证据，不进入 Phase B；
 2. [`OpenMLS 0.9.0` 实施骨架与 Phase A 精确授权包](../testing/sw-g2-openmls-0.9-phase-a-authorization.md)已完成 A/A2/A3/A4/A5/C2/D/A6/E；A5 后 bundle `20260830-112214-39636.GpERrj` 已构建并复核 `PASS`。单元 E 对独立 264-package 固定图形成 schema 4/v4 正式 `STOP`：source/audit/feature 为零，独立 audit 未发现 vulnerability 但报告一个 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate；不重跑、不进入 Phase B，也不能继承 0.8.1 lockfile、cache 或授权；
-3. 以[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和已接受的[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)对照许可证、advisory、存储、互操作与平台边界；A0/A1/A2/A3 已离线实施并形成 clean revision，单元 C 固定审计工具 bundle 已复核 `PASS`，单元 D 在固定 94-package 图的旧 transitive feature gate 形成正式历史 `STOP`。D2 随后只读 seed 同一 final lock、拒绝重新解析和旧 mutable cache，形成正式 Phase A `PASS` 并提升同一仓库 lockfile；[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线形成，R1/R2 与 Phase B 未授权；
+3. 以[`mls-rs 0.56.0` 静态门禁](../testing/sw-g2-mls-rs-spike-authorization.md)和已接受的[精确实施与 Phase A 包](../testing/sw-g2-mls-rs-phase-a-authorization.md)对照许可证、advisory、存储、互操作与平台边界；A0/A1/A2/A3 已离线实施并形成 clean revision，单元 C 固定审计工具 bundle 已复核 `PASS`，单元 D 在固定 94-package 图的旧 transitive feature gate 形成正式历史 `STOP`。D2 随后只读 seed 同一 final lock、拒绝重新解析和旧 mutable cache，形成正式 Phase A `PASS` 并提升同一仓库 lockfile；[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)已完成 R1c-R 固定对象补证和 R1d-L 独立处置评审，分别保持 `STOP/license-evidence` 与 `STOP/license-disposition`；debug_tree 澄清设计/helper 已离线形成但未发送，R2 前置不满足，Phase B 禁止；
 4. `libsignal v0.101.0` 只做许可证与受支持接口的静态核对，在许可证和 Linux ARM64 集成面关闭前不安装、不链接、不运行。
 
 这个顺序不是采用结论。任一候选只有同时通过许可证、Linux ARM64、身份绑定、去中心化投递、崩溃安全、中继不可解密和独立复核，才可以进入 ADR；`SW-G2` 当前仍为未通过。
@@ -24,7 +24,7 @@
 | --- | --- | --- | --- | --- |
 | `OpenMLS` 旧基线 | `openmls-v0.8.1` / `47dbede` | MIT；Rust；可插拔 crypto/storage；MLS 两成员组与未来群组共用标准语义 | 固定图命中活跃 RustSec advisory，其中包含 AArch64 相关密码错误；`hpke-rs* 0.6.1` 的 `MPL-2.0` 未通过初始 allowlist | Phase A 负向基线；prepared run 禁止进入 Phase B |
 | `OpenMLS` 稳定刷新 | `openmls 0.9.0`（2026-08-25） | 官方列出 Linux AArch64 构建与测试；provider/storage 版本线已更新 | 单元 E 的独立 audit 漏洞为零但有 unmaintained 信息项；当前许可证门正式拒绝三个 `MPL-2.0` crate；迁移与 0.8 行为差异仍无结论 | 当前固定图 Phase A 负向 `STOP`；不重跑，Phase B 禁止 |
-| `mls-rs` | `0.56.0` | Apache-2.0 OR MIT；Rust；提供 storage traits、SQLite provider、互操作与 FFI/UniFFI 路径 | D2 固定图 Phase A 已 `PASS`；11 个 crate archive 缺少随包许可证/NOTICE 类文件，人工分发义务与非实现者复核未关闭；完整第三方审计、X.509 支持面、资源边界和 Linux ARM64 实证仍未关闭 | 对照候选，不是后备默认值；Phase B 禁止 |
+| `mls-rs` | `0.56.0` | Apache-2.0 OR MIT；Rust；提供 storage traits、SQLite provider、互操作与 FFI/UniFFI 路径 | D2 固定图 Phase A 已 `PASS`；11 个 crate archive 的随包证据不足以覆盖全部声明正文及适用归属，人工分发义务与非实现者复核未关闭；完整第三方审计、X.509 支持面、资源边界和 Linux ARM64 实证仍未关闭 | 对照候选，不是后备默认值；Phase B 禁止 |
 | `libsignal` | `v0.101.0` / `b056faa` | 一对一异步初始协商、逐消息 ratchet 与多设备会话语义最直接 | AGPL-3.0 与本仓库、分发和商店渠道的义务尚未独立确认；官方 native artifact 列表未列 Debian/Linux ARM64；公开 bridge 不是稳定 API 承诺 | 静态核对，未过停止线不进入运行 |
 
 许可证栏只记录上游声明，不判断组合或分发是否合法。MIT/Apache-2.0 候选仍需核对完整依赖图、notice、归属和分发义务；AGPL 候选必须获得独立许可证评审或权利人书面许可，不以工程推断代替结论。
@@ -112,7 +112,7 @@
 
 ## 运行授权包要求
 
-本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的单元 E 也已形成正式负向 Phase A 并阻断 Phase B，不再申请同基线重跑。[`mls-rs 0.56.0` 静态包](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受并按分段授权执行到 D2；历史 fixed graph 的旧 feature-gate `STOP` 保留，D2 对同一固定图形成正式 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)只完成 R0 离线设计；进入 R1 联网补证、R2 独立复核、D2 重跑、Phase B 或任何其他修订 spike 前必须重新满足：
+本包不授权下载、安装、构建或运行。首轮 OpenMLS 的精确依赖、命令、外部影响、证据、清理和分段授权已形成并执行[`SW-EXP-002` 执行授权包](../testing/sw-g2-openmls-spike-authorization.md)；Phase A 的负向结果已阻断 Phase B。[`OpenMLS 0.9.0` 包](../testing/sw-g2-openmls-0.9-spike-authorization.md)的单元 E 也已形成正式负向 Phase A 并阻断 Phase B，不再申请同基线重跑。[`mls-rs 0.56.0` 静态包](../testing/sw-g2-mls-rs-spike-authorization.md)与[精确包](../testing/sw-g2-mls-rs-phase-a-authorization.md)均已接受并按分段授权执行到 D2；历史 fixed graph 的旧 feature-gate `STOP` 保留，D2 对同一固定图形成正式 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)已记录 R1/R1b 传输负向、R1c-R 实质证据缺口和 R1d-L 处置 STOP；debug_tree 的 R1d-U-P/I 已完成，X/R 尚未执行。当前状态见[项目状态](../status/current.md)。任何后续上游操作、R2 独立复核、D2 重跑、Phase B 或修订 spike 均须先关闭各自前置并明确：
 
 - 精确依赖版本、commit、校验值、来源、许可证和 lockfile 变更；
 - 精确命令、目标平台、网络访问、临时目录、预计时长和最大资源占用；
@@ -136,4 +136,36 @@
 8. 篡改、重放、乱序、耗尽、旧 epoch、fork 与失败恢复结果可复现；
 9. 独立复核完成并以 Accepted ADR 冻结选择、限制和迁移边界。
 
-当前已完成决策包、上游证据收敛和两份 OpenMLS 固定图 Phase A。0.8.1 最终 run `20260824-215104-90006` 生成 229-package lockfile，来源检查通过；许可证检查拒绝 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 共报告 6 个 vulnerability。0.9.0 单元 E run `20260901-123158-75973.3gVtsH` 对 264-package 固定图形成有效 schema 4/v4 证据；source/audit/feature 为零，独立 audit 漏洞为零并报告 `RUSTSEC-2026-0173` unmaintained 信息项，当前许可证门拒绝 3 个 `MPL-2.0` crate。两轮均为正式 `STOP`，Phase B 禁止。`mls-rs 0.56.0` 单元 D 的 94-package 图 source/audit/deny 为零、旧 feature gate 为一，正式历史 `STOP` 保留；D2 run `20260902-130415-49997.8P5Td6` 对同一图形成 schema 2/v2 正式 `PASS`，四门全零且仓库 lockfile 与 seed/evidence 摘要一致。11 个 crate archive 缺少随包许可证/NOTICE 类文件，人工分发义务与非实现者 evidence 复核未完成；这不是无许可证判定，也不授权联网补证或 Phase B。当前没有候选运行实证或 ADR，`SW-G2` 保持未通过。
+当前已完成决策包、上游证据收敛和两份 OpenMLS 固定图 Phase A。0.8.1 最终 run `20260824-215104-90006` 生成 229-package lockfile，来源检查通过；许可证检查拒绝 3 个 `MPL-2.0` `hpke-rs*` crate，`cargo-deny` 命中 3 个活跃 RustSec advisory，其中 `RUSTSEC-2026-0212` 直接涉及 AArch64，`cargo-audit` 共报告 6 个 vulnerability。0.9.0 单元 E run `20260901-123158-75973.3gVtsH` 对 264-package 固定图形成有效 schema 4/v4 证据；source/audit/feature 为零，独立 audit 漏洞为零并报告 `RUSTSEC-2026-0173` unmaintained 信息项，当前许可证门拒绝 3 个 `MPL-2.0` crate。两轮均为正式 `STOP`，Phase B 禁止。`mls-rs 0.56.0` 单元 D 的 94-package 图 source/audit/deny 为零、旧 feature gate 为一，正式历史 `STOP` 保留；D2 run `20260902-130415-49997.8P5Td6` 对同一图形成 schema 2/v2 正式 `PASS`，四门全零且仓库 lockfile 与 seed/evidence 摘要一致。11 个 crate archive 的随包证据不足以覆盖全部声明正文及适用归属，R1c-R 已补齐 9 个 mls-rs package 的 Apache-2.0/MIT 正文，debug_tree 和 r-efi 的固定对象处置仍未关闭，R1d-L 不是 R2；这不是无许可证判定，也不授权新的联网补证或 Phase B。当前没有候选运行实证或 ADR，`SW-G2` 保持未通过。
+
+## 候选适配的优先证明项
+
+依赖检查通过后，最早的受限场景应优先回答下列可实现性问题，再扩展媒体、群组或跨平台集成。此处是后续方案的设计输入，不恢复当前被禁止的 Phase B。
+
+| 问题 | 必须提交的设计 / 证据 | 不接受的替代 |
+| --- | --- | --- |
+| 密码与应用事务 | 候选库具体 API、提交点、失败传播，以及 outbox/inbox、去重、receipt 与安全状态的同一原子边界或等价 crash-safe 协调 | 仅声称 SQLite provider 已提供事务 |
+| 离线并发 | 同时建组、并发 Commit、旧 epoch、KeyPackage 重用与分区重合后的确定拒绝/重建路径 | 最后到达者成功、静默丢弃失败 |
+| relay-clear proof | 固定成熟机制、实际库支持、验证者凭据来源、与消息引用的认证绑定及元数据暴露评审 | 因规范提出了性质，就假定 Signal/MLS 库提供该功能；自行拼装新握手或密钥协议 |
+| 端点撤销与恢复 | Node/手机角色、丢失后的会话处理、分区期间撤销未知状态和重新验证入口 | 宣称离线撤销可立即对所有节点生效 |
+
+RFC 9750 的 [AS/DS 架构与投递说明](https://www.rfc-editor.org/rfc/rfc9750.html)允许去中心化实现，但投递一致性和身份映射仍由应用明确。库支持两成员组不是 RadishLink 离线闭环的通过证据。
+
+无法找到被接受的 proof 映射或事务边界时，应给出候选不适配及重新评审 SW-G1/SW-G2 的影响，不在实现中绕过既有删除或确认不变量。
+
+## 按实际分发范围评审许可证（政策修订候选）
+
+提出日期：2026-09-05；状态：待专业评审与所有者决策，不改变当前 allowlist、R1/R2 合同或任何历史 STOP。
+
+应分别记录“权利或义务问题”“材料不足”“项目政策未接受”“适配/安全问题”，避免用一个 STOP 原因代替全部结论。Mozilla 的 [MPL FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)说明其文件级 copyleft 与 Larger Work 的关系；这支持按具体分发物评审，不构成 RadishLink 的许可证兼容结论或允许直接采用的授权。
+
+| 渠道 | 待冻结输入 | 评审重点 |
+| --- | --- | --- |
+| 内部 Linux 受限实验 | 操作者与接收者、target、实际编译 feature、依赖与工具来源、是否外传 | 本轮复制/构建/使用权与证据范围；不能仅凭“内部”免除许可核对 |
+| 提供给他人的测试镜像 | 接收范围、镜像内容、修改状态、SBOM | 实际交付组件、正文/归属、源码提供与通知义务 |
+| 正式 Linux 设备镜像 | 产品 target、rootfs/固件/应用、静态或动态链接、更新包 | 整个分发物的义务、材料位置和可重复生成方式 |
+| Android / iOS | 分别固定构建 target、FFI、静态库、应用包与渠道条款 | 不把 Linux 结论外推为移动分发许可 |
+| 服务端 | 仅运行服务还是交付镜像/二进制、修改与接收方 | 按具体许可证核对网络使用和分发触发条件 |
+| 源码 / vendor / cache 包 | 包含的实际源码、构建工具、归档与 third-party 材料 | 不以最终二进制未链接为由忽略随包材料 |
+
+所有者与适当专业评审者需明确：哪些义务属于当前实验前置，哪些需要在未来相应渠道启用前关闭；未启用渠道不得被记成 PASS 或无需审查。只有形成被接受的政策修订和新的精确合同后，才能改变未来 gate。debug_tree 的固定源码授权/归属缺口与 r-efi 的 MIT alternative 判断继续分案处理；当前 R2 和 Phase B 停止线保持。

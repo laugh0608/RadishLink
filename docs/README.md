@@ -5,7 +5,7 @@
 ## 默认入口
 
 - [当前状态](status/current.md)：当前阶段、已确定事项、风险与下一步。
-- [项目执行计划](status/project-execution-plan.md)：产品阶段、SW/HW/RF 证据轨、依赖与总 gate。
+- [项目执行计划](status/project-execution-plan.md)：产品阶段、近期工作包、待决策事项与 SW/HW/RF 依赖。
 - [D0/P0 软件工作计划](status/d0-t0-p0-plan.md)：计划优先顺序、候选设计、决策门与暂停线。
 - [产品定义](product-definition.md)：定位、用户价值、范围和验收层级。
 - [路线图](roadmap.md)：从软件模拟、三节点原型到随身工程样机的推进顺序。
@@ -29,20 +29,21 @@
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
-- [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A lockfile、审计 `STOP` 与 Phase B 门禁。
-- [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：单元 D 在固定 94-package 图的旧 feature gate 保留历史 `STOP`；A2/A3 已形成 package-qualified gate 与固定图消费合同，D2 对同一图正式 `PASS`，人工许可证/NOTICE 与非实现者复核未完成，Phase B 禁止。
-- [`SW-EXP-003` mls-rs 0.56.0 实施与 Phase A 精确授权包](testing/sw-g2-mls-rs-phase-a-authorization.md)：记录 A0–A3、C、D 与 D2；D2 run `20260902-130415-49997.8P5Td6` 的 schema 2/v2 四门全零，仓库 lockfile 与 seed/evidence 一致；不授权联网补证、重跑或 Phase B。
-- [`SW-EXP-003` mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包](testing/sw-g2-mls-rs-license-notice-review.md)：R0/helper 已固定 11 个随包证据不足 package、3 个上游仓库、6 个不可变 commit 与证据合同；首次 R1/R1b 因不同 raw 文件 `TimeoutError` 形成有效传输负向 evidence。R1c-I/R 已完成 schema 2 blob identity/checksum 链及 11 行 mapping，但 `debug_tree` 与 `r-efi` 的固定 tree 未覆盖全部声明正文，结果为有效 `STOP/license-evidence`。R1d-P/L 已完成并保持 `STOP/license-disposition`；`debug_tree` R1d-U-P/I 已冻结并离线实现独立 schema 1 helper/checker，但未联网、发送或创建正式 evidence。R2 与 Phase B 禁止。
-- [`SW-EXP-003` mls-rs 0.56.0 R1d-L 独立许可证处置评审](testing/sw-g2-mls-rs-license-disposition-review.md)：独立复核 R1c checksum/mapping、两包固定证据及六类渠道，结果为 `STOP/license-disposition`。`debug_tree` 首选绑定固定对象的 R1d-U 上游澄清，`r-efi` 首选独立法律评审接受 MIT alternative 后进入 R1d-G/R1d-D；不重判 R1c，不替代 R2。
-- [`SW-EXP-003` `debug_tree 0.4.0` R1d-U-P 上游澄清设计](testing/sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)：冻结唯一公开 Issue 的固定对象、精确全文、新 evidence 要求、回复接受标准与转 R1d-V 条件；R1d-U-I 已离线实现并按该文件 revision/SHA 固定校验，R1d-U-X/R 尚未执行，未联网、发送或创建正式 evidence。
-- [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：单元 E 已形成 schema 4/v4 正式 `STOP`；独立 audit 漏洞为零但有 unmaintained 信息项，当前许可证门拒绝三个 `MPL-2.0` crate，Phase B 禁止。
-- [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：记录成功 bundle、单元 D 无效结果、A6 修复与单元 E 正式负向证据；不授权重跑、Phase B 或放宽门禁。
-- [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：已接受的 profile、seed、数值、manifest 与 `PASS/FAIL/INVALID` 口径。
-- [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：实施与 Docker 运行已分别授权并完成，四个 profile 各三次通过；不构成重跑或后续 `SW-V*` 授权。
+- [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A / Phase B 合同与历史结果。
+- [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：候选静态门与停止条件。
+- [`SW-EXP-003` mls-rs 0.56.0 实施与 Phase A 精确授权包](testing/sw-g2-mls-rs-phase-a-authorization.md)：固定依赖图、实施单元与 Phase A 结果。
+- [`SW-EXP-003` mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包](testing/sw-g2-mls-rs-license-notice-review.md)：许可证取证合同、运行结果与 R2 前置。
+- [`SW-EXP-003` mls-rs 0.56.0 R1d-L 独立许可证处置评审](testing/sw-g2-mls-rs-license-disposition-review.md)：固定对象、分发渠道与独立处置意见。
+- [`SW-EXP-003` `debug_tree 0.4.0` R1d-U-P 上游澄清设计](testing/sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)：已冻结的公开澄清与只读收集合同。
+- [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：候选静态门与停止条件。
+- [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：审计工具、精确实施与 Phase A 结果。
+- [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：版本化 profile、故障矩阵、证据与待评审勘误。
+- [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
 
+- [2026-09-03 状态与批次快照](status/2026-09-03-progress.md)：历史流水与证据引用，非当前授权。
 - [ADR 索引](adr/README.md)
 - [ADR 0001：主机、长距无线与近距接入基线](adr/0001-radio-and-host-baseline.md)
 - [ADR 0002：分离无线承载层与 RadishLink 覆盖层](adr/0002-underlay-overlay-separation.md)
@@ -59,6 +60,7 @@
 
 ## 文档规则
 
+- 当前结果与下一步统一从 `status/current.md` 进入；索引不重复批次结果，专题中的历史结果标明时点。
 - 带距离、速率、续航和时延的数字必须标明测试条件或明确写为目标。
 - 厂商峰值、标准上限和实测应用吞吐不得混写。
 - 安全结论必须说明端到端、逐跳或本地静态数据的保护边界。
