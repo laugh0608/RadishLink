@@ -76,6 +76,9 @@
 
 ## Git 与外部状态
 
+- `dev` 是常态开发与集成分支；串行推进的普通任务直接在 `dev` 开发和提交，不要求主题分支、Pull Request 或额外 worktree。
+- 只有项目所有者明确要求、外部贡献、并行写入、确有隔离价值的高风险改动或 hotfix 才创建主题分支；Agent 不自动创建 `codex/*` 等临时分支。
+- `dev` 当前不启用 branch protection，普通 push 不触发 CI；直接开发按改动范围完成本地验证，需要评审或隔离时再通过 Pull Request 合入 `dev`。
 - 未经明确要求不提交、push、创建或修改远程仓库、PR、tag、Release、Ruleset 或部署；commit 授权不包含任何远程写入。
 - 未经明确要求不 amend、重写、合并或拆分既有提交，不修改用户 Git 身份，不用 rebase、reset 或 force push 改写共享历史。
 - 提交使用 Conventional Commits，按可审阅主题拆分，不添加 AI 协作者署名；分支、合并和回流细节以仓库治理文档与 ADR 0003 为准。

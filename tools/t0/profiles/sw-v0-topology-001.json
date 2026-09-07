@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "profile_id": "SW-V0-TOPOLOGY-001",
+  "profile_version": 1,
+  "seed_hex": "0x524c535747330101",
+  "topology": "a-b-c-one-relay",
+  "payload_size_bytes": 1,
+  "message_count": 4,
+  "lifetime_ms": 30000,
+  "initial_hop_budget": 2,
+  "fault": {
+    "kind": "none",
+    "direction": "none",
+    "trigger_event": "none",
+    "trigger_index": 0,
+    "parameters": {}
+  },
+  "retry": {
+    "backoff_ms": [250, 500, 1000, 2000],
+    "max_attempts": 4,
+    "deadline_ms": 10000
+  },
+  "observation_window_ms": 10000,
+  "expected_events": ["a_to_c_unreachable", "c_to_a_unreachable", "b_to_a_reachable", "b_to_c_reachable"],
+  "forbidden_events": ["a_to_c_reachable", "c_to_a_reachable"],
+  "evidence_schema_version": 1
+}

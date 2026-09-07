@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "profile_id": "SW-V0-CLOCK-001",
+  "profile_version": 1,
+  "seed_hex": "0x524c535747330104",
+  "topology": "a-b-c-one-relay",
+  "payload_size_bytes": 1,
+  "message_count": 2,
+  "lifetime_ms": 30000,
+  "initial_hop_budget": 2,
+  "fault": {
+    "kind": "wall-clock-rollback",
+    "direction": "local",
+    "trigger_event": "clock-event",
+    "trigger_index": 2,
+    "parameters": {
+      "rollback_ms": 3600000
+    }
+  },
+  "retry": {
+    "backoff_ms": [250, 500, 1000, 2000],
+    "max_attempts": 4,
+    "deadline_ms": 10000
+  },
+  "observation_window_ms": 10000,
+  "expected_events": ["monotonic_advanced", "wall_clock_rollback_observed"],
+  "forbidden_events": ["monotonic_clock_rollback", "system_clock_modified"],
+  "evidence_schema_version": 1
+}

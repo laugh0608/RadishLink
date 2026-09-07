@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "profile_id": "SW-V0-EVIDENCE-001",
+  "profile_version": 1,
+  "seed_hex": "0x524c535747330103",
+  "topology": "a-b-c-one-relay",
+  "payload_size_bytes": 1,
+  "message_count": 1,
+  "lifetime_ms": 30000,
+  "initial_hop_budget": 2,
+  "fault": {
+    "kind": "evidence-tamper",
+    "direction": "local",
+    "trigger_event": "checksum-copy",
+    "trigger_index": 1,
+    "parameters": {}
+  },
+  "retry": {
+    "backoff_ms": [250, 500, 1000, 2000],
+    "max_attempts": 4,
+    "deadline_ms": 10000
+  },
+  "observation_window_ms": 10000,
+  "expected_events": ["evidence_complete", "tamper_rejected"],
+  "forbidden_events": ["partial_evidence_accepted", "tamper_accepted"],
+  "evidence_schema_version": 1
+}

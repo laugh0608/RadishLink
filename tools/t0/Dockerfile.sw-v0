@@ -1,0 +1,11 @@
+FROM scratch
+
+ARG RUN_ID
+LABEL org.radishlink.sw-v0.run="${RUN_ID}"
+LABEL org.radishlink.component="sw-v0-harness"
+
+COPY --chown=65532:65532 sw-v0-harness /sw-v0-harness
+COPY --chown=65532:65532 profiles /profiles
+
+USER 65532:65532
+ENTRYPOINT ["/sw-v0-harness"]

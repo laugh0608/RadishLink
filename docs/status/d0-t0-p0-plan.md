@@ -1,7 +1,7 @@
 # D0/P0 软件工作计划
 
-- 状态：Draft，待评审
-- 更新日期：2026-08-20
+- 状态：Accepted（`SW-G0`，2026-08-24）
+- 更新日期：2026-09-05（状态同步与后续准备；不改变 SW-G0 接受范围）
 - 适用范围：D0 的无射频软件方案设计，以及进入 P0 前的 `SW-*` 证据准备
 - 目标读者：产品、网络、安全、协议与测试协作者
 
@@ -18,6 +18,14 @@
 5. 才修改工具、执行验证并判断是否进入 P0。
 
 在第 4 步前，现有 `tools/t0/` 和 `scripts/run-t0-three-node.sh` 只维护阻断性缺陷，不扩展故障注入、生产协议、密码、媒体或硬件能力。
+
+## SW-G0 评审记录
+
+- 结论：Accepted；
+- 日期：2026-08-24；
+- 接受范围：D0/P0 边界、`SW-EXP-001` 的探索性证据定位、设计优先的工作顺序和实现暂停线；
+- 直接结果：下一工作包是[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)的 `SW-G1` 评审；
+- 授权边界：本 gate 只允许继续设计与只读核对，不授权修改或重跑测试实现，也不授权安装或集成密码依赖。
 
 ## 计划边界
 
@@ -52,7 +60,7 @@
 
 因此，脚本的 `T0 PASS` 只表示脚本内断言通过，不表示本计划、`SW-V*` 或 P0 已通过。该次运行统一登记为 `SW-EXP-001`。
 
-## 待评审设计基线
+## 待后续 gate 评审的设计候选
 
 以下是下一轮评审的候选方案，不是已接受 ADR。
 
@@ -94,30 +102,32 @@
 
 ### SW-G0：计划与术语
 
-评审本计划，确认 D0/P0 边界、探索性证据定位、工作顺序和暂停线。未通过 `SW-G0`，不扩展代码或重新运行场景。
+已于 2026-08-24 接受。评审确认 D0/P0 边界、探索性证据定位、工作顺序和暂停线；该结论不替代 `SW-G1..G4`。
 
 ### SW-G1：覆盖层消息语义
 
-形成独立的消息交付语义草案，至少覆盖：
+已于 2026-08-24 接受[覆盖层消息交付语义](../protocol/message-delivery-semantics.md)，覆盖：
 
 - ID、版本、origin/destination、lifetime、hop budget 和优先级；
 - destination delivery、relay custody、read receipt 与删除提示；
 - 去重范围、重放区别、乱序、重试、配额与淘汰；
 - 正例、负例、未知版本、时钟异常、存储失败和崩溃恢复。
 
-`SW-G1` 只冻结语义和不变量，不冻结二进制编码、生产语言或数据库。
+`SW-G1` 只冻结语义和不变量，不冻结二进制编码、生产语言或数据库，也不构成实现授权。
 
 ### SW-G2：E2EE 与身份候选
 
-按[端到端加密候选评审](../security/e2ee-candidate-review.md)比较 Signal 与 MLS 路线，先关闭许可证、支持平台、无中心投递映射和 crash-safe 状态问题。任何依赖安装或 spike 都需要另行授权。最终选择通过 ADR 接受；未通过 `SW-G2`，只能测试合成不透明载荷，不能测试或宣称 E2EE。
+按[端到端加密候选评审](../security/e2ee-candidate-review.md)和[`SW-G2` 决策包](../security/e2ee-sw-g2-decision-package.md)比较候选的身份/投递映射、crash-safe 状态、许可证与适配证明。当前候选结果统一见[当前状态](current.md)：OpenMLS 两个固定图 Phase A 为 STOP；mls-rs D2 固定图已 PASS，但 R1c-R/R1d-L 仍 STOP，R2 与 Phase B 被阻断，最终采用 ADR 尚未形成。
+
+未通过 `SW-G2`，正式 SW-V1/V2 只能测试合成不透明载荷，不能测试或宣称 E2EE；候选受限运行仍按其独立精确合同的前置与授权执行。历史资料只陈述当时结果，不提供新运行授权。
 
 ### SW-G3：验证设计
 
-在不改实现的前提下冻结 profile schema、固定 seed 规则、指标、观察窗、停止条件、证据目录和 `PASS/FAIL/INVALID` 判定。每个故障先单变量验证，再进入组合场景。
+已于 2026-08-28 接受[`SW-G3` 确定性故障与证据设计](../testing/sw-g3-deterministic-validation-design.md)，冻结 profile schema、固定 seed、单变量故障、指标、观察窗、停止条件、证据目录和 `PASS/FAIL/INVALID` 判定。该 gate 只允许继续形成 `SW-G4` 精确授权包，不授权实现或运行。
 
 ### SW-G4：实现授权
 
-根据 `SW-G1..G3` 形成精确改动清单、命令、外部资源、副作用、预计时间和清理方式。获得授权后才实现用户态 proxy、状态机或库 spike，并运行短生命周期容器。
+[`SW-G4 / SW-V0` Harness 最小实现与运行授权包](../testing/sw-g4-sw-v0-harness-authorization.md)已接受并按两个授权单位完成。四个 canonical profile 各三次通过且归一化一致；该结果只接受 harness 有效，不授权重跑、修改 profile/schema 或扩展 `SW-V1/V2/V3`。
 
 ### SW-G5：阶段判定
 
@@ -127,13 +137,34 @@
 
 | 顺序 | 工作包 | 主要产物 | 当前状态 |
 | --- | --- | --- | --- |
-| 1 | 证据归档与计划纠偏 | 本计划、探索性探针边界 | 文档已形成，待 `SW-G0` |
-| 2 | 消息交付语义 | `docs/protocol/` 下的新草案 | 未开始 |
-| 3 | E2EE/身份决策 | 候选实测计划与 ADR | 候选评审已有，未决策 |
-| 4 | 故障与证据设计 | profile/manifest/判定规范 | 未开始 |
-| 5 | `SW-V*` 工具调整 | 经评审的最小实现 | 暂停 |
+| 1 | 证据归档与计划纠偏 | 本计划、探索性探针边界 | `SW-G0` 已接受 |
+| 2 | 消息交付语义 | [覆盖层消息交付语义](../protocol/message-delivery-semantics.md) | `SW-G1` 已接受 |
+| 3 | E2EE/身份决策 | [SW-G2 决策包](../security/e2ee-sw-g2-decision-package.md)、候选精确包与后续 ADR | 当前结果见[状态页](current.md)；无采用 ADR，Phase B 与 R2 前置未关闭 |
+| 4 | 故障与证据设计 | [`SW-G3`](../testing/sw-g3-deterministic-validation-design.md) | `SW-G3` 已接受 |
+| 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | `SW-V0` 已完成并通过；无重跑或后续 `SW-V*` 授权 |
 | 6 | 三节点矩阵 | 可复现结果与限制 | 暂停 |
 | 7 | P0 进入评审 | D0 退出证据汇总 | 未开始 |
+
+## 最小文字纵向切片的设计输入
+
+后续 SW-G4 包应先交付一个从用户动作到恢复结果的小而完整的路径，再逐项扩展矩阵：已验证身份 → origin 原子入队 → B custody → C 安全状态/消息/去重提交 → 认证 delivery evidence → A/B 验证后清理 → 重启后的用户状态保持。
+
+设计至少给出每一步的输入、所有者、库接口、提交边界、UI 状态、失败原因与对应断言。优先覆盖确认丢失、满盘、身份变化和提交点崩溃；合成认证占位的结果只能登记为 SW-V1/V2，不能在交接中把它提升为安全切片完成。真实 E2EE 场景继续以 SW-G2、R2 和精确运行前置为界。
+
+[SW-G3 的实现前勘误](../testing/sw-g3-deterministic-validation-design.md#2026-09-05-实现前勘误待评审)尚未接受；涉及重试预算、密文长度和 profile 版本的选择应在实现前解决，不允许测试代码自行挑选有利解释。已有 SW-EXP-001 的 JSON、摘要 ACK 和 snapshot 不直接迁移为产品协议。
+
+## 已有工具的离线验证
+
+已有 Go 工具的单元测试不依赖生产技术栈冻结。具备满足 `tools/t0/go.mod` 的本地工具链时，可在对应的代码审阅/验证授权范围内使用：
+
+```bash
+cd tools/t0
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./...
+```
+
+此入口只执行 Go 单元测试并写入构建缓存；不下载依赖、不启动 Docker，不替代 `run-sw-v0-harness.sh run`。工具链或缓存不满足时报告失败，依赖安装另行授权。2026-09-05 文档整理前的审阅已在 macOS ARM64 / Go 1.26.3 通过该测试；这不是 Linux ARM64、密码候选或产品场景证据。
+
+CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)，本轮不修改脚本、代码或 workflow。
 
 ## 授权与停止线
 
@@ -141,4 +172,4 @@
 - 修改测试实现需要明确范围；运行容器前再次说明命令、目标、副作用、时长和清理；
 - 依赖安装、VM 启动、系统网络、`NET_ADMIN`、射频、硬件、真实密钥和外部状态分别授权；
 - 任一设计缺失会影响安全、兼容、数据或结论时，停止实现并回到相应决策门；
-- 本计划获得明确确认前，下一步仅限文档评审与修订。
+- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；mls-rs 单元 D 保留正式历史 `STOP`，D2 对 A2/A3 固定的同一 94-package 图已形成 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线形成；下一步只为 R1 固定一次性命令/helper 并申请单次 L3 联网授权，随后由项目所有者指定非实现者执行 R2。任何 R1/R2、D2 重跑、Phase B、进一步 gate 变化、依赖/provider/source 变化均须另行精确授权，不得复用 OpenMLS lockfile/cache 或相邻授权，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。

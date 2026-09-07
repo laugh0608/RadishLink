@@ -1,6 +1,6 @@
 # ADR 0003：分支、PR 与 Ruleset 治理
 
-日期：2026-08-19
+日期：2026-08-29
 
 状态：Accepted
 
@@ -26,9 +26,9 @@ Radish、RadishMind、RadishLex、RadishCatalyst、RadishFlow 和 RadishAxiom �
 
 ### 开发与合并拓扑
 
-普通变更以 `topic -> dev -> master -> dev` 形成闭环：
+普通变更以 `dev -> master -> dev` 形成闭环；确有隔离或评审需要时，在前面增加 `topic -> dev`：
 
-1. 主题分支默认向 `dev` 发起 PR；单人连续开发可直接进入 `dev`，但仍须执行风险匹配的本地验证。
+1. 串行推进的普通开发直接在 `dev` 完成，并执行风险匹配的本地验证；项目所有者明确要求、外部贡献、并行写入、风险隔离或明确评审需求才使用主题分支 PR。Agent 不自动创建 `codex/*` 分支或额外 worktree。
 2. 阶段性产品、协议、工具或治理基线稳定后，从 `dev` 向 `master` 发起 PR。
 3. `dev -> master` 优先使用 merge commit，保留阶段边界和原始提交身份，并使暂停前进的 `dev` 可以 fast-forward 到合并后的 `master`。
 4. 仓库允许 rebase merge；使用后 GitHub 会生成新的提交 SHA，必须通过普通 merge 把 `master` 回流到 `dev`。

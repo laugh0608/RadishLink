@@ -5,7 +5,7 @@
 ## 默认入口
 
 - [当前状态](status/current.md)：当前阶段、已确定事项、风险与下一步。
-- [项目执行计划](status/project-execution-plan.md)：产品阶段、SW/HW/RF 证据轨、依赖与总 gate。
+- [项目执行计划](status/project-execution-plan.md)：产品阶段、近期工作包、待决策事项与 SW/HW/RF 依赖。
 - [D0/P0 软件工作计划](status/d0-t0-p0-plan.md)：计划优先顺序、候选设计、决策门与暂停线。
 - [产品定义](product-definition.md)：定位、用户价值、范围和验收层级。
 - [路线图](roadmap.md)：从软件模拟、三节点原型到随身工程样机的推进顺序。
@@ -14,8 +14,10 @@
 
 - [系统架构](architecture/system-architecture.md)
 - [网络与路由](architecture/network-and-routing.md)
+- [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
 - [安全架构](security/security-architecture.md)
 - [端到端加密候选评审](security/e2ee-candidate-review.md)
+- [`SW-G2` E2EE 与身份候选决策包](security/e2ee-sw-g2-decision-package.md)
 - [媒体与 QoS](protocol/media-and-qos.md)
 - [手机接入方案](mobile/companion-app.md)
 
@@ -27,10 +29,21 @@
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
+- [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A / Phase B 合同与历史结果。
+- [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：候选静态门与停止条件。
+- [`SW-EXP-003` mls-rs 0.56.0 实施与 Phase A 精确授权包](testing/sw-g2-mls-rs-phase-a-authorization.md)：固定依赖图、实施单元与 Phase A 结果。
+- [`SW-EXP-003` mls-rs 0.56.0 许可证/NOTICE 补证与非实现者复核包](testing/sw-g2-mls-rs-license-notice-review.md)：许可证取证合同、运行结果与 R2 前置。
+- [`SW-EXP-003` mls-rs 0.56.0 R1d-L 独立许可证处置评审](testing/sw-g2-mls-rs-license-disposition-review.md)：固定对象、分发渠道与独立处置意见。
+- [`SW-EXP-003` `debug_tree 0.4.0` R1d-U-P 上游澄清设计](testing/sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)：已冻结的公开澄清与只读收集合同。
+- [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：候选静态门与停止条件。
+- [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：审计工具、精确实施与 Phase A 结果。
+- [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：版本化 profile、故障矩阵、证据与待评审勘误。
+- [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
 
+- [2026-09-03 状态与批次快照](status/2026-09-03-progress.md)：历史流水与证据引用，非当前授权。
 - [ADR 索引](adr/README.md)
 - [ADR 0001：主机、长距无线与近距接入基线](adr/0001-radio-and-host-baseline.md)
 - [ADR 0002：分离无线承载层与 RadishLink 覆盖层](adr/0002-underlay-overlay-separation.md)
@@ -47,6 +60,7 @@
 
 ## 文档规则
 
+- 当前结果与下一步统一从 `status/current.md` 进入；索引不重复批次结果，专题中的历史结果标明时点。
 - 带距离、速率、续航和时延的数字必须标明测试条件或明确写为目标。
 - 厂商峰值、标准上限和实测应用吞吐不得混写。
 - 安全结论必须说明端到端、逐跳或本地静态数据的保护边界。
