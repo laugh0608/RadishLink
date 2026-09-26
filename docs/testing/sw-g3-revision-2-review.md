@@ -18,7 +18,7 @@
 | 后续 evidence schema | 候选主版本 2，记录语义模式、子用例、发送原因、预算消耗与提交点 | 比较器按 schema/profile ID/version/variant/子用例分组，禁止跨版本归一化为相同结果 |
 | 新的边界子用例 | 以父 profile ID/version 加稳定 subcase ID 区分 | 三次重复按同一子用例比较，不以三个不同子用例代替三次重复 |
 
-`tools/t0/internal/harness/profile.go` 仍只接受四个 canonical SW-V0 ID、profile version 1、schema 1，并拒绝未知字段。[I4 接入包](sw-g4-synthetic-i4-plan.md)已获有限接受并完成 schema 2 decoder、validator、场景编排、clock、evidence writer/checker、比较器及离线测试；入口独立分派版本，不放宽 V0 校验。其 offline-i3 variant 只消费 I3 小容量路径的五 profile 七子用例，不接受本包完整矩阵或正式运行；其他 version 2 场景尚未实现。
+`tools/t0/internal/harness/profile.go` 仍只接受四个 canonical SW-V0 ID、profile version 1、schema 1，并拒绝未知字段。[I4 接入包](sw-g4-synthetic-i4-plan.md)已获有限接受并完成 schema 2 decoder、validator、场景编排、clock、evidence writer/checker、比较器及离线测试；入口独立分派版本，不放宽 V0 校验。其 offline-i3 variant 只消费 I3 小容量路径的五 profile 七子用例，不接受本包完整矩阵或正式运行；其他 version 2 场景尚未实现。后续 [I5 三进程闭环草案](sw-g4-synthetic-i5-plan.md)单独提出 profile/evidence schema 3 与 TCP variant，以实际跨进程证据覆盖同一有限矩阵；I4/V0 合同保持不变，I5 尚未实施或运行。
 
 ## 重试与 5 秒断链
 

@@ -31,6 +31,7 @@
 | 后续 `SW-G4 / I2` | 有限范围已接受，实施与离线验证通过 | [I2 记录](../testing/sw-g4-synthetic-i2-plan.md)覆盖显式限额、V0 兼容和短写拒绝；全量 vet/test 首次受缓存权限阻断，同命令获准复验通过；[队列/事务接入](../architecture/minimal-text-slice.md#队列与事务的接入设计)仍为候选 |
 | 后续 `SW-G4 / I3` | 有限范围已接受，十文件实施与离线验证通过 | [I3 记录](../testing/sw-g4-synthetic-i3-plan.md)覆盖合成 envelope/store v1、四消息资源、完整持久路径、事务错误与进程重开；全量 vet/test 首次缓存权限失败，同命令获准复验通过；不等于真实安全或正式场景 |
 | 后续 `SW-G4 / I4` | 有限范围已接受，实施与离线验证通过 | [I4 记录](../testing/sw-g4-synthetic-i4-plan.md)覆盖观测/证据合同、五 profile 七子用例共 21 个独立样本及三次比较、事实篡改拒绝；全量 vet/test 通过，不是正式 SW-V1/V2 结果 |
+| 后续 `SW-G4 / I5` | 三进程闭环设计 Draft 已形成；实施与运行未执行 | [I5 方案](../testing/sw-g4-synthetic-i5-plan.md)明确 I5-I 实现/离线验收及 I5-R TCP 三容器矩阵；不继承 I4 离线 PASS |
 | `SW-EXP-001` | Docker/Ethernet 合成载荷探索成立 | 不是正式消息实现、E2EE 或 P0 验收 |
 | OpenMLS `0.8.1` | Phase A `STOP`：advisory 与许可证门 | [历史授权与结果](../testing/sw-g2-openmls-spike-authorization.md)，Phase B 禁止 |
 | OpenMLS `0.9.0` | 单元 E：固定 264-package 图 Phase A `STOP` | 独立 audit 未发现 vulnerability，但有 unmaintained 信息项；当前门拒绝三个 MPL-2.0 crate；[正式记录](../testing/sw-g2-openmls-0.9-phase-a-authorization.md) |
@@ -49,7 +50,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 1. 按已确认的熟人小队、上海、整套 2000 元和文字/语音优先范围，补齐使用条件、复用设备及地区合规路径；不承诺预算可行性或日期。
 2. 形成按实际渠道区分的许可证政策评审输入，分别处置 `debug_tree` 与 `r-efi`；保留全部现行 STOP 和 R2 条件。
 3. 收敛 Node/手机身份、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. I1/I2/I3 已提交；[I4 场景与证据接入包](../testing/sw-g4-synthetic-i4-plan.md)已接受，13 个 Go 文件/5 个 JSON 实施与离线验证通过。下一步根据真实接口设计消息进程/传输入口、监督时钟/事件屏障、网络拓扑及证据收集，再形成精确实施与运行包。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
+4. I1–I4 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已形成 Draft，明确消息进程、TCP 传输、监督时钟/屏障、schema 3 证据、实施清单及 21 样本运行边界。下一步为 I5-I 实现与离线验收，随后才是满足前置并获明确运行授权的 I5-R；本轮仅完成设计。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
 5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成硬件复用及能量/体积/成本预算；I4 本轮未修改 CI。
 
 ## 关键风险
