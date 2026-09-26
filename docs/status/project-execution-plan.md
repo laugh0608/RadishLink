@@ -140,13 +140,13 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 | 已确认范围 | [阶段顺序修订记录](../roadmap.md#阶段顺序修订记录2026-09-26) | 首台 E0 文字/语音样机不等待 P2；产品、依赖图、硬件与媒体验收同步 | 所有者已选择；安全、升级恢复、HW/RF 门不变，阶段未通过 |
 | 高 | [E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)及现有 R1d 处置 | 按实际渠道形成许可证评审输入；分别处理 debug_tree 与 r-efi，满足新证据轨/R2 条件 | 专业许可证意见、工程证据复核和所有者决策分开；不放宽现行 gate，不进入 Phase B |
 | 高 | [手机身份](../mobile/companion-app.md)、[路由边界](../architecture/network-and-routing.md)与安全状态 | 明确端点、密钥/历史归属、物理与覆盖层 hop 映射、事务和 relay-clear proof 可实现性 | 系统/安全评审；不由 UI 或具体库默认值代替决策 |
-| 高 | [文字闭环设计](../architecture/minimal-text-slice.md)与 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md) | Draft 已给出事务/失败矩阵、重试事件表、长度与版本候选；下一步专题评审并冻结精确实施清单 | SW-G3 原值保留，修订尚未接受；V1/V2 合成验证不能代替 V3 |
+| 高 | [文字闭环设计](../architecture/minimal-text-slice.md)、[SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与 [I1 实施记录](../testing/sw-g4-synthetic-i1-plan.md) | I1 有限范围已接受、四文件实施与离线验证通过；下一步固定队列/schema/事务/reader 集成设计 | 整体修订未接受；I1 只验证离线算法，不修改 V0 或宣称 V1/V2/V3 通过 |
 | 中 | [HW0 盘点](../hardware/hardware-validation-plan.md)与[联合预算](../hardware/hardware-strategy.md#能量体积与成本联合预算) | 复用设备清单、接口拓扑、典型日负载、Wh/重量/体积/整套成本和测量方法 | 所有者指定现有设备；先评审 HW-G0/G1，不启动或覆盖设备 |
-| 中 | [已有工具验证与 CI](../governance/repository-governance.md#已有工具的质量入口演进) | 将现有离线测试纳入拟实施清单，识别重复 runner/monitor/finalizer 的稳定职责 | 另案代码/CI 实施；本轮只有文档，无已生效的新 job |
+| 中 | [已有工具验证与 CI](../governance/repository-governance.md#已有工具的质量入口演进) | 将现有离线测试纳入拟实施清单，识别重复 runner/monitor/finalizer 的稳定职责 | 另案代码/CI 实施；I1 本轮未修改 CI，无已生效的新 job |
 
 审计与上游补证等待期间，可以继续已授权的范围设计、接口评审和只读资料整理。没有相应实现/运行授权时，不把“可以并行”解释为允许启动实验。项目进展按关闭的不确定性和验证的用户路径判断，不按 helper、提交或 gate 数量判断。
 
-本轮收口后优先评审 SW-G3 与文字切片的合成范围；所有者同时提供已有 Linux 设备/接口清单并指定许可证、上海法规工作的责任人与复核日期。人员和日期当前待定，不启动自动监控或擅自联系第三方。地区无可行路径或预算不足时，提交明确取舍再决定后续承载与硬件工作。
+I1 已接受并完成后，优先形成后续消息队列、完整 schema、事务及 reader 集成的精确设计；整体文字切片仍有安全缺口。所有者同时提供已有 Linux 设备/接口清单并指定许可证、上海法规工作的责任人与复核日期。人员和日期当前待定，不启动自动监控或擅自联系第三方。地区无可行路径或预算不足时，提交明确取舍再决定后续承载与硬件工作。
 
 ## 计划与授权门
 

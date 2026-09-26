@@ -40,6 +40,7 @@
 - [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：审计工具、精确实施与 Phase A 结果。
 - [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：版本化 profile、故障矩阵、证据与待评审勘误。
 - [`SW-G3` 实现前修订评审包](testing/sw-g3-revision-2-review.md)：待评审的重试、长度、故障划分与版本方案。
+- [后续 `SW-G4` 离线实施单元 I1](testing/sw-g4-synthetic-i1-plan.md)：重试算法、长度边界、精确范围与离线验证记录。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 
