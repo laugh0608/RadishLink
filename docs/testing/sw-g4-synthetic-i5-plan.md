@@ -1,6 +1,6 @@
 # SW-G4 合成验证准备：三进程文字闭环单元 I5
 
-- 状态：Draft；设计已形成，实施与网络运行未执行
+- 状态：I5-I 有限实施已接受，实施与离线验收通过；I5-R 未执行
 - 日期：2026-09-26
 - 基线：`dc50626`，I1–I4 已提交
 - 目标读者：消息实现、场景执行与证据复核者
@@ -9,7 +9,7 @@
 
 ## 范围与推荐决定
 
-所有者在 I4 提交后同意继续形成下一工作包。本轮为设计任务：核对本地源码，形成以下候选合同与文件清单；没有启动容器、网络服务或新进程实验。方案涉及测试控制协议和证据版本，按 L2 评审；容器运行及资源清理另按 L3 执行。
+所有者在 I4 提交后同意继续形成下一工作包。设计轮核对本地源码，形成以下合同与文件清单；后续 I5-I 有限实施的接受与验证见文末。没有启动容器或网络服务。方案涉及测试控制协议和证据版本，按 L2 评审；容器运行及资源清理另按 L3 执行。
 
 推荐先完成 `I5-I`：现有命令包中的消息进程、监督器、TCP 适配器、证据消费者和离线正负例，再执行 `I5-R`：三个隔离容器的有界网络矩阵。两者是同一纵向切片的实施与实测部分，不以 stub 或内存测试宣告三进程闭环完成。实施可先验收；网络运行只在产物、精确 revision/hash 和环境预检齐备且取得明确运行授权后开始。
 
@@ -35,7 +35,7 @@
 
 控制面通过监督器拥有的 `docker start -ai` stdin/stdout 管道；先 `docker create -i`，给尚未启动的 B 接入第二张网络，再启动并保持管道。stderr 独立限额采集。Docker CLI 子进程退出、管道 EOF、写阻塞和消息乱序均可观察，不在失联后重发事务命令。Docker 已启动是运行前提，本包不启动桌面应用或 daemon。
 
-数据面仅走节点间 TCP，每条连接承载一个 I2 frame。接收邻接由本次 inspect 取得的源 IP、接收接口和预置邻接表共同绑定，不相信 payload 自报的 neighbor。禁止 A→C/C→A 地址进入数据发送表；B 的业务转发必须来自其本地提交后的 Transmission。控制面不允许提交任意原始 frame、历史内容或修改 store；初始化只传固定 profile/subcase，A 在本地构造公开合成载荷。
+数据面仅走节点间 TCP/IPv4，每条连接承载一个 I2 frame。接收邻接由本次 inspect 取得的源 IP、接收接口和预置邻接表共同绑定，不相信 payload 自报的 neighbor。禁止 A→C/C→A 地址进入数据发送表；B 的业务转发必须来自其本地提交后的 Transmission。控制面不允许提交任意原始 frame、历史内容或修改 store；初始化只传固定 profile/subcase，A 在本地构造公开合成载荷。
 
 每个节点独占一个新建 named volume，仅挂 `/state`，容器根只读，另设 16 MiB `/tmp` tmpfs。volume 的名字、ID、标签、挂载和所有者在创建时登记；不挂工作区、用户目录或其他节点 volume。镜像内预建归固定测试 UID 所有的空 `/state`，新 volume 通过该目录初始化；固定 UID 及卷目录权限须由创建阶段核验，权限不满足即停止，不能改宿主目录权限凑通过。所有节点同一镜像，镜像仅含本批本地构建二进制与固定 profiles，基础为 scratch，不拉取镜像。
 
@@ -107,7 +107,7 @@ validator 必须重算业务断言，同时从 execution 验证请求/响应连�
 
 PASS/FAIL/INVALID 继续遵循 I4：环境有效的实现违反合同为 FAIL，证据/监督设施失效为 INVALID；同时发生时保留两类原因。单样本 CLI 退出 0/1/2；批次部分完成不得 PASS。中断保留实际停止时刻、错误和清理结果，不伪造完整 bundle 或三次一致。
 
-## 精确实施清单（候选 I5-I）
+## 精确实施清单（I5-I 已接受，职责细化见实施记录）
 
 以下文件均相对 `tools/t0/`，合计 24 个 Go 文件（11 个已有、13 个新增）、5 个新 JSON；另有一个新 shell 入口与一个新 Dockerfile。新文件按职责组织，避免继续堆叠超长 validator；不改 I1/I2、synthetic 状态机、envelope/store 格式、密码依赖或 go.mod。
 
@@ -148,14 +148,14 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -count=1 -timeout=120s ./...
 
 ### 有界运行与停止/清理
 
-拟提供的根目录入口如下，**当前不存在，不是本轮已执行命令**：
+已实现的根目录入口如下，**本轮未执行这两个入口**；它们供后续 I5-R 使用：
 
 ```bash
 ./scripts/run-sw-i5-harness.sh preflight
 ./scripts/run-sw-i5-harness.sh run --matrix i5-seven-v1 --repeats 3
 ```
 
-preflight 只读取本地 git、Go、Docker client/server 与环境；不启动 daemon、不创建资源。执行前要求源树干净且记录完整 revision、合同/profile hash、实际 Docker/Go 版本及架构；构建后记录宿主监督器和 Linux 节点二进制 hash。缺失/不支持架构、Docker 不可用、固定 profile 不符、既有同名资源、可用磁盘不足 1 GiB 均停止；不回退到内存模式、下载依赖或替换工具链。
+preflight 与 run 都先在 `.tmp/i5-bootstrap.*` 有界离线构建宿主检查器，再使用同一个 Go 预检函数读取 git、Go、Docker client/server、profile/hash 与环境；preflight 不创建 Docker 资源、不启动 daemon。它会留下本地 bootstrap 二进制和 Go cache，不是零文件写入。只接受本地 Unix Docker endpoint，拒绝远程 TCP/SSH context。执行前要求源树干净且记录完整 revision、合同/profile hash、实际 Docker/Go 版本及架构；构建后记录宿主监督器和 Linux 节点二进制 hash。缺失/不支持架构、Docker 不可用、固定 profile 不符、既有同名资源、可用磁盘不足 1 GiB 均停止；不回退到内存模式、下载依赖或替换工具链。
 
 run 内部用本地 Go 工具链离线构建宿主和 `CGO_ENABLED=0 GOOS=linux` 节点二进制，显式匹配 daemon arch；镜像构建采用 `--network=none --pull=false`。单次批次只构建一次镜像，每个样本新建三容器、两网络、三 volume，串行执行 21 样本，完成一个子用例三次后立即 compare。prepare/start/probe/stop 等临时 CLI 也由监督器创建、限时和 Wait；不使用无人管理的 shell background。
 
@@ -169,16 +169,50 @@ run 内部用本地 Go 工具链离线构建宿主和 `CGO_ENABLED=0 GOOS=linux`
 | 批次 | 含离线构建最多 45 min 实际耗时，预期数分钟至数十分钟；清理另外最多 60 s；不保证机器性能 |
 | 产物与诊断 | 每 bundle 32 MiB；整个批次含构建/临时/store/诊断最多 768 MiB，写前计费并检查宿主余量；named volume 纳入计费，超限停止 |
 
-主要副作用仅为本批 Docker image/container/internal network/named volume、本地构建缓存和 `artifacts/sw-v/i5-<batch-id>/` 证据；不接触无线、外部服务、账号、其他项目或用户数据。所有 Docker 对象记录返回 ID，并带 `org.radishlink.sw-i5.batch` 与 sample/node 标签；名字只作显示，清理前重新按 ID 复核标签与挂载。
+主要副作用仅为本批 Docker image/container/internal network/named volume、`.tmp/i5-bootstrap.*` 二进制、本地构建缓存和 `artifacts/sw-v/i5-<batch-id>/` 证据；不接触无线、外部服务、账号、其他项目或用户数据。所有 Docker 对象记录返回 ID，并带 `org.radishlink.sw-i5.batch` 与 sample/node 标签；名字只作显示，清理前重新按 ID 复核标签与挂载。
 
 正常结束或异常均先停止节点、关闭并 Wait 控制进程，再移除本样本容器、网络、volume；整个批次结束才移除本批镜像。只移除本次 inventory 精确拥有的对象，不用 prune、宽泛 label 批量删除或目录递归清理。inspect 权限/连接错误不能当“不存在”；清理失败保留具体 ID 和诊断，结果 INVALID 并停止下一样本。失败证据保留，不自动重跑；产物目录和 Go cache 默认保留。若需继续，先根据失败重新明确修复与剩余运行范围。
 
-本包把命令、次数、主要副作用、上限和回收边界放在同一处，后续可一次确认 I5-I 及满足前置后的 I5-R，不必逐样本重复询问。本文 Draft 和本轮设计授权本身不启动 L3 操作；实施后如命令/对象/上限与本文不同，须先交付实际差异及精确产物再执行。
+本包把命令、次数、主要副作用、上限和回收边界放在同一处，后续可一次确认 I5-I 及满足前置后的 I5-R，不必逐样本重复询问。I5-I 的接受不启动 L3 操作；实施后如命令/对象/上限与本文不同，须先交付实际差异及精确产物再执行。
 
 ## 设计复核与当前交付
 
 编写 Agent 静态核对了 I3 Node/store/observations、I4 scenario/profile/evidence、现有 clock/proxy、V0 main/shell/Dockerfile 及当前计划。主要关闭的设计缺口是：三进程/store 所有权、控制面不转发正文、Write 前后的 generation 屏障、重复 frame 的发送归因、逻辑与实际时间分离、单向 down 层级、跨进程事实链和双二进制绑定。不是独立复核或运行结果。
 
-本轮仅新增本方案并同步文档入口；没有创建上述源码、profiles、shell、镜像或测试 evidence。设计检查只证明文档和引用一致，不能证明拟定控制协议、资源预算、网络隔离或三次比较实际成立。下一项明确交付为 I5-I 实现及离线验收，随后才是满足前置并获运行授权的 I5-R。许可证、安全适配、上海法规与复用设备输入仍按[当前状态](../status/current.md)单独关闭。
+设计轮仅新增本方案并同步文档入口；当时没有创建上述源码、profiles、shell、镜像或测试 evidence。设计检查只证明文档和引用一致，不能证明拟定控制协议、资源预算、网络隔离或三次比较实际成立。当时下一项交付为 I5-I 实现及离线验收；现已完成，后续为满足前置并获运行授权的 I5-R。许可证、安全适配、上海法规与复用设备输入仍按[当前状态](../status/current.md)单独关闭。
 
 设计轮验证：`./scripts/check-repo.sh` 通过（149 文件），`git diff --check` 通过；逐项核对实施清单的 11 个已有 Go 路径存在、13 个新增路径尚未占用，共 24 个且无重复。未运行 Go 测试、构建、Docker 或网络实验；本轮没有后台进程或测试产物，未提交、未推送。
+
+## I5-I 实施范围记录（2026-09-26）
+
+所有者在方案交付后要求“提交更改，继续推进下一步”；方案已提交为 `0065f03`，本轮开始 I5-I 代码与离线验收，不启动 I5-R、Docker、socket listener、设备或远程操作。
+
+实施中的职责细化：新增 `internal/harness/network_bundle.go` 承载 schema 3 文件读写与比较，新增 `cmd/sw-v0-harness/process_runtime.go` 承载宿主准备、构建与批次资源管理；其余场景/控制职责保持原清单。候选范围由 24 个 Go 文件扩大为 26 个（11 个已有、15 个新增），仅按已有职责拆分，不扩大场景或接口。已有文件无必要时不制造形式性改动。
+
+共享镜像归批次所有：样本 residuals 只清点其独占的三个容器、两网络和三个 volume；镜像 ID 仍绑定每份 manifest。批次结束后精确删除镜像，并写 `batch-result.json`；样本通过而镜像清理失败时批次必须 INVALID，不把仍被后续样本使用的镜像当样本残留。路由表摘要是保留的环境诊断，比较时仅对该随运行 IP 变化的摘要使用显式诊断别名；隔离断言依赖网络成员、接口和数字 IP probe，不能用摘要证明路由正确。
+
+离线控制集成测试可以用真实 Node、三个独立临时 store 和受控字节流构造 schema 3 **校验器 fixture**，验证事实消费者与负例；fixture 的合同判定不是 Docker/TCP 运行结果，不发布为 I5-R evidence。真实 socket、容器挂载/权限和 daemon 行为继续等待 I5-R。
+
+## I5-I 实施与离线验证结果（2026-09-26）
+
+实际修改 4 个已有 Go 文件、新增 15 个 Go 文件、5 个 profile JSON、shell 入口及 Dockerfile；计划范围内其余已有文件无需改动，没有为凑清单制造差异。V2 观测/语义/文件职责分离，共享内部语义合同由各版本严格 decoder 构造；V0/schema 1 与 I4/schema 2 不接受 schema 3 作为旧数据。
+
+实现包括：严格控制请求/响应和独立节点 actor；当前 generation 的单次发送机会；真实 TCP 接口的有界读写、半关闭/EOF 与邻接绑定；监督器逻辑时钟、入批/发送屏障、单向 gate 和 delivery 丢弃；schema 3 原始执行事实、来源核对、结果重算、文件校验及重复比较；独立 store/container/network 所有权、精确标签核对和残留查询。七个场景通过字节流驱动实际 Node 构造校验器 fixture，不是三个真实 OS 进程或 TCP 实验。
+
+容器创建前先登记本批精确名称，命令返回不确定时保留未解析 inventory；清理只在重新核对名称、batch/sample/node 标签并取得实际 ID 后执行。外来标签拒绝删除，inspect 失败不当不存在。共享镜像由批次记录负责，样本资源与共享资源结果分别保存。预检检查本地 Docker endpoint、干净源树、五 profile 绑定、架构和磁盘；构建后复核源码 revision/dirty 状态。预检分支与 run 共用检查函数，不由 shell 维护第二套 profile 合同。
+
+| 验证 | 实际结果与边界 |
+| --- | --- |
+| 拆分后的 V0/I4 回归 | harness 与命令包通过；I4 原有五 profile/七子用例共 21 个离线样本及三次比较仍通过 |
+| 七个 I5 字节流场景 | 真实 Node、独立临时 store 与注入网络/进程接口通过；BASE 的三份独立 fixture 通过 V3 write/verify/compare；不登记为 I5-R PASS |
+| 控制与发送拒绝 | 非规范/超长请求、未知操作、重复序号、错 session/epoch/generation、同刻批次、未消费发送前提交、响应短写、额外 frame/短帧/错误邻接均拒绝；提交后响应丢失不重放，拨号失败不退还机会 |
+| 证据与分类 | 缺 ingress 来源、缺写出、改 generation、共享 store、非数字目标 probe、错 epoch/序号/摘要、伪造清理拒绝；重算 checksum 后的指标篡改仍拒绝；完整实现错误 fixture 为 FAIL，完整环境失败 fixture 为 INVALID，均可保存和验证 |
+| 生命周期与预检 | 注入创建完成后超时，仍能凭精确名称和标签解析 ID 清理；拒绝外来标签删除；清理失败保留对象与错误。预检拒绝 dirty tree 和远程 Docker，测试未执行外部命令 |
+| 格式与静态检查 | 范围内 Go 文件 gofmt；`bash -n scripts/run-sw-i5-harness.sh`、全量 `go vet ./...` 通过 |
+| 全量离线回归 | 设置 GOTOOLCHAIN=local、GOPROXY=off、GOSUMDB=off 后，`go test -count=1 -timeout=120s ./...` 通过；最后一次完整回归命令包约 18.7 s，synthetic 包约 10.1 s；之后预检入口收敛的精准测试与全量 vet 再次通过 |
+
+开发失败保留：多次 Go 编译/精准或全量测试因 `Library/Caches/go-build/...: operation not permitted` 退出 1，均保留失败并获准同命令离线复验；未换缓存目录、下载依赖或放宽测试。编译曾因错误调用 `CompareEvidenceRepeats`（实际为 CompareEvidenceRuns）与拆分后 unused strings import 退出 1，修复后通过。早期控制测试使用 TempDir 默认权限而未建立 0700 独占 store，I3 正确拒绝；测试已改为专属 0700 子目录。另一个测试错误地期待 1 ms 首槽立即发包，实际上初始 token 不足会消费该槽；已改为在 250 ms 的真实可发送槽验证发送屏障，I1/I3 行为未改。
+
+本轮未执行 shell preflight/run、Docker build/create/start、socket listener、网络 probe 或 I5-R 矩阵；容器实际挂载、目录权限、daemon 启动时序、真实 TCP 与网络隔离仍需 I5-R 验收。自审及字节流 fixture 不替代这些入口。没有新依赖、CI、E2EE、射频、设备或远程变更；测试临时 store/bundle 按生命周期回收，既有 I3 短命 helper 已 Wait，Go cache 保留。方案提交为 `0065f03`，本轮新实现尚未提交。
+
+最终仓库检查：`./scripts/check-repo.sh` 通过（171 文件）、`git diff --check` 通过；实际 19 个 Go 文件格式检查为空，五份 I5 JSON 保留单 LF 封装。所有新增/修改源码文件均低于 1000 行。工作区保留本轮实现和文档更改，`dev` 领先已知 `origin/dev` 6 个提交，未推送；没有本轮遗留后台进程。

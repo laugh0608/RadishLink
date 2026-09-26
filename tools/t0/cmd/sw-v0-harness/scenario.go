@@ -195,31 +195,11 @@ func runScenario(root string, p harness.ScenarioProfile, subID string, metadata 
 	}
 	downAt, upAt := int64(-1), int64(-1)
 	for tick := 0; tick < 512; tick++ {
-		next := int64(30000)
+		pendingTimes := []int64{}
 		for _, q := range pending {
-			if q.at > now {
-				next = min(next, q.at)
-			}
+			pendingTimes = append(pendingTimes, q.at)
 		}
-		for _, s := range snapshots {
-			for _, q := range s.Queues {
-				if q.Status != "active" {
-					continue
-				}
-				for _, offset := range []int64{0, 250, 750, 1750, 3750} {
-					at := q.Start + offset
-					if at == 0 {
-						at = 1
-					}
-					if at > now {
-						next = min(next, at)
-					}
-				}
-			}
-		}
-		if downAt >= 0 && upAt < 0 {
-			next = min(next, downAt+5000)
-		}
+		next := scenarioNext(now, snapshots, pendingTimes, downAt, upAt)
 		if next <= now {
 			return bundle, errors.New("scenario clock did not advance")
 		}
@@ -245,21 +225,7 @@ func runScenario(root string, p harness.ScenarioProfile, subID string, metadata 
 				}
 			}
 			pending = remaining
-			due := len(batch.Inputs) > 0 || now == 30000
-			for _, q := range snapshots[name].Queues {
-				if q.Status != "active" {
-					continue
-				}
-				for _, offset := range []int64{0, 250, 750, 1750, 3750} {
-					at := q.Start + offset
-					if at == 0 {
-						at = 1
-					}
-					if at == now {
-						due = true
-					}
-				}
-			}
+			due := len(batch.Inputs) > 0 || scenarioDue(now, snapshots[name])
 			target := ""
 			if p.Fault.Kind == "down" {
 				if p.Fault.Direction == "a-to-b" && name == "A" && now == 1 && downAt < 0 {

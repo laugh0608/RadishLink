@@ -87,7 +87,7 @@ T-B 的 custody 回复可以由已提交记录幂等重建，但也必须受控�
 - A 入队 → B custody → C 提交 → A/B 处理 evidence 已在三个临时目录与内存字节流中通过；包含事务 I/O 错误和受控进程退出/重开。不证明网络三节点、物理掉电、密码学认证或安全库联合提交。
 - 复用既有 profile/validator/runner/evidence 消费链；离线 schema 2 已接入 I4，网络 schema 3 另见 I5 草案及其受限运行条件。V0 的固定 schema 1 和历史 evidence 保留，真实 E2EE 继续受 SW-G2 约束。
 
-[I4 接入包](../testing/sw-g4-synthetic-i4-plan.md)已获有限接受并完成实施验证：I3 提供只读事务/预算观测，现有 harness 命令包编排离线场景，五 profile 七子用例的 21 个独立样本及三次证据比较通过。使用显式 offline variant，校验器从提交、发送与接收事实重算结果；V0 runner 保持原样。echo 端点不等于消息进程；后续 [I5 三进程闭环草案](../testing/sw-g4-synthetic-i5-plan.md)已明确独立 store、TCP 与控制管道、提交/发送屏障和网络证据合同，实施与运行仍未执行。
+[I4 接入包](../testing/sw-g4-synthetic-i4-plan.md)已获有限接受并完成实施验证：I3 提供只读事务/预算观测，现有 harness 命令包编排离线场景，五 profile 七子用例的 21 个独立样本及三次证据比较通过。使用显式 offline variant，校验器从提交、发送与接收事实重算结果；V0 runner 保持原样。echo 端点不等于消息进程；后续 [I5 三进程闭环包](../testing/sw-g4-synthetic-i5-plan.md)的 I5-I 已实现独立 store/actor、TCP 与控制管道、提交/发送屏障及网络证据消费者，并通过离线验收。实际三容器和 TCP 运行仍未执行。
 
 ## 安全接口与必须证明的缺口
 

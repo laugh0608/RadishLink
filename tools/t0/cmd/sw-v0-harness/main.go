@@ -23,6 +23,10 @@ import (
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "sw-v0-harness:", err)
+		var result *networkExit
+		if errors.As(err, &result) {
+			os.Exit(result.code)
+		}
 		os.Exit(1)
 	}
 }
@@ -32,6 +36,10 @@ func run(arguments []string) error {
 		return errors.New("subcommand required: endpoint, proxy, probe, or finalize")
 	}
 	switch arguments[0] {
+	case "synthetic-node":
+		return runSyntheticNode(arguments[1:])
+	case "synthetic-run":
+		return runSyntheticSupervisor(arguments[1:])
 	case "endpoint":
 		return runEndpoint(arguments[1:])
 	case "proxy":
