@@ -1,7 +1,7 @@
 # D0/P0 软件工作计划
 
 - 状态：Accepted（`SW-G0`，2026-08-24）
-- 更新日期：2026-09-05（状态同步与后续准备；不改变 SW-G0 接受范围）
+- 更新日期：2026-09-26（文字切片与验证修订准备；不改变 SW-G0 接受范围）
 - 适用范围：D0 的无射频软件方案设计，以及进入 P0 前的 `SW-*` 证据准备
 - 目标读者：产品、网络、安全、协议与测试协作者
 
@@ -147,6 +147,8 @@
 
 ## 最小文字纵向切片的设计输入
 
+2026-09-26 已形成[最小文字闭环实现前设计](../architecture/minimal-text-slice.md)，给出用户状态、事务边界、接口缺口、失败矩阵和实施顺序；[SW-G3 修订评审包](../testing/sw-g3-revision-2-review.md)给出可评审的重试时序、长度与版本方案。两份均为 Draft，未接受、未实施、未运行；首期范围确认不自动接受端点/安全设计。
+
 后续 SW-G4 包应先交付一个从用户动作到恢复结果的小而完整的路径，再逐项扩展矩阵：已验证身份 → origin 原子入队 → B custody → C 安全状态/消息/去重提交 → 认证 delivery evidence → A/B 验证后清理 → 重启后的用户状态保持。
 
 设计至少给出每一步的输入、所有者、库接口、提交边界、UI 状态、失败原因与对应断言。优先覆盖确认丢失、满盘、身份变化和提交点崩溃；合成认证占位的结果只能登记为 SW-V1/V2，不能在交接中把它提升为安全切片完成。真实 E2EE 场景继续以 SW-G2、R2 和精确运行前置为界。
@@ -172,4 +174,4 @@ CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作�
 - 修改测试实现需要明确范围；运行容器前再次说明命令、目标、副作用、时长和清理；
 - 依赖安装、VM 启动、系统网络、`NET_ADMIN`、射频、硬件、真实密钥和外部状态分别授权；
 - 任一设计缺失会影响安全、兼容、数据或结论时，停止实现并回到相应决策门；
-- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；mls-rs 单元 D 保留正式历史 `STOP`，D2 对 A2/A3 固定的同一 94-package 图已形成 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线形成；下一步只为 R1 固定一次性命令/helper 并申请单次 L3 联网授权，随后由项目所有者指定非实现者执行 R2。任何 R1/R2、D2 重跑、Phase B、进一步 gate 变化、依赖/provider/source 变化均须另行精确授权，不得复用 OpenMLS lockfile/cache 或相邻授权，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。
+- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；mls-rs 单元 D 保留正式历史 `STOP`，D2 对 A2/A3 固定的同一 94-package 图已形成 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)已记录 R1/R1b、R1c-R 与 R1d-L 结果；当前分别处置 debug_tree 上游澄清与 r-efi 独立法律评审，不能继续按“R1 未执行”推进。新证据轨完整通过后才恢复 R2 前置，由所有者指定合格非实现者复核。任何补证/R2、D2 重跑、Phase B、进一步 gate 变化、依赖/provider/source 变化均须另行精确授权，不得复用 OpenMLS lockfile/cache 或相邻授权，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。

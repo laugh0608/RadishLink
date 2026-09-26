@@ -1,6 +1,6 @@
 # RadishLink 当前状态
 
-更新日期：2026-09-05
+更新日期：2026-09-26
 
 ## 当前阶段
 
@@ -15,7 +15,8 @@
 - 主系统为嵌入式 Linux；ESP32-S3 只作为交互、电源、唤醒等辅助域候选。
 - 长距承载首选评估 Wi-Fi HaLow，近距使用独立 2.4 GHz Wi-Fi/BLE；无线承载与覆盖层分离，不冻结量产器件、监管域或路由实现。
 - 应用 E2EE 与逐跳保护分层，中继不得获得内容明文；三节点是中继验证的最低规模，替代路径恢复另需可用的替代链路。
-- 产品阶段继续沿用已接受的 `D0/P0/P1/P2/E0`。首期场景、视频与可携带样机顺序、手机端点角色的修订候选见[项目执行计划](project-execution-plan.md)，尚未替代既有阶段退出条件。
+- 产品阶段保留 `D0/P0/P1/P2/E0`；2026-09-26 所有者确认首台文字/语音 E0 不以 P2 为前置，安全、升级恢复、HW/RF 条件不变。手机端点角色仍待 SW-G2 评审，见[项目执行计划](project-execution-plan.md)。
+- 首期为熟人小队入场前配对，交换短文字、状态与按键通话；测试/首期使用地区为中国上海，整套预算上限人民币 2000 元。具体场地、复用设备、预算可行性及合法无线配置尚未关闭。
 - 原创内容采用根目录 `LICENSE` 的 `RadishLink Source-Available License 1.0`，不是开放源码许可证。
 - 串行普通开发在 `dev`，`master` 为默认稳定主线；主题分支与 PR 适用条件见[仓库治理](../governance/repository-governance.md)。远程 Ruleset、合并选项和私密漏洞入口的既有核对记录不等于本轮实时复核。
 
@@ -24,7 +25,7 @@
 | 证据轨 / gate | 当前结论 | 后续缺口与正式记录 |
 | --- | --- | --- |
 | `PLAN-G0 / SW-G0 / SW-G1` | 已接受计划、术语和消息交付语义 | [执行计划](project-execution-plan.md)、[软件计划](d0-t0-p0-plan.md)、[消息语义](../protocol/message-delivery-semantics.md) |
-| `SW-G3` | 1.0 设计已接受 | [设计专题](../testing/sw-g3-deterministic-validation-design.md)新增待评审勘误；原参数和历史证据不变 |
+| `SW-G3` | 1.0 设计已接受；修订未接受 | [修订评审包](../testing/sw-g3-revision-2-review.md)已形成重试、长度、单故障与版本候选；原参数和历史证据不变 |
 | `SW-G4 / SW-V0` | 已完成；四个 canonical profile 各三次通过且归一化一致 | 只证明 harness；[正式记录](../testing/sw-g4-sw-v0-harness-authorization.md)不授权重跑或扩展 |
 | `SW-EXP-001` | Docker/Ethernet 合成载荷探索成立 | 不是正式消息实现、E2EE 或 P0 验收 |
 | OpenMLS `0.8.1` | Phase A `STOP`：advisory 与许可证门 | [历史授权与结果](../testing/sw-g2-openmls-spike-authorization.md)，Phase B 禁止 |
@@ -33,7 +34,7 @@
 | mls-rs 许可证证据 | R1/R1b 传输负向；R1c-R 为 `STOP/license-evidence`；R1d-L 为 `STOP/license-disposition` | [补证与复核包](../testing/sw-g2-mls-rs-license-notice-review.md)、[处置评审](../testing/sw-g2-mls-rs-license-disposition-review.md)；R2 前置未满足 |
 | `SW-G2 / SW-V1..V3` | E2EE 决策未通过，后续正式场景未执行 | [决策包](../security/e2ee-sw-g2-decision-package.md)；没有已验证 E2EE 或产品软件闭环 |
 | `HW` | 未进入实体台架；`HW-G0` 待评审 | [低成本验证计划](../hardware/hardware-validation-plan.md) |
-| `RF` | 地区/SKU/配置未关闭，保持 `RF-R0` | [法规预检](../regulatory/radio-compliance.md)，采购与发射暂停 |
+| `RF` | 上海地区输入已确认，SKU/配置与法规结论未关闭，保持 `RF-R0` | [法规预检](../regulatory/radio-compliance.md)，采购与发射暂停 |
 
 mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/MIT 正文；`debug_tree 0.4.0` 缺绑定固定源码的 MIT notice/holder，`r-efi 6.0.0` 的 `AUTHORS` 含完整 MIT 正文与归属，但缺另两项声明 alternative 的完整正文。前者的 R1d-U-P/I 已完成澄清设计及离线 helper，公开发送 X 与只读收集 R 均未执行；后者等待独立法律评审后再分流。这是证据和处置缺口，不是许可证不存在、违法或候选淘汰结论。
 
@@ -41,15 +42,15 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
-1. 明确首个用户场景、首个测试/使用地区，以及视频是否阻挡首台可携带样机；不替用户选择地区或承诺日期。
+1. 按已确认的熟人小队、上海、整套 2000 元和文字/语音优先范围，补齐使用条件、复用设备及地区合规路径；不承诺预算可行性或日期。
 2. 形成按实际渠道区分的许可证政策评审输入，分别处置 `debug_tree` 与 `r-efi`；保留全部现行 STOP 和 R2 条件。
 3. 收敛 Node/手机身份、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. 评审 `SW-G3` 勘误和最小文字纵向切片；`SW-V1/V2` 的合成验证准备与硬件只读盘点可分别设计，不升级为 E2EE 或实体实测。
+4. 评审已形成的 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[最小文字闭环](../architecture/minimal-text-slice.md)，接受合成范围后固定精确实施清单；不升级为 E2EE 或实体实测。
 5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成硬件复用及能量/体积/成本预算；本轮没有实施代码或 CI 修改。
 
 ## 关键风险
 
-- **产品与地区尚未收敛**：使用场景跨度大；MM8108 覆盖范围与国外支持地区不能推导国内合法配置，地区问题可能改变产品路线。
+- **上海合规与预算可行性未关闭**：场景、地区和预算已选定，但没有可核对的合法无线配置或完整 BOM；MM8108 覆盖范围与国外支持地区不能推导上海合法配置，地区问题可能改变承载路线。
 - **安全适配未证明**：依赖图通过不能证明离线建组、分区并发、撤销传播、崩溃原子性或中继清理证明可实现；mls-rs 完整第三方安全审计缺口仍在。
 - **架构与交互接口未冻结**：覆盖层 hop 不自动等于物理 hop，手机独立端点也不自动把会话延续给 Node。
 - **工程样机预算缺少实测**：Linux、双无线、常开中继和媒体共同影响电池、温度、体积与成本；开发板和 PHY 峰值不能替代产品数据。
