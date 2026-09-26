@@ -119,34 +119,69 @@ func (proxy *SyntheticProxy) ValidateComplete() error {
 }
 
 func WriteSyntheticFrame(writer io.Writer, payload []byte) error {
-	if len(payload) == 0 || len(payload) > MaxSyntheticFrameBytes {
-		return fmt.Errorf("synthetic frame length must be between 1 and %d", MaxSyntheticFrameBytes)
+	return WriteSyntheticFrameWithLimit(writer, payload, MaxSyntheticFrameBytes)
+}
+
+// WriteSyntheticFrameWithLimit writes one opaque frame. The limit excludes the
+// four-byte prefix and must be within 1..MaxSyntheticFrameBytes. On any write
+// error the caller must abandon the stream; partial writes are not retried.
+func WriteSyntheticFrameWithLimit(writer io.Writer, payload []byte, maxBodyBytes int64) error {
+	if err := checkSyntheticFrameLimit(maxBodyBytes); err != nil {
+		return err
+	}
+	if len(payload) == 0 || int64(len(payload)) > maxBodyBytes {
+		return fmt.Errorf("synthetic frame length must be between 1 and %d: %d", maxBodyBytes, len(payload))
 	}
 	var header [4]byte
 	binary.BigEndian.PutUint32(header[:], uint32(len(payload)))
-	if _, err := writer.Write(header[:]); err != nil {
+	n, err := writer.Write(header[:])
+	if err != nil {
 		return fmt.Errorf("write synthetic frame header: %w", err)
 	}
-	if _, err := writer.Write(payload); err != nil {
+	if n != len(header) {
+		return fmt.Errorf("write synthetic frame header: wrote %d of %d bytes: %w", n, len(header), io.ErrShortWrite)
+	}
+	n, err = writer.Write(payload)
+	if err != nil {
 		return fmt.Errorf("write synthetic frame payload: %w", err)
+	}
+	if n != len(payload) {
+		return fmt.Errorf("write synthetic frame payload: wrote %d of %d bytes: %w", n, len(payload), io.ErrShortWrite)
 	}
 	return nil
 }
 
 func ReadSyntheticFrame(reader io.Reader) ([]byte, error) {
+	return ReadSyntheticFrameWithLimit(reader, MaxSyntheticFrameBytes)
+}
+
+// ReadSyntheticFrameWithLimit checks the declared body length before allocating
+// or reading it. It consumes one frame on success and returns no partial body on
+// failure. The caller owns timeouts and must abandon the stream after an error.
+func ReadSyntheticFrameWithLimit(reader io.Reader, maxBodyBytes int64) ([]byte, error) {
+	if err := checkSyntheticFrameLimit(maxBodyBytes); err != nil {
+		return nil, err
+	}
 	var header [4]byte
 	if _, err := io.ReadFull(reader, header[:]); err != nil {
 		return nil, fmt.Errorf("read synthetic frame header: %w", err)
 	}
 	length := binary.BigEndian.Uint32(header[:])
-	if length == 0 || length > MaxSyntheticFrameBytes {
-		return nil, fmt.Errorf("synthetic frame length must be between 1 and %d: %d", MaxSyntheticFrameBytes, length)
+	if length == 0 || int64(length) > maxBodyBytes {
+		return nil, fmt.Errorf("synthetic frame length must be between 1 and %d: %d", maxBodyBytes, length)
 	}
 	payload := make([]byte, length)
 	if _, err := io.ReadFull(reader, payload); err != nil {
 		return nil, fmt.Errorf("read synthetic frame payload: %w", err)
 	}
 	return payload, nil
+}
+
+func checkSyntheticFrameLimit(maxBodyBytes int64) error {
+	if maxBodyBytes < 1 || maxBodyBytes > MaxSyntheticFrameBytes {
+		return fmt.Errorf("synthetic frame body limit must be between 1 and %d: %d", MaxSyntheticFrameBytes, maxBodyBytes)
+	}
+	return nil
 }
 
 func RunEndpoint(ctx context.Context, listenAddress string) error {

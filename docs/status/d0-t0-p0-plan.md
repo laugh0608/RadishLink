@@ -151,6 +151,8 @@
 
 同日工程自审补齐 B→A 送达证据的独立返回责任、迟到调度与 frame 边界，并形成[I1 精确离线实施清单与结果](../testing/sw-g4-synthetic-i1-plan.md)。所有者随后接受 I1，四个源码文件的重试/长度算法、精准测试、go vet 与全量离线回归已完成；整体 schema 2、消息事务、真实身份与 proof 不因此接受。全量回归首次受沙盒 Go 缓存权限阻断，获准以同命令复验通过，失败保留在 I1 记录中。
 
+I1 已提交后，补齐[消息责任、批次与事务接入设计](../architecture/minimal-text-slice.md#队列与事务的接入设计)，并形成[I2 有界读写包](../testing/sw-g4-synthetic-i2-plan.md)。所有者随后接受 I2，两个 Go 文件已实施：参数化既有 frame codec，保留 V0 的 65536 B 合同，实现 32768 B 显式调用边界的分配前拒绝，并修复短写误报成功。精准测试通过，全量 vet/test 首次受沙盒缓存权限阻断，获准同命令复验通过；完整 envelope/schema、存储与队列资源合同仍待后续收敛。
+
 后续 SW-G4 包应先交付一个从用户动作到恢复结果的小而完整的路径，再逐项扩展矩阵：已验证身份 → origin 原子入队 → B custody → C 安全状态/消息/去重提交 → 认证 delivery evidence → A/B 验证后清理 → 重启后的用户状态保持。
 
 设计至少给出每一步的输入、所有者、库接口、提交边界、UI 状态、失败原因与对应断言。优先覆盖确认丢失、满盘、身份变化和提交点崩溃；合成认证占位的结果只能登记为 SW-V1/V2，不能在交接中把它提升为安全切片完成。真实 E2EE 场景继续以 SW-G2、R2 和精确运行前置为界。
@@ -168,7 +170,7 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./...
 
 此入口只执行 Go 单元测试并写入构建缓存；不下载依赖、不启动 Docker，不替代 `run-sw-v0-harness.sh run`。工具链或缓存不满足时报告失败，依赖安装另行授权。2026-09-05 文档整理前的审阅已在 macOS ARM64 / Go 1.26.3 通过该测试；这不是 Linux ARM64、密码候选或产品场景证据。
 
-CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 本轮只新增 I1 的四个源码文件，未修改既有脚本、runner 或 workflow；单元测试通过不证明两个 command package 的 CLI 入口已验证。
+CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 的 I1 实施新增四个源码文件，后续 I2 修改既有 codec 与测试两个文件，未修改既有脚本、runner 或 workflow；单元测试通过不证明两个 command package 的 CLI 入口已验证。
 
 ## 授权与停止线
 
