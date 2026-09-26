@@ -4,7 +4,7 @@
 
 RadishLink 是 Radish 家族中的离线自组网通信项目。它面向没有互联网、蜂窝网络不可用或不希望依赖中心服务的近远距离场景，使每台随身设备既能作为独立通信终端，也具备在策略允许时为其他节点转发数据的能力。
 
-首期目标包括文字、受限图片与语音留言、实时语音，以及受限的一对一中低码率视频。手机在附近时可以作为更便利的界面和媒体终端；手机不在时，RadishLink 设备仍必须能够独立完成核心操作。
+首期场景是熟人小队进入无网区域前完成配对，通过随身 Node 交换短文字、状态与按键通话。首台文字/语音样机不以视频为前置；受限附件与一对一视频保留为后续独立验收目标。手机在附近时可以作为更便利的界面和媒体终端；手机不在时，RadishLink 设备仍必须能够独立完成核心操作。范围决定见[产品定义](docs/product-definition.md#首期范围决定2026-09-26)。
 
 ## 当前结论
 
@@ -48,7 +48,7 @@ Windows PowerShell：
 pwsh ./scripts/check-repo.ps1
 ```
 
-当前仓库处于定义与可行性验证阶段，尚未冻结量产硬件、射频区域版本、应用开发栈或兼容性承诺。GitHub 远程已启用 `master` Ruleset 和 `PR Checks`；仓库内模板仍只负责记录与复现策略，实际状态以[当前状态](docs/status/current.md)和[仓库治理](docs/governance/repository-governance.md)为准。
+当前仓库处于定义与可行性验证阶段，尚未冻结量产硬件、射频区域版本、应用开发栈或兼容性承诺。GitHub `master` Ruleset 和 `PR Checks` 的启用情况见既有核对记录，本轮未实时复核远程设置；当前结论与治理规则分别见[当前状态](docs/status/current.md)和[仓库治理](docs/governance/repository-governance.md)。
 
 ## 许可
 

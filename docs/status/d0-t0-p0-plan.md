@@ -1,7 +1,7 @@
 # D0/P0 软件工作计划
 
 - 状态：Accepted（`SW-G0`，2026-08-24）
-- 更新日期：2026-09-26（文字切片与验证修订准备；不改变 SW-G0 接受范围）
+- 更新日期：2026-09-26（I1–I5-I 实施收尾；不改变 SW-G0 接受范围）
 - 适用范围：D0 的无射频软件方案设计，以及进入 P0 前的 `SW-*` 证据准备
 - 目标读者：产品、网络、安全、协议与测试协作者
 
@@ -89,7 +89,7 @@
 ### 持久化
 
 - 正式设计先定义状态机、原子提交边界、崩溃点和恢复不变量，再比较 SQLite、append-only log 或其他成熟存储；
-- 当前全量 JSON snapshot 只用于少量合成消息，不支持并发、配额、迁移或损坏恢复结论；
+- 探索性 `t0node` 的全量 JSON snapshot 只用于少量合成消息，不支持并发、配额、迁移或损坏恢复结论；后续 `synthetic` store v1 的独立事务、限额与恢复证据见 I3，不把两套实现混同；
 - 必须先写出 schema version、未知字段、降级拒绝、迁移和回滚策略，之后才能选择实现。
 
 ### 证据
@@ -141,8 +141,8 @@
 | 2 | 消息交付语义 | [覆盖层消息交付语义](../protocol/message-delivery-semantics.md) | `SW-G1` 已接受 |
 | 3 | E2EE/身份决策 | [SW-G2 决策包](../security/e2ee-sw-g2-decision-package.md)、候选精确包与后续 ADR | 当前结果见[状态页](current.md)；无采用 ADR，Phase B 与 R2 前置未关闭 |
 | 4 | 故障与证据设计 | [`SW-G3`](../testing/sw-g3-deterministic-validation-design.md) | `SW-G3` 已接受 |
-| 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | `SW-V0` 已完成并通过；无重跑或后续 `SW-V*` 授权 |
-| 6 | 三节点矩阵 | 可复现结果与限制 | 暂停 |
+| 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md)及后续 I1–I5 包 | `SW-V0` 已完成；I1–I5-I 有限实施与离线验证已完成，无正式网络运行授权 |
+| 6 | 三节点矩阵 | 可复现结果与限制 | I5-R 未执行；先关闭资源合同差异并满足运行前置 |
 | 7 | P0 进入评审 | D0 退出证据汇总 | 未开始 |
 
 ## 最小文字纵向切片的设计输入
@@ -153,7 +153,7 @@
 
 I1 已提交后，补齐[消息责任、批次与事务接入设计](../architecture/minimal-text-slice.md#队列与事务的接入设计)，并形成[I2 有界读写包](../testing/sw-g4-synthetic-i2-plan.md)。所有者随后接受 I2，两个 Go 文件已实施：参数化既有 frame codec，保留 V0 的 65536 B 合同，实现 32768 B 显式调用边界的分配前拒绝，并修复短写误报成功。精准测试通过，全量 vet/test 首次受沙盒缓存权限阻断，获准同命令复验通过；完整 envelope/schema、存储与队列资源合同仍待后续收敛。
 
-I2 提交后形成的[I3 持久文字路径合同](../testing/sw-g4-synthetic-i3-plan.md)已由所有者接受并完成十文件实施，覆盖合成 envelope/store v1、四消息资源与速率预算、I1 事件重放、T-A/B/C/D、提交结果不确定及文件恢复。完整离线路径、60 个事务 I/O 故障和 48 个受控子进程退出用例通过；全量 vet/test 首次仍受沙盒缓存权限阻断，获准同命令复验通过。结果限定临时合成数据和监督端存活的进程重开，不证明掉电或密码状态原子性；原 V0/schema 与 t0node 不变。下一步为正式 profile/evidence 接入设计和精确运行包，尚未实施或正式运行。
+I2 提交后形成的[I3 持久文字路径合同](../testing/sw-g4-synthetic-i3-plan.md)已由所有者接受并完成十文件实施，覆盖合成 envelope/store v1、四消息资源与速率预算、I1 事件重放、T-A/B/C/D、提交结果不确定及文件恢复。完整离线路径、60 个事务 I/O 故障和 48 个受控子进程退出用例通过；全量 vet/test 首次仍受沙盒缓存权限阻断，获准同命令复验通过。结果限定临时合成数据和监督端存活的进程重开，不证明掉电或密码状态原子性；原 V0/schema 与 t0node 不变。当时待做的 profile/evidence 接入已由后续 I4/I5-I 有限实施覆盖，正式网络运行仍未执行。
 
 后续 SW-G4 包应先交付一个从用户动作到恢复结果的小而完整的路径，再逐项扩展矩阵：已验证身份 → origin 原子入队 → B custody → C 安全状态/消息/去重提交 → 认证 delivery evidence → A/B 验证后清理 → 重启后的用户状态保持。
 
@@ -174,7 +174,7 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./...
 
 此入口只执行 Go 单元测试并写入构建缓存；不下载依赖、不启动 Docker，不替代 `run-sw-v0-harness.sh run`。工具链或缓存不满足时报告失败，依赖安装另行授权。2026-09-05 文档整理前的审阅已在 macOS ARM64 / Go 1.26.3 通过该测试；这不是 Linux ARM64、密码候选或产品场景证据。
 
-CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 的 I1 实施新增四个源码文件，后续 I2 修改既有 codec 与测试两个文件，未修改既有脚本、runner 或 workflow；单元测试通过不证明两个 command package 的 CLI 入口已验证。
+CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 的 I1/I2 当轮未修改脚本、runner 或 workflow；后续 I4/I5-I 已扩展现有 harness 命令包，I5 新增独立 shell 入口与 Dockerfile，并拆分证据职责。workflow、旧 V0 runner 与 t0node 未变；全量离线回归通过不证明新增 shell、Docker 或真实 TCP 入口已运行。当天提交与资源合同待关闭项见[收尾记录](2026-09-26-progress.md)。
 
 ## 授权与停止线
 

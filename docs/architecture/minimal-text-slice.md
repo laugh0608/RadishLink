@@ -85,7 +85,7 @@ T-B 的 custody 回复可以由已提交记录幂等重建，但也必须受控�
 - I2 已完成现有 frame codec 的可配置上限与短写处理；I3 已复用该入口完成合成消息读写。
 - [I3 持久文字路径包](../testing/sw-g4-synthetic-i3-plan.md)的合成 envelope、队列容量/计费、控制速率、存储恢复及十文件实施范围已接受并通过离线验证。独立 synthetic 包通过有界 I1 批次重放恢复预算，丢弃历史发送决定；envelope/store/profile 版本分别演进。
 - A 入队 → B custody → C 提交 → A/B 处理 evidence 已在三个临时目录与内存字节流中通过；包含事务 I/O 错误和受控进程退出/重开。不证明网络三节点、物理掉电、密码学认证或安全库联合提交。
-- 复用既有 profile/validator/runner/evidence 消费链；离线 schema 2 已接入 I4，网络 schema 3 另见 I5 草案及其受限运行条件。V0 的固定 schema 1 和历史 evidence 保留，真实 E2EE 继续受 SW-G2 约束。
+- 复用既有 profile/validator/runner/evidence 消费链；离线 schema 2 已接入 I4，网络 schema 3 已在 I5-I 实现并通过离线验收，I5-R 尚未执行。V0 的固定 schema 1 和历史 evidence 保留，真实 E2EE 继续受 SW-G2 约束。
 
 [I4 接入包](../testing/sw-g4-synthetic-i4-plan.md)已获有限接受并完成实施验证：I3 提供只读事务/预算观测，现有 harness 命令包编排离线场景，五 profile 七子用例的 21 个独立样本及三次证据比较通过。使用显式 offline variant，校验器从提交、发送与接收事实重算结果；V0 runner 保持原样。echo 端点不等于消息进程；后续 [I5 三进程闭环包](../testing/sw-g4-synthetic-i5-plan.md)的 I5-I 已实现独立 store/actor、TCP 与控制管道、提交/发送屏障及网络证据消费者，并通过离线验收。实际三容器和 TCP 运行仍未执行。
 
@@ -132,6 +132,6 @@ T-B 的 custody 回复可以由已提交记录幂等重建，但也必须受控�
 4. **真实 E2EE 适配**：遵循 SW-G2 候选精确合同，先关闭许可证/R2 等前置并获准候选运行，证明本表的库 API 和事务/proof 映射；最终 SW-G2 接受后再进入正式 SW-V3。合成通过不跳过此步骤。
 5. **P0 用户入口与实体闭环**：补齐首次配对、设备独立操作、本地 Web 信任和三台独立 Linux 有线台架；按 HW 与 D0 条件评审，不把容器当实体。
 
-整个文字闭环仍为可审阅设计；已实现的 I1/I2/I3 覆盖离线算法、frame codec 和合成持久路径。正式运行、R2、Phase B、SW-V3 和 P0 均未因此启动；真实安全缺口保留为显式阻塞，不新增占位“安全已完成”状态。
+整个文字闭环仍为可审阅设计；I1–I3 已覆盖离线算法、frame codec 和合成持久路径，I4 增加离线场景与证据，I5-I 增加进程/TCP 适配与 schema 3 消费者。I5-R 前须关闭[收尾复核记录](../status/2026-09-26-progress.md#代码与文档核对)中的资源合同差异；正式网络运行、R2、Phase B、SW-V3 和 P0 均未因此启动，真实安全缺口仍为显式阻塞。
 
 2026-09-26 工程自审已补齐确认返回责任，并形成[首个离线实施单元 I1](../testing/sw-g4-synthetic-i1-plan.md)。I1 是后续消息调度会消费的算法与长度检查，不实现本节 T-A/T-B/T-C/T-D 或伪造完整闭环；后续 I3 已实现合成事务路径，自审不等于独立安全评审，真实端点、安全联合事务、proof 与正式场景仍未接受。
