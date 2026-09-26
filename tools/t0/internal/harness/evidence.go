@@ -233,6 +233,13 @@ func WriteEvidenceBundle(root string, input EvidenceInput) error {
 }
 
 func FinalizeEvidence(root string) error {
+	version, err := bundleSchema(root)
+	if err != nil {
+		return err
+	}
+	if version == 2 {
+		return finalizeScenario(root)
+	}
 	if err := validateEvidenceBundle(root); err != nil {
 		return err
 	}
@@ -253,6 +260,14 @@ func FinalizeEvidence(root string) error {
 }
 
 func VerifyEvidence(root string) error {
+	version, err := bundleSchema(root)
+	if err != nil {
+		return err
+	}
+	if version == 2 {
+		_, err := verifyScenario(root, true)
+		return err
+	}
 	if err := validateEvidenceBundle(root); err != nil {
 		return err
 	}
@@ -311,6 +326,13 @@ func NormalizeEvents(data []byte) ([]byte, error) {
 }
 
 func CompareEvidenceRuns(profileRoot string) (string, error) {
+	version, err := bundleSchema(filepath.Join(profileRoot, "1"))
+	if err != nil {
+		return "", err
+	}
+	if version == 2 {
+		return compareScenarios(profileRoot)
+	}
 	var reference []byte
 	var referenceProfile []byte
 	var referenceAssertions []byte

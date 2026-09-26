@@ -43,6 +43,7 @@
 - [后续 `SW-G4` 离线实施单元 I1](testing/sw-g4-synthetic-i1-plan.md)：重试算法、长度边界、精确范围与离线验证记录。
 - [后续 `SW-G4` 有界读写单元 I2](testing/sw-g4-synthetic-i2-plan.md)：frame 限额、V0 兼容、短写拒绝与离线验证记录。
 - [后续 `SW-G4` 持久文字路径单元 I3](testing/sw-g4-synthetic-i3-plan.md)：合成 envelope、队列资源、文件提交恢复合同与完整离线路径验证记录。
+- [后续 `SW-G4` 场景与证据接入单元 I4](testing/sw-g4-synthetic-i4-plan.md)：离线 variant、版本化事实/断言、三次比较与实施验证记录。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 

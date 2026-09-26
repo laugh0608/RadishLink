@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"radishlink.local/t0/internal/delivery"
+	"radishlink.local/t0/internal/harness"
 )
 
 type Verdict uint8
@@ -382,8 +383,27 @@ func expire(s *state, now int64) bool {
 // Step commits one complete event batch before returning any transmission.
 // Repeated node timestamps are rejected; each queue's identical replay remains inert.
 func (n *Node) Step(batch Batch) ([]*Transmission, error) {
+	out, _, err := n.StepWithReport(batch)
+	return out, err
+}
+func (n *Node) StepWithReport(batch Batch) ([]*Transmission, BatchReport, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	before := n.storage.current.clone()
+	report := BatchReport{Before: before.Generation, After: before.Generation, Transactions: []string{}, Decisions: []harness.ObservedRetry{}}
+	out, err := n.step(batch, &report)
+	if n.storage.current.Generation != before.Generation {
+		report.Committed = true
+		report.After = n.storage.current.Generation
+		if len(report.Transactions) == 0 {
+			report.Transactions = transactionKinds(before, n.storage.current)
+		}
+	} else {
+		report.Decisions = []harness.ObservedRetry{}
+	}
+	return out, report, err
+}
+func (n *Node) step(batch Batch, report *BatchReport) ([]*Transmission, error) {
 	if err := n.checkTime(batch.Now); err != nil {
 		return nil, err
 	}
@@ -416,6 +436,7 @@ func (n *Node) Step(batch Batch) ([]*Transmission, error) {
 			if saveErr := n.commit(expired); saveErr != nil {
 				return nil, saveErr
 			}
+			report.Transactions = []string{"expiry"}
 		}
 		return nil, err
 	}
@@ -483,6 +504,11 @@ func (n *Node) Step(batch Batch) ([]*Transmission, error) {
 		if link == "" {
 			link = "unchanged"
 		}
+		timed, recovery, err := q.consumed()
+		if err != nil {
+			return nil, err
+		}
+		observed := harness.ObservedRetry{Key: harness.ObservedKey(q.Key), Kind: q.Kind, Neighbor: q.Neighbor, Start: q.Start, Deadline: q.Deadline, TimedBefore: timed, RecoveryBefore: recovery, Cost: cost / 1000, GlobalBefore: a.Credit, NeighborBefore: b.Credit}
 		decision, err := q.advance(retryBatch{batch.Now, link, "continue", admit})
 		if Code(err) == "SCHEDULE_LIMIT" {
 			scheduleErr = err
@@ -496,6 +522,15 @@ func (n *Node) Step(batch Batch) ([]*Transmission, error) {
 			b.Credit -= cost
 			out = append(out, &Transmission{node: n, generation: s.Generation + 1, key: q.Key, kind: q.Kind, neighbor: q.Neighbor, envelope: e})
 		}
+		observed.Reason, observed.Attempt, observed.Send = string(decision.Reason), decision.Attempt, decision.Send
+		observed.Missed = int64(decision.MissedSlots)
+		observed.TimedAfter = timed + int64(decision.TimedSlotsConsumed)
+		observed.RecoveryAfter = recovery
+		if decision.RecoveryConsumed {
+			observed.RecoveryAfter++
+		}
+		observed.GlobalAfter, observed.NeighborAfter = a.Credit, b.Credit
+		report.Decisions = append(report.Decisions, observed)
 	}
 	if err := n.commit(s); err != nil {
 		return nil, err

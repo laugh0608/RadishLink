@@ -18,7 +18,7 @@
 | 后续 evidence schema | 候选主版本 2，记录语义模式、子用例、发送原因、预算消耗与提交点 | 比较器按 schema/profile ID/version/variant/子用例分组，禁止跨版本归一化为相同结果 |
 | 新的边界子用例 | 以父 profile ID/version 加稳定 subcase ID 区分 | 三次重复按同一子用例比较，不以三个不同子用例代替三次重复 |
 
-当前 `tools/t0/internal/harness/profile.go` 只接受四个 canonical SW-V0 ID、profile version 1、schema 1，并拒绝未知字段。上述 version 2 尚无实现；后续精确实施包需列出 decoder、validator、runner、clock、evidence writer/checker、归一化比较器和相应测试的变更，不复制另一套 runner 或放宽 V0 校验。
+`tools/t0/internal/harness/profile.go` 仍只接受四个 canonical SW-V0 ID、profile version 1、schema 1，并拒绝未知字段。[I4 接入包](sw-g4-synthetic-i4-plan.md)已获有限接受并完成 schema 2 decoder、validator、场景编排、clock、evidence writer/checker、比较器及离线测试；入口独立分派版本，不放宽 V0 校验。其 offline-i3 variant 只消费 I3 小容量路径的五 profile 七子用例，不接受本包完整矩阵或正式运行；其他 version 2 场景尚未实现。
 
 ## 重试与 5 秒断链
 
@@ -54,7 +54,7 @@
 
 调度器晚到时，一次结算全部已到期定时槽；更早槽记为 `missed_schedule` 并消耗，最多尝试最新一个到期槽。若同批次还有恢复触发，合并为一次尝试并消费恢复额度。不得把多个过期定时器补成突发发送；同刻同内容批次重放只做幂等观察，同刻不同内容拒绝，不能先调度发送后再补入同刻终态。已有终态、暂停或到期时只记录停止原因，不补发。
 
-实际崩溃后的时钟重建和预算持久化尚未实现。调度算法只消费调用方已证明的保守时间；不得把旧进程 monotonic 数直接传入新进程后宣称恢复正确。
+设计初轮尚无预算持久化；后续 [I3](sw-g4-synthetic-i3-plan.md)已完成监督端仍存活条件下的合成持久预算与进程重开验证，真实机器重启后的时钟重建仍未实现。调度算法只消费调用方已证明的保守时间；不得把旧进程 monotonic 数直接传入新进程后宣称恢复正确。
 
 ### `SW-V1-DOWN-BC-001` version 2 事件表
 

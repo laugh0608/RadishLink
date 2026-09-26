@@ -226,3 +226,24 @@ func TestRejectedInputsDoNotPreventExpiry(t *testing.T) {
 		})
 	}
 }
+
+func TestBatchReportForRejectedInputExpiry(t *testing.T) {
+	n, _ := testNode(t, "A")
+	mustSubmit(t, n, "one", testID, 1)
+	out, r, err := n.StepWithReport(Batch{Now: 30000, Inputs: []Input{{Neighbor: "B", Frame: []byte("bad")}}})
+	if err == nil || len(out) != 0 || !r.Committed || r.After != r.Before+1 || len(r.Decisions) != 0 || len(r.Transactions) != 1 || r.Transactions[0] != "expiry" {
+		t.Fatalf("expiry report: %+v %v", r, err)
+	}
+}
+
+func TestScheduleLimitReportIsNotExpiry(t *testing.T) {
+	n, _ := testNode(t, "A")
+	mustSubmit(t, n, "one", testID, 1)
+	for now := int64(1); now <= 64; now++ {
+		mustStep(t, n, Batch{Now: now})
+	}
+	out, r, err := n.StepWithReport(Batch{Now: 65})
+	if Code(err) != "SCHEDULE_LIMIT" || len(out) != 0 || !r.Committed || len(r.Transactions) != 1 || r.Transactions[0] != "schedule" {
+		t.Fatalf("schedule report: %+v %v", r, err)
+	}
+}

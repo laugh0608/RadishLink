@@ -116,37 +116,53 @@ type queue struct {
 
 func (q queue) order() string { return q.Key.order() + "/" + q.Kind + "/" + q.Neighbor }
 func (q queue) replay() (delivery.RetryState, error) {
+	s, _, _, err := q.replayCounted()
+	return s, err
+}
+func (q queue) consumed() (int64, int64, error) {
+	if q.Status == "reserved" {
+		return 0, 0, nil
+	}
+	_, timed, recovery, err := q.replayCounted()
+	return timed, recovery, err
+}
+func (q queue) replayCounted() (delivery.RetryState, int64, int64, error) {
+	var timed, recovery int64
 	link := delivery.LinkDown
 	if q.InitialLink == "up" {
 		link = delivery.LinkUp
 	} else if q.InitialLink != "down" {
-		return delivery.RetryState{}, fail("STORE_INVALID", "initial link")
+		return delivery.RetryState{}, 0, 0, fail("STORE_INVALID", "initial link")
 	}
 	s, err := delivery.NewRetryState(q.Start, q.Deadline, link)
 	if err != nil {
-		return s, err
+		return s, 0, 0, err
 	}
 	if q.Batches == nil || len(q.Batches) > 64 {
-		return s, fail("STORE_INVALID", "batch count")
+		return s, 0, 0, fail("STORE_INVALID", "batch count")
 	}
 	var last delivery.RetryDecision
 	for i, b := range q.Batches {
 		if i > 0 && b.Now <= q.Batches[i-1].Now {
-			return s, fail("STORE_INVALID", "batch order")
+			return s, 0, 0, fail("STORE_INVALID", "batch order")
 		}
 		v, err := b.value()
 		if err != nil {
-			return s, err
+			return s, 0, 0, err
 		}
 		s, last, err = s.Advance(v)
 		if err != nil {
-			return s, err
+			return s, 0, 0, err
+		}
+		timed += int64(last.TimedSlotsConsumed)
+		if last.RecoveryConsumed {
+			recovery++
 		}
 	}
 	if q.Status == "active" && (last.Reason == delivery.RetryStopped || last.Reason == delivery.RetryPaused || last.Reason == delivery.RetryExpired) {
-		return s, fail("STORE_INVALID", "active retry phase")
+		return s, 0, 0, fail("STORE_INVALID", "active retry phase")
 	}
-	return s, nil
+	return s, timed, recovery, nil
 }
 func (q *queue) advance(b retryBatch) (delivery.RetryDecision, error) {
 	s, err := q.replay()

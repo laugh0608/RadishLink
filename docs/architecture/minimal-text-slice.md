@@ -87,6 +87,8 @@ T-B 的 custody 回复可以由已提交记录幂等重建，但也必须受控�
 - A 入队 → B custody → C 提交 → A/B 处理 evidence 已在三个临时目录与内存字节流中通过；包含事务 I/O 错误和受控进程退出/重开。不证明网络三节点、物理掉电、密码学认证或安全库联合提交。
 - 复用既有 profile/validator/runner/evidence 消费链扩展正式 schema 2，再进入受限运行包；V0 的固定 schema 1 和历史 evidence 保留。真实 E2EE 继续受 SW-G2 约束。
 
+[I4 接入包](../testing/sw-g4-synthetic-i4-plan.md)已获有限接受并完成实施验证：I3 提供只读事务/预算观测，现有 harness 命令包编排离线场景，五 profile 七子用例的 21 个独立样本及三次证据比较通过。使用显式 offline variant，校验器从提交、发送与接收事实重算结果；V0 runner 保持原样。echo 端点不等于消息进程，正式网络拓扑、时钟屏障和运行包仍未完成。
+
 ## 安全接口与必须证明的缺口
 
 | 接口能力 | 所需证明 | 当前状态 / 关闭责任 |

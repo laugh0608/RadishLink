@@ -30,6 +30,7 @@
 | 后续 `SW-G4 / I1` | 有限范围已接受，离线算法实施与验证通过 | [I1 记录](../testing/sw-g4-synthetic-i1-plan.md)覆盖重试与长度边界；全量回归先受沙盒缓存权限阻断，获准同命令复验通过；无正式场景结果 |
 | 后续 `SW-G4 / I2` | 有限范围已接受，实施与离线验证通过 | [I2 记录](../testing/sw-g4-synthetic-i2-plan.md)覆盖显式限额、V0 兼容和短写拒绝；全量 vet/test 首次受缓存权限阻断，同命令获准复验通过；[队列/事务接入](../architecture/minimal-text-slice.md#队列与事务的接入设计)仍为候选 |
 | 后续 `SW-G4 / I3` | 有限范围已接受，十文件实施与离线验证通过 | [I3 记录](../testing/sw-g4-synthetic-i3-plan.md)覆盖合成 envelope/store v1、四消息资源、完整持久路径、事务错误与进程重开；全量 vet/test 首次缓存权限失败，同命令获准复验通过；不等于真实安全或正式场景 |
+| 后续 `SW-G4 / I4` | 有限范围已接受，实施与离线验证通过 | [I4 记录](../testing/sw-g4-synthetic-i4-plan.md)覆盖观测/证据合同、五 profile 七子用例共 21 个独立样本及三次比较、事实篡改拒绝；全量 vet/test 通过，不是正式 SW-V1/V2 结果 |
 | `SW-EXP-001` | Docker/Ethernet 合成载荷探索成立 | 不是正式消息实现、E2EE 或 P0 验收 |
 | OpenMLS `0.8.1` | Phase A `STOP`：advisory 与许可证门 | [历史授权与结果](../testing/sw-g2-openmls-spike-authorization.md)，Phase B 禁止 |
 | OpenMLS `0.9.0` | 单元 E：固定 264-package 图 Phase A `STOP` | 独立 audit 未发现 vulnerability，但有 unmaintained 信息项；当前门拒绝三个 MPL-2.0 crate；[正式记录](../testing/sw-g2-openmls-0.9-phase-a-authorization.md) |
@@ -48,8 +49,8 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 1. 按已确认的熟人小队、上海、整套 2000 元和文字/语音优先范围，补齐使用条件、复用设备及地区合规路径；不承诺预算可行性或日期。
 2. 形成按实际渠道区分的许可证政策评审输入，分别处置 `debug_tree` 与 `r-efi`；保留全部现行 STOP 和 R2 条件。
 3. 收敛 Node/手机身份、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. I1/I2 已提交；[I3 持久文字路径包](../testing/sw-g4-synthetic-i3-plan.md)已接受并完成实施与离线验证，关闭合成路径的事务/预算/进程重开缺口。下一步设计正式 profile/evidence 与真实 I3 入口的映射、版本和精确运行包，保留 V0 历史合同；安全联合提交仍待 SW-G2 证明。整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)仍不代表 E2EE 或实体实测。
-5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成硬件复用及能量/体积/成本预算；I3 本轮未修改 CI。
+4. I1/I2/I3 已提交；[I4 场景与证据接入包](../testing/sw-g4-synthetic-i4-plan.md)已接受，13 个 Go 文件/5 个 JSON 实施与离线验证通过。下一步根据真实接口设计消息进程/传输入口、监督时钟/事件屏障、网络拓扑及证据收集，再形成精确实施与运行包。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
+5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成硬件复用及能量/体积/成本预算；I4 本轮未修改 CI。
 
 ## 关键风险
 
@@ -67,7 +68,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 - `debug_tree` X/R 继续遵循[已冻结的精确澄清合同](../testing/sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)。公开账号和逐字消息须预审；发送、收集、回复接受性分别按合同处理，不自动监控、追问、编辑或关闭 Issue。
 - `r-efi` 的 MIT alternative 须独立法律评审；R1d-L 不能替代 R2。R2 仅在新证据轨有效完整通过后，由所有者指定符合条件的复核者执行。
 - 既有 `SW-V0`、审计 bundle、D2 和其他实验运行的单次授权不延续；不重跑、扩展 profile/schema、安装密码依赖或清理旧 evidence/cache。
-- I1/I2/I3 的有限离线实施均已完成；I3 的接受不构成正式 profile/schema 扩展、网络运行、安全适配或外部写入授权；无射频证据与地区法规分别关门。
+- I1/I2/I3/I4 的有限离线实施均已完成；I4 只增加 offline-i3 variant 的有限 profile/evidence schema 2 与观测接口，不构成网络运行、完整矩阵、安全适配或外部写入授权；无射频证据与地区法规分别关门。
 
 ## 验证入口与结论边界
 

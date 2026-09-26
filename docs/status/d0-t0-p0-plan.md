@@ -157,6 +157,8 @@ I2 提交后形成的[I3 持久文字路径合同](../testing/sw-g4-synthetic-i3
 
 后续 SW-G4 包应先交付一个从用户动作到恢复结果的小而完整的路径，再逐项扩展矩阵：已验证身份 → origin 原子入队 → B custody → C 安全状态/消息/去重提交 → 认证 delivery evidence → A/B 验证后清理 → 重启后的用户状态保持。
 
+I3 提交为 `112f1e8` 后形成的[I4 场景与证据接入包](../testing/sw-g4-synthetic-i4-plan.md)已获所有者接受，13 个 Go 文件和 5 个 JSON 完成实施：offline-i3 variant 消费实际提交/发送/预算事实，接通有限 schema 2、断言重算和三次比较。五 profile 七子用例共 21 个独立样本通过，负例覆盖重算 checksum 后的事实/指标篡改、版本混合、观测失败与 FAIL/INVALID 分类；全量 vet/test 通过。它不覆盖全部矩阵；现有 echo 端点不等于消息 Node，下一步仍须设计正式网络运行的进程入口、监督时钟/屏障和环境合同。
+
 设计至少给出每一步的输入、所有者、库接口、提交边界、UI 状态、失败原因与对应断言。优先覆盖确认丢失、满盘、身份变化和提交点崩溃；合成认证占位的结果只能登记为 SW-V1/V2，不能在交接中把它提升为安全切片完成。真实 E2EE 场景继续以 SW-G2、R2 和精确运行前置为界。
 
 [SW-G3 的实现前勘误](../testing/sw-g3-deterministic-validation-design.md#2026-09-05-实现前勘误待评审)尚未接受；涉及重试预算、密文长度和 profile 版本的选择应在实现前解决，不允许测试代码自行挑选有利解释。已有 SW-EXP-001 的 JSON、摘要 ACK 和 snapshot 不直接迁移为产品协议。
