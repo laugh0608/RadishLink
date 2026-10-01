@@ -177,6 +177,7 @@ type networkExit struct {
 }
 
 func (e *networkExit) Error() string { return e.err.Error() }
+func (e *networkExit) Unwrap() error { return e.err }
 func runSyntheticSupervisor(args []string) error {
 	flags := flag.NewFlagSet("synthetic-run", flag.ContinueOnError)
 	root := flags.String("repo-root", "", "repository root")
@@ -188,6 +189,9 @@ func runSyntheticSupervisor(args []string) error {
 	}
 	if flags.NArg() != 0 || *root == "" || (!*inventoryOnly && (*matrix != "i5-seven-v1" || *repeats != 3)) || (*inventoryOnly && (*matrix != "" || *repeats != 0)) {
 		return errors.New("synthetic-run requires repo-root, i5-seven-v1 and three repeats")
+	}
+	if err := requireNetworkResourceIsolation(); err != nil {
+		return err
 	}
 	resolved, err := filepath.EvalSymlinks(*root)
 	if err != nil || !filepath.IsAbs(resolved) {
@@ -212,6 +216,9 @@ func runSyntheticSupervisor(args []string) error {
 	return err
 }
 func runNetworkMatrix(ctx context.Context, r processRunner, root string) (runErr error) {
+	if err := requireNetworkResourceIsolation(); err != nil {
+		return err
+	}
 	preCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	p, err := preflightNetwork(preCtx, r, root)
 	cancel()

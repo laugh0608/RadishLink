@@ -1,6 +1,6 @@
 # RadishLink 当前状态
 
-更新日期：2026-09-26
+更新日期：2026-10-01
 
 ## 当前阶段
 
@@ -8,7 +8,7 @@
 
 本页只保存当前结论、关键风险、下一项决策与停止线。历史 run、hash、失败时间线和当时授权见[2026-09-03 状态与批次快照](2026-09-03-progress.md)及对应测试专题；I1 算法、I2 有界读写与 I3 合成持久路径均完成离线验证，不重判历史结果，不代表重新执行正式实验或复核远程配置。
 
-2026-09-26 的 I1–I5-I 均已提交；当日提交回顾与 [2026-09-27 明日事项](2026-09-26-progress.md#明日事项2026-09-27)单独记录。下一次开发先关闭 I5 批次资源计费与运行合同的差异，再准备网络验收。
+2026-09-26 的 I1–I5-I 均已提交；当日提交回顾与 [2026-09-27 明日事项](2026-09-26-progress.md#明日事项2026-09-27)单独记录。2026-10-01 所有者选择保留整批 768 MiB，补充[有容量硬上限的隔离环境设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)；shell 与 Go 入口现均在环境访问/构建前停止。资源修复尚未完成，下一步先冻结隔离后端并实现计费，环境验收前禁止 I5-R。
 
 ## 已确定的产品与工程基线
 
@@ -33,7 +33,7 @@
 | 后续 `SW-G4 / I2` | 有限范围已接受，实施与离线验证通过 | [I2 记录](../testing/sw-g4-synthetic-i2-plan.md)覆盖显式限额、V0 兼容和短写拒绝；全量 vet/test 首次受缓存权限阻断，同命令获准复验通过；[队列/事务接入](../architecture/minimal-text-slice.md#队列与事务的接入设计)仍为候选 |
 | 后续 `SW-G4 / I3` | 有限范围已接受，十文件实施与离线验证通过 | [I3 记录](../testing/sw-g4-synthetic-i3-plan.md)覆盖合成 envelope/store v1、四消息资源、完整持久路径、事务错误与进程重开；全量 vet/test 首次缓存权限失败，同命令获准复验通过；不等于真实安全或正式场景 |
 | 后续 `SW-G4 / I4` | 有限范围已接受，实施与离线验证通过 | [I4 记录](../testing/sw-g4-synthetic-i4-plan.md)覆盖观测/证据合同、五 profile 七子用例共 21 个独立样本及三次比较、事实篡改拒绝；全量 vet/test 通过，不是正式 SW-V1/V2 结果 |
-| 后续 `SW-G4 / I5` | I5-I 有限范围已接受，实施与离线验收通过；I5-R 未执行 | [I5 方案](../testing/sw-g4-synthetic-i5-plan.md)覆盖控制/节点/监督器与 V3 证据、七场景字节流 fixture；实际 TCP 三容器矩阵未运行 |
+| 后续 `SW-G4 / I5` | I5-I 有限范围已接受，实施与离线验收通过；I5-R 未执行且入口停止 | [I5 方案](../testing/sw-g4-synthetic-i5-plan.md)覆盖控制/节点/监督器与 V3 证据；[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)保留 768 MiB，后端与整批计费未实现；实际 TCP 三容器矩阵未运行 |
 | `SW-EXP-001` | Docker/Ethernet 合成载荷探索成立 | 不是正式消息实现、E2EE 或 P0 验收 |
 | OpenMLS `0.8.1` | Phase A `STOP`：advisory 与许可证门 | [历史授权与结果](../testing/sw-g2-openmls-spike-authorization.md)，Phase B 禁止 |
 | OpenMLS `0.9.0` | 单元 E：固定 264-package 图 Phase A `STOP` | 独立 audit 未发现 vulnerability，但有 unmaintained 信息项；当前门拒绝三个 MPL-2.0 crate；[正式记录](../testing/sw-g2-openmls-0.9-phase-a-authorization.md) |
@@ -52,7 +52,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 1. 按已确认的熟人小队、上海、整套 2000 元和文字/语音优先范围，补齐使用条件、复用设备及地区合规路径；不承诺预算可行性或日期。
 2. 形成按实际渠道区分的许可证政策评审输入，分别处置 `debug_tree` 与 `r-efi`；保留全部现行 STOP 和 R2 条件。
 3. 收敛 Node/手机身份、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。收尾静态复核发现批次资源计费尚未完整满足运行合同，先按[明日事项](2026-09-26-progress.md#明日事项2026-09-27)修复并验证，再固定运行 revision/产物、执行本地预检并取得明确运行授权，进入 I5-R 的 21 样本矩阵；真实网络入口尚未验证。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
+4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)先确定硬容量后端、接入构建与写前计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
 5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成硬件复用及能量/体积/成本预算；I4 本轮未修改 CI。
 
 ## 关键风险
@@ -62,10 +62,11 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 - **架构与交互接口未冻结**：覆盖层 hop 不自动等于物理 hop，手机独立端点也不自动把会话延续给 Node。
 - **工程样机预算缺少实测**：Linux、双无线、常开中继和媒体共同影响电池、温度、体积与成本；开发板和 PHY 峰值不能替代产品数据。
 - **验证和维护成本偏重**：`SW-EXP-001` 不能继承为产品协议；已有脚本重复和长文件需要在后续相关实施中收敛，当前 CI 仍只检查仓库卫生。
-- **I5-R 运行前资源边界未关闭**：现有采样检查不能证明合同要求的整批写前计费与持续余量检查；bootstrap 不在批次目录计费内。离线通过不覆盖这一差异，关闭前不进入网络矩阵。
+- **I5-R 运行前资源边界未关闭**：Go cache/temp、bootstrap 和 Docker builder/daemon 写入不能靠 artifact 采样约束；整批写前计费与持续余量检查仍待实施。已加入入口停止检查，保留 768 MiB；硬容量环境的可行性和真实拒绝证据仍待验证。
 
 ## 当前停止线
 
+- I5 shell preflight/run 与直接 Go synthetic-run 均因缺少整批资源隔离而停止；不绕过停止检查、先在域外构建或自动调整共享 daemon。环境准备需另行精确授权，离线拒绝回归不构成资源修复完成或 I5-R 放行。
 - 不采购 HaLow、不射频发射、不做量产 PCB、不冻结生产技术栈；`HW-G2` 前不采购，`HW-G3` 前不刷写或启动实体台架，无线操作另受 `RF-R*` 约束。
 - OpenMLS 两个固定图的 Phase B 禁止；mls-rs D2 的 `PASS` 不授权 Phase B。许可证证据轨和 R2 未完成，`SW-G2` 未通过。
 - 不自动第四次运行 R1、不扩展 selector、不补写或重判 R1c evidence、不改 gate/allowlist/advisory ignore、版本、provider、source 或 lockfile；新证据与策略变更须另行明确范围。

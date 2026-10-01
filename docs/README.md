@@ -45,6 +45,7 @@
 - [后续 `SW-G4` 持久文字路径单元 I3](testing/sw-g4-synthetic-i3-plan.md)：合成 envelope、队列资源、文件提交恢复合同与完整离线路径验证记录。
 - [后续 `SW-G4` 场景与证据接入单元 I4](testing/sw-g4-synthetic-i4-plan.md)：离线 variant、版本化事实/断言、三次比较与实施验证记录。
 - [后续 `SW-G4` 三进程文字闭环单元 I5](testing/sw-g4-synthetic-i5-plan.md)：独立进程/TCP、监督屏障与证据合同；I5-I 离线验收记录及 I5-R 运行边界。
+- [I5 整批资源隔离设计](testing/sw-g4-synthetic-i5-resource-isolation.md)：保留 768 MiB、构建与写入隔离要求、入口停止检查及重新开放条件。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 
