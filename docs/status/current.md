@@ -8,7 +8,7 @@
 
 本页只保存当前结论、关键风险、下一项决策与停止线。历史 run、hash、失败时间线和当时授权见[2026-09-03 状态与批次快照](2026-09-03-progress.md)及对应测试专题；I1 算法、I2 有界读写与 I3 合成持久路径均完成离线验证，不重判历史结果，不代表重新执行正式实验或复核远程配置。
 
-2026-09-26 的 I1–I5-I 均已提交；当日提交回顾与 [2026-09-27 明日事项](2026-09-26-progress.md#明日事项2026-09-27)单独记录。2026-10-01 所有者选择保留整批 768 MiB，补充[有容量硬上限的隔离环境设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)；shell 与 Go 入口现均在环境访问/构建前停止。资源修复尚未完成，下一步先冻结隔离后端并实现计费，环境验收前禁止 I5-R。
+2026-09-26 的 I1–I5-I 均已提交；当日提交回顾与 [2026-09-27 明日事项](2026-09-26-progress.md#明日事项2026-09-27)单独记录。2026-10-01 所有者选择保留整批 768 MiB，入口停止及[隔离设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)已提交为 `0f531d3`。后续已接入证据/诊断写前计费、逐文件余量检查及容器临时存储检查，离线通过；完整构建/daemon 隔离未完成。下一步接入具体后端验证及受限 bootstrap/构建，环境验收前继续禁止 I5-R。
 
 ## 已确定的产品与工程基线
 
@@ -33,7 +33,7 @@
 | 后续 `SW-G4 / I2` | 有限范围已接受，实施与离线验证通过 | [I2 记录](../testing/sw-g4-synthetic-i2-plan.md)覆盖显式限额、V0 兼容和短写拒绝；全量 vet/test 首次受缓存权限阻断，同命令获准复验通过；[队列/事务接入](../architecture/minimal-text-slice.md#队列与事务的接入设计)仍为候选 |
 | 后续 `SW-G4 / I3` | 有限范围已接受，十文件实施与离线验证通过 | [I3 记录](../testing/sw-g4-synthetic-i3-plan.md)覆盖合成 envelope/store v1、四消息资源、完整持久路径、事务错误与进程重开；全量 vet/test 首次缓存权限失败，同命令获准复验通过；不等于真实安全或正式场景 |
 | 后续 `SW-G4 / I4` | 有限范围已接受，实施与离线验证通过 | [I4 记录](../testing/sw-g4-synthetic-i4-plan.md)覆盖观测/证据合同、五 profile 七子用例共 21 个独立样本及三次比较、事实篡改拒绝；全量 vet/test 通过，不是正式 SW-V1/V2 结果 |
-| 后续 `SW-G4 / I5` | I5-I 有限范围已接受，实施与离线验收通过；I5-R 未执行且入口停止 | [I5 方案](../testing/sw-g4-synthetic-i5-plan.md)覆盖控制/节点/监督器与 V3 证据；[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)保留 768 MiB，后端与整批计费未实现；实际 TCP 三容器矩阵未运行 |
+| 后续 `SW-G4 / I5` | I5-I 有限范围已接受，实施与离线验收通过；I5-R 未执行且入口停止 | [I5 方案](../testing/sw-g4-synthetic-i5-plan.md)覆盖控制/节点/监督器与 V3 证据；[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)保留 768 MiB，证据计费子项离线通过，构建/daemon 隔离仍未实现；实际 TCP 三容器矩阵未运行 |
 | `SW-EXP-001` | Docker/Ethernet 合成载荷探索成立 | 不是正式消息实现、E2EE 或 P0 验收 |
 | OpenMLS `0.8.1` | Phase A `STOP`：advisory 与许可证门 | [历史授权与结果](../testing/sw-g2-openmls-spike-authorization.md)，Phase B 禁止 |
 | OpenMLS `0.9.0` | 单元 E：固定 264-package 图 Phase A `STOP` | 独立 audit 未发现 vulnerability，但有 unmaintained 信息项；当前门拒绝三个 MPL-2.0 crate；[正式记录](../testing/sw-g2-openmls-0.9-phase-a-authorization.md) |
@@ -62,7 +62,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 - **架构与交互接口未冻结**：覆盖层 hop 不自动等于物理 hop，手机独立端点也不自动把会话延续给 Node。
 - **工程样机预算缺少实测**：Linux、双无线、常开中继和媒体共同影响电池、温度、体积与成本；开发板和 PHY 峰值不能替代产品数据。
 - **验证和维护成本偏重**：`SW-EXP-001` 不能继承为产品协议；已有脚本重复和长文件需要在后续相关实施中收敛，当前 CI 仍只检查仓库卫生。
-- **I5-R 运行前资源边界未关闭**：Go cache/temp、bootstrap 和 Docker builder/daemon 写入不能靠 artifact 采样约束；整批写前计费与持续余量检查仍待实施。已加入入口停止检查，保留 768 MiB；硬容量环境的可行性和真实拒绝证据仍待验证。
+- **I5-R 运行前资源边界未关闭**：Go cache/temp、bootstrap 和 Docker builder/daemon 写入不能靠 artifact 采样约束；证据/诊断已有写前计费，构建、store 阶段预留及阻塞期间持续检查仍待实施。入口保持停止；五部分合计 768 MiB 的容量可行性和真实拒绝证据仍待验证。
 
 ## 当前停止线
 

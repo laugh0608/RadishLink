@@ -76,21 +76,8 @@ func preflightNetwork(ctx context.Context, r processRunner, root string) (networ
 	if p.Docker.Server.Os != "linux" || !slices.Contains([]string{"amd64", "arm64"}, p.Docker.Server.Arch) || p.Docker.Server.Version == "" || p.Docker.Client.Version == "" {
 		return p, errors.New("unsupported Docker daemon")
 	}
-	raw, err = r.Run(ctx, "df", "-Pk", root)
-	if err != nil {
+	if err = checkHostDisk(ctx, r, root); err != nil {
 		return p, err
-	}
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	if len(lines) < 2 {
-		return p, errors.New("disk inventory")
-	}
-	fields := strings.Fields(lines[len(lines)-1])
-	if len(fields) < 4 {
-		return p, errors.New("disk inventory columns")
-	}
-	free, err := strconv.ParseInt(fields[3], 10, 64)
-	if err != nil || free < 1024*1024 {
-		return p, errors.New("less than 1 GiB free disk")
 	}
 	p.Profiles, err = harness.NetworkProfiles()
 	if err != nil {
@@ -120,20 +107,27 @@ func freshID() (string, error) {
 	}
 	return hex.EncodeToString(b[:]), nil
 }
-func writeNewJSON(path string, v any) error {
-	raw, err := json.Marshal(v)
+func checkHostDisk(ctx context.Context, r processRunner, root string) error {
+	raw, err := r.Run(ctx, "df", "-Pk", root)
 	if err != nil {
 		return err
 	}
-	if len(raw) > 32*1024*1024 {
-		return errors.New("artifact limit")
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) != 2 {
+		return errors.New("disk inventory must contain exactly one filesystem")
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	fields := strings.Fields(lines[1])
+	if len(fields) < 6 {
+		return errors.New("disk inventory columns")
+	}
+	free, err := strconv.ParseInt(fields[3], 10, 64)
 	if err != nil {
-		return err
+		return fmt.Errorf("disk available blocks: %w", err)
 	}
-	_, e := f.Write(append(raw, '\n'))
-	return errors.Join(e, f.Close())
+	if free < 1024*1024 {
+		return errors.New("less than 1 GiB free disk")
+	}
+	return nil
 }
 func pathBytes(root string) (int64, error) {
 	var total int64
@@ -159,6 +153,9 @@ func pathBytes(root string) (int64, error) {
 	return total, err
 }
 func monitorNetwork(ctx context.Context, r processRunner, root string) error {
+	if err := checkHostDisk(ctx, r, root); err != nil {
+		return err
+	}
 	raw, err := r.Run(ctx, "ps", "-o", "rss=", "-p", strconv.Itoa(os.Getpid()))
 	if err != nil {
 		return err
@@ -235,6 +232,22 @@ func runNetworkMatrix(ctx context.Context, r processRunner, root string) (runErr
 		return err
 	}
 	if err = os.Mkdir(artifact, 0700); err != nil {
+		return err
+	}
+	// Evidence and failure output have separate sublimits. This does not
+	// authorize builds: the isolation policy above remains closed until the
+	// external build/daemon domains and actual filesystem checks are wired.
+	checkOutputSpace := func() error {
+		checkCtx, done := context.WithTimeout(context.Background(), operationTimeout)
+		defer done()
+		return checkHostDisk(checkCtx, r, root)
+	}
+	evidenceBudget, err := harness.NewNetworkWriteBudget(harness.NetworkEvidenceStorageBytes, checkOutputSpace)
+	if err != nil {
+		return err
+	}
+	diagnosticBudget, err := harness.NewNetworkWriteBudget(harness.NetworkDiagnosticStorageBytes, checkOutputSpace)
+	if err != nil {
 		return err
 	}
 	build := filepath.Join(artifact, "build")
@@ -338,7 +351,7 @@ func runNetworkMatrix(ctx context.Context, r processRunner, root string) (runErr
 			ImageID          string
 			ImageRemoved     bool
 			Error            string
-		}{batch, batchResult, sampleCount, image, imageRemoved, fmt.Sprint(runErr)})
+		}{batch, batchResult, sampleCount, image, imageRemoved, fmt.Sprint(runErr)}, diagnosticBudget, 4<<20)
 		runErr = errors.Join(runErr, e)
 	}()
 	buildCtx, buildCancel = context.WithTimeout(ctx, 5*time.Minute)
@@ -420,14 +433,14 @@ func runNetworkMatrix(ctx context.Context, r processRunner, root string) (runErr
 					e := writeNewJSON(filepath.Join(artifact, run+"-incomplete.json"), struct {
 						Error  string
 						Bundle harness.NetworkBundle
-					}{callErr.Error(), b})
+					}{callErr.Error(), b}, diagnosticBudget, 32<<20)
 					return &networkExit{2, errors.Join(callErr, e)}
 				}
-				if err = harness.WriteNetworkBundle(dest, b); err != nil {
+				if err = harness.WriteNetworkBundleBudgeted(dest, b, evidenceBudget); err != nil {
 					e := writeNewJSON(filepath.Join(artifact, run+"-rejected.json"), struct {
 						Error  string
 						Bundle harness.NetworkBundle
-					}{err.Error(), b})
+					}{err.Error(), b}, diagnosticBudget, 32<<20)
 					return &networkExit{2, errors.Join(err, e)}
 				}
 				_, _, result, err := harness.AssessNetwork(b)
