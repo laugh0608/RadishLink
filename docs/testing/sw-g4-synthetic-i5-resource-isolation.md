@@ -8,9 +8,9 @@
 
 ## 本轮决定与交付
 
-所有者在 2026-10-01 选择“保持整批 768 MiB：补充有容量硬上限的隔离构建环境设计，环境就绪前禁止 I5-R”。没有选择拆分构建与运行预算，也没有授权实际创建或调整隔离环境。
+所有者在 2026-10-01 选择“保持整批 768 MiB：补充有容量硬上限的隔离构建环境设计，环境就绪前禁止 I5-R”。该次决定没有拆分构建与运行预算，也未授权实际创建或调整隔离环境；随后仅获准复制、移动专用 UTM 副本，范围见本页准备记录。
 
-第一轮交付是入口停止检查、离线拒绝回归和本设计，已提交为 `0f531d3`。所有者随后要求提交并继续推进；本次接入证据输出计费、诊断限额与余量复查，并细化后端方案。构建/daemon 隔离及环境验收仍未完成，不能将局部离线通过写成整批资源验收通过。
+入口停止及本设计已提交为 `0f531d3`，证据输出计费、诊断限额与余量复查为 `287b264`，容量核验及受限双构建 helper 为 `538323f`，专用 UTM 副本准备记录为 `40a588c`。构建/daemon 隔离及环境验收仍未完成，不能将局部离线通过写成整批资源验收通过。
 
 - shell 的 `preflight` 和 `run` 均以退出码 2、`I5_RESOURCE_ISOLATION_REQUIRED` 停止；停止发生在任何外部命令、目录创建和 bootstrap 构建之前。
 - 直接调用 Go `synthetic-run` 的两种模式也在环境访问前停止；内部矩阵入口单独保留同一检查，避免跳过 shell 后运行。
@@ -212,3 +212,21 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 保留的异常与处理：沙盒内帮助命令曾退出 134；获准沙盒外读取 `utmctl clone --help` 后正常。副本初始位于 UTM 默认 Documents；配置直接读取在沙盒内外均被 macOS 以 `Operation not permitted` 拒绝，没有通过更改隐私权限或手工搬移绕过。按已说明的原生 Move 操作完成后，在目标目录正常读取并完成验证。第一次文件夹导航未完成移动，核对目标 absent 后重新打开 Move 对话框并完成；没有重跑 clone。首次并行 hash 与句柄检查观察到读取进程，待 hash 完成后串行复查才确认零句柄。
 
 **剩余边界**：副本继承 Shared 网络和原 MAC；guest 内的 machine-id、SSH host key、实际 Debian/内核、Landlock ABI、Go/Python/Docker 与 guest agent 状态均未检查。首次启动前应明确网络隔离和克隆身份处理。四个容量域尚未创建，批次资源硬限额、宿主 backing/环境日志归属及 I5-R 验收均未通过。下一步仅为该副本的 guest 盘点与精确准备包；本次授权不包含启动或安装。
+
+## 首次 guest 盘点操作包（已推迟至次日，未授权执行）
+
+副本准备记录已提交为 `40a588c`。2026-10-01 晚所有者要求停止推进、将下一步写入明日事项，因此本包留作次日复核材料，今晚不再等待或执行启动。`scripts/inspect-sw-i5-guest.py` 目前仅是本地未跟踪草稿，未纳入本次文档提交；执行前须复核并提交脚本，不能把本包当作完整可执行交付。本包只针对 UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`、`~/VirtualMachines/RadishLink-I5-Debian13-ARM64.utm`，预计 5–10 分钟。先复核 UUID、路径及 stopped 状态，通过 UTM 原生设置移除全部网卡、关闭剪贴板和目录共享，保存后读取配置核验，再启动一次。保留源 VM 及其他 VM 状态。此变更将持久修改该副本配置；启动和关机会写系统盘日志，不属于 768 MiB 批次实测。配置失败则不启动；本包结束保留隔离设置，不自动恢复 Shared 网络。
+
+启动与只读检查的命令形态如下，`<nonce>` 须替换为本次新生成的 32 位小写十六进制值；不能把占位文本原样执行：
+
+```text
+utmctl start B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --hide
+utmctl exec B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --input --cmd /usr/bin/python3 -I -B - --nonce <nonce> < scripts/inspect-sw-i5-guest.py
+utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --request
+```
+
+盘点脚本草稿通过 guest agent 的 stdin 执行，只把 JSON 写到 stdout。读取内核、架构、内存、块设备容量、根盘余量、网卡/路由、指定包版本与工具位置，并只查询 Landlock ABI；不执行 Go/Docker、不建立隔离规则、不安装软件、不复制源码或创建 guest 文件。仅记录 machine-id 是否非空及 SSH 公钥文件数量，不收集其内容、不重新生成身份；`identity_regeneration_verified` 和 `i5_ready` 始终为 false。返回必须包含匹配 nonce 的可解析 JSON；空输出或仅退出 0 不算完成。网卡必须只有 `lo`，否则立即停止盘点并关机。
+
+guest agent 或 Python 不可用时保留具体错误并关机，不临时安装；正常关机请求后最多等待 120 秒，若本包获准的超时处置也被授权，才对同一 UUID 使用 `utmctl stop ... --force`，记录为非正常关机，随后复核全部 VM 状态。即使盘点失败也进入关机收尾；没有单独授权时不使用 `--kill`、不删除副本或系统盘。安装依赖、修改 machine-id/SSH key、创建四个容量域、构建、启动 daemon 和 I5-R 均不在本包范围内。
+
+本地验证：脚本语法解析通过；`--help` 退出 0；macOS 上传入合法 nonce 时按预期退出 2，报告 `Linux guest required`。这不证明 guest agent、Linux 内核或实际工具可用；实际执行结果待授权后补充。
