@@ -1,7 +1,7 @@
 # D0/P0 软件工作计划
 
 - 状态：Accepted（`SW-G0`，2026-08-24）
-- 更新日期：2026-09-05（状态同步与后续准备；不改变 SW-G0 接受范围）
+- 更新日期：2026-09-26（I1–I5-I 实施收尾；不改变 SW-G0 接受范围）
 - 适用范围：D0 的无射频软件方案设计，以及进入 P0 前的 `SW-*` 证据准备
 - 目标读者：产品、网络、安全、协议与测试协作者
 
@@ -89,7 +89,7 @@
 ### 持久化
 
 - 正式设计先定义状态机、原子提交边界、崩溃点和恢复不变量，再比较 SQLite、append-only log 或其他成熟存储；
-- 当前全量 JSON snapshot 只用于少量合成消息，不支持并发、配额、迁移或损坏恢复结论；
+- 探索性 `t0node` 的全量 JSON snapshot 只用于少量合成消息，不支持并发、配额、迁移或损坏恢复结论；后续 `synthetic` store v1 的独立事务、限额与恢复证据见 I3，不把两套实现混同；
 - 必须先写出 schema version、未知字段、降级拒绝、迁移和回滚策略，之后才能选择实现。
 
 ### 证据
@@ -141,13 +141,23 @@
 | 2 | 消息交付语义 | [覆盖层消息交付语义](../protocol/message-delivery-semantics.md) | `SW-G1` 已接受 |
 | 3 | E2EE/身份决策 | [SW-G2 决策包](../security/e2ee-sw-g2-decision-package.md)、候选精确包与后续 ADR | 当前结果见[状态页](current.md)；无采用 ADR，Phase B 与 R2 前置未关闭 |
 | 4 | 故障与证据设计 | [`SW-G3`](../testing/sw-g3-deterministic-validation-design.md) | `SW-G3` 已接受 |
-| 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md) | `SW-V0` 已完成并通过；无重跑或后续 `SW-V*` 授权 |
-| 6 | 三节点矩阵 | 可复现结果与限制 | 暂停 |
+| 5 | `SW-V*` 工具调整 | [`SW-G4 / SW-V0` 授权包](../testing/sw-g4-sw-v0-harness-authorization.md)及后续 I1–I5 包 | `SW-V0` 已完成；I1–I5-I 有限实施与离线验证已完成，无正式网络运行授权 |
+| 6 | 三节点矩阵 | 可复现结果与限制 | I5-R 未执行；先关闭资源合同差异并满足运行前置 |
 | 7 | P0 进入评审 | D0 退出证据汇总 | 未开始 |
 
 ## 最小文字纵向切片的设计输入
 
+2026-09-26 已形成[最小文字闭环实现前设计](../architecture/minimal-text-slice.md)，给出用户状态、事务边界、接口缺口、失败矩阵和实施顺序；[SW-G3 修订评审包](../testing/sw-g3-revision-2-review.md)给出可评审的重试时序、长度与版本方案。两份整体仍为 Draft；后续 I1/I2/I3 的有限接受及实施见下文，不等于整体方案接受或正式运行，首期范围确认不自动接受端点/安全设计。
+
+同日工程自审补齐 B→A 送达证据的独立返回责任、迟到调度与 frame 边界，并形成[I1 精确离线实施清单与结果](../testing/sw-g4-synthetic-i1-plan.md)。所有者随后接受 I1，四个源码文件的重试/长度算法、精准测试、go vet 与全量离线回归已完成；整体 schema 2、消息事务、真实身份与 proof 不因此接受。全量回归首次受沙盒 Go 缓存权限阻断，获准以同命令复验通过，失败保留在 I1 记录中。
+
+I1 已提交后，补齐[消息责任、批次与事务接入设计](../architecture/minimal-text-slice.md#队列与事务的接入设计)，并形成[I2 有界读写包](../testing/sw-g4-synthetic-i2-plan.md)。所有者随后接受 I2，两个 Go 文件已实施：参数化既有 frame codec，保留 V0 的 65536 B 合同，实现 32768 B 显式调用边界的分配前拒绝，并修复短写误报成功。精准测试通过，全量 vet/test 首次受沙盒缓存权限阻断，获准同命令复验通过；完整 envelope/schema、存储与队列资源合同仍待后续收敛。
+
+I2 提交后形成的[I3 持久文字路径合同](../testing/sw-g4-synthetic-i3-plan.md)已由所有者接受并完成十文件实施，覆盖合成 envelope/store v1、四消息资源与速率预算、I1 事件重放、T-A/B/C/D、提交结果不确定及文件恢复。完整离线路径、60 个事务 I/O 故障和 48 个受控子进程退出用例通过；全量 vet/test 首次仍受沙盒缓存权限阻断，获准同命令复验通过。结果限定临时合成数据和监督端存活的进程重开，不证明掉电或密码状态原子性；原 V0/schema 与 t0node 不变。当时待做的 profile/evidence 接入已由后续 I4/I5-I 有限实施覆盖，正式网络运行仍未执行。
+
 后续 SW-G4 包应先交付一个从用户动作到恢复结果的小而完整的路径，再逐项扩展矩阵：已验证身份 → origin 原子入队 → B custody → C 安全状态/消息/去重提交 → 认证 delivery evidence → A/B 验证后清理 → 重启后的用户状态保持。
+
+I3 提交为 `112f1e8` 后形成的[I4 场景与证据接入包](../testing/sw-g4-synthetic-i4-plan.md)已获所有者接受，13 个 Go 文件和 5 个 JSON 完成实施：offline-i3 variant 消费实际提交/发送/预算事实，接通有限 schema 2、断言重算和三次比较。五 profile 七子用例共 21 个独立样本通过，负例覆盖重算 checksum 后的事实/指标篡改、版本混合、观测失败与 FAIL/INVALID 分类；全量 vet/test 通过。它不覆盖全部矩阵；现有 echo 端点不等于消息 Node，后续 [I5 三进程闭环方案](../testing/sw-g4-synthetic-i5-plan.md)的 I5-I 已获有限接受并完成控制协议、进程入口、监督时钟/屏障、TCP 适配器和 V3 证据消费者。全量离线回归及控制/生命周期负例通过；七场景字节流 fixture 不是网络结果。下一步为固定源码和产物后的 I5-R，21 样本三容器运行仍受其精确前置、资源与清理条件约束，尚未执行。
 
 设计至少给出每一步的输入、所有者、库接口、提交边界、UI 状态、失败原因与对应断言。优先覆盖确认丢失、满盘、身份变化和提交点崩溃；合成认证占位的结果只能登记为 SW-V1/V2，不能在交接中把它提升为安全切片完成。真实 E2EE 场景继续以 SW-G2、R2 和精确运行前置为界。
 
@@ -164,7 +174,7 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./...
 
 此入口只执行 Go 单元测试并写入构建缓存；不下载依赖、不启动 Docker，不替代 `run-sw-v0-harness.sh run`。工具链或缓存不满足时报告失败，依赖安装另行授权。2026-09-05 文档整理前的审阅已在 macOS ARM64 / Go 1.26.3 通过该测试；这不是 Linux ARM64、密码候选或产品场景证据。
 
-CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)，本轮不修改脚本、代码或 workflow。
+CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 的 I1/I2 当轮未修改脚本、runner 或 workflow；后续 I4/I5-I 已扩展现有 harness 命令包，I5 新增独立 shell 入口与 Dockerfile，并拆分证据职责。workflow、旧 V0 runner 与 t0node 未变；全量离线回归通过不证明新增 shell、Docker 或真实 TCP 入口已运行。当天提交与资源合同待关闭项见[收尾记录](2026-09-26-progress.md)。
 
 ## 授权与停止线
 
@@ -172,4 +182,4 @@ CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作�
 - 修改测试实现需要明确范围；运行容器前再次说明命令、目标、副作用、时长和清理；
 - 依赖安装、VM 启动、系统网络、`NET_ADMIN`、射频、硬件、真实密钥和外部状态分别授权；
 - 任一设计缺失会影响安全、兼容、数据或结论时，停止实现并回到相应决策门；
-- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；mls-rs 单元 D 保留正式历史 `STOP`，D2 对 A2/A3 固定的同一 94-package 图已形成 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)的 R0 已离线形成；下一步只为 R1 固定一次性命令/helper 并申请单次 L3 联网授权，随后由项目所有者指定非实现者执行 R2。任何 R1/R2、D2 重跑、Phase B、进一步 gate 变化、依赖/provider/source 变化均须另行精确授权，不得复用 OpenMLS lockfile/cache 或相邻授权，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。
+- `SW-G2` 未完成前，OpenMLS 0.9.0 当前基线不再重跑或进入 Phase B；mls-rs 单元 D 保留正式历史 `STOP`，D2 对 A2/A3 固定的同一 94-package 图已形成 Phase A `PASS`。[许可证/NOTICE 与非实现者复核包](../testing/sw-g2-mls-rs-license-notice-review.md)已记录 R1/R1b、R1c-R 与 R1d-L 结果；当前分别处置 debug_tree 上游澄清与 r-efi 独立法律评审，不能继续按“R1 未执行”推进。新证据轨完整通过后才恢复 R2 前置，由所有者指定合格非实现者复核。任何补证/R2、D2 重跑、Phase B、进一步 gate 变化、依赖/provider/source 变化均须另行精确授权，不得复用 OpenMLS lockfile/cache 或相邻授权，也不得由 `SW-V0 PASS` 推导重跑或授权 `SW-V3`。

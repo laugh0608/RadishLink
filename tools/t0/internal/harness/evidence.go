@@ -233,6 +233,16 @@ func WriteEvidenceBundle(root string, input EvidenceInput) error {
 }
 
 func FinalizeEvidence(root string) error {
+	version, err := bundleSchema(root)
+	if err != nil {
+		return err
+	}
+	if version == 3 {
+		return finalizeNetwork(root)
+	}
+	if version == 2 {
+		return finalizeScenario(root)
+	}
 	if err := validateEvidenceBundle(root); err != nil {
 		return err
 	}
@@ -253,6 +263,18 @@ func FinalizeEvidence(root string) error {
 }
 
 func VerifyEvidence(root string) error {
+	version, err := bundleSchema(root)
+	if err != nil {
+		return err
+	}
+	if version == 3 {
+		_, err := verifyNetwork(root, true)
+		return err
+	}
+	if version == 2 {
+		_, err := verifyScenario(root, true)
+		return err
+	}
 	if err := validateEvidenceBundle(root); err != nil {
 		return err
 	}
@@ -311,6 +333,16 @@ func NormalizeEvents(data []byte) ([]byte, error) {
 }
 
 func CompareEvidenceRuns(profileRoot string) (string, error) {
+	version, err := bundleSchema(filepath.Join(profileRoot, "1"))
+	if err != nil {
+		return "", err
+	}
+	if version == 3 {
+		return compareNetworks(profileRoot)
+	}
+	if version == 2 {
+		return compareScenarios(profileRoot)
+	}
 	var reference []byte
 	var referenceProfile []byte
 	var referenceAssertions []byte
@@ -633,9 +665,13 @@ func collectEvidenceFiles(root string) ([]string, error) {
 }
 
 func atomicWriteEvidenceFile(root, relativePath string, data []byte) error {
-	if len(data) > MaxEvidenceFileBytes {
-		return fmt.Errorf("evidence file %s exceeds %d bytes", relativePath, MaxEvidenceFileBytes)
+	return atomicWriteEvidenceFileLimit(root, relativePath, data, MaxEvidenceFileBytes)
+}
+func atomicWriteEvidenceFileLimit(root, relativePath string, data []byte, limit int) error {
+	if limit < 1 || limit > 16*1024*1024 || len(data) > limit {
+		return fmt.Errorf("evidence file %s exceeds %d bytes", relativePath, limit)
 	}
+
 	if err := validateRelativePath(relativePath); err != nil {
 		return err
 	}

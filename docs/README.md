@@ -13,6 +13,7 @@
 ## 架构与协议
 
 - [系统架构](architecture/system-architecture.md)
+- [最小文字闭环实现前设计](architecture/minimal-text-slice.md)：待评审的用户路径、事务边界与失败矩阵。
 - [网络与路由](architecture/network-and-routing.md)
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
 - [安全架构](security/security-architecture.md)
@@ -38,11 +39,18 @@
 - [`SW-EXP-004` OpenMLS 0.9.0 静态门禁与执行授权包](testing/sw-g2-openmls-0.9-spike-authorization.md)：候选静态门与停止条件。
 - [`SW-EXP-004` OpenMLS 0.9.0 实施骨架与 Phase A 精确授权包](testing/sw-g2-openmls-0.9-phase-a-authorization.md)：审计工具、精确实施与 Phase A 结果。
 - [`SW-G3` 确定性故障与证据设计](testing/sw-g3-deterministic-validation-design.md)：版本化 profile、故障矩阵、证据与待评审勘误。
+- [`SW-G3` 实现前修订评审包](testing/sw-g3-revision-2-review.md)：待评审的重试、长度、故障划分与版本方案。
+- [后续 `SW-G4` 离线实施单元 I1](testing/sw-g4-synthetic-i1-plan.md)：重试算法、长度边界、精确范围与离线验证记录。
+- [后续 `SW-G4` 有界读写单元 I2](testing/sw-g4-synthetic-i2-plan.md)：frame 限额、V0 兼容、短写拒绝与离线验证记录。
+- [后续 `SW-G4` 持久文字路径单元 I3](testing/sw-g4-synthetic-i3-plan.md)：合成 envelope、队列资源、文件提交恢复合同与完整离线路径验证记录。
+- [后续 `SW-G4` 场景与证据接入单元 I4](testing/sw-g4-synthetic-i4-plan.md)：离线 variant、版本化事实/断言、三次比较与实施验证记录。
+- [后续 `SW-G4` 三进程文字闭环单元 I5](testing/sw-g4-synthetic-i5-plan.md)：独立进程/TCP、监督屏障与证据合同；I5-I 离线验收记录及 I5-R 运行边界。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
 
+- [2026-09-26 开发回顾与明日事项](status/2026-09-26-progress.md)：当天提交、代码与文档核对、I5-R 前置缺口及次日接续顺序。
 - [2026-09-03 状态与批次快照](status/2026-09-03-progress.md)：历史流水与证据引用，非当前授权。
 - [ADR 索引](adr/README.md)
 - [ADR 0001：主机、长距无线与近距接入基线](adr/0001-radio-and-host-baseline.md)

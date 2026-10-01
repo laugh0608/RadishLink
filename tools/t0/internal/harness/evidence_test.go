@@ -216,3 +216,29 @@ func testEvidenceInput(t *testing.T, repeat int, wallTime string, pid int, tempo
 		},
 	}
 }
+
+func TestEvidenceVersionDispatchRejectsUnknownAndMixed(t *testing.T) {
+	for _, version := range []string{"0", "2", "3", "null"} {
+		t.Run(version, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "run")
+			if err := WriteEvidenceBundle(root, testEvidenceInput(t, 1, "2026-08-28T00:00:00Z", 101, "/tmp/run")); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, "manifest.json")
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw = []byte(strings.Replace(string(raw), `"schema_version": 1`, `"schema_version": `+version, 1))
+			if err := os.WriteFile(path, raw, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := VerifyEvidence(root); err == nil {
+				t.Fatal("mixed manifest accepted")
+			}
+			if err := FinalizeEvidence(root); err == nil {
+				t.Fatal("mixed manifest finalized")
+			}
+		})
+	}
+}
