@@ -1,7 +1,7 @@
 # I5 整批资源隔离设计与运行停止检查
 
 - 日期：2026-10-01
-- 状态：所有者已选择保留整批 768 MiB；证据写前计费已接入，隔离环境与构建接入未完成，I5-R 禁止启动
+- 状态：保留整批 768 MiB；证据计费、容量探测及受限双构建 helper 离线通过，真实环境、运行接入与 daemon 隔离未完成，I5-R 禁止启动
 - 目标读者：I5 实现、运行环境准备及证据复核者
 - 用途：关闭构建及运行写入绕过批次计费的问题，给出下一实施包的可检验边界
 - 非目标：创建环境、启动 daemon/VM、安装依赖、执行 I5-R、修改产品协议或扩大验证结论
@@ -38,7 +38,7 @@
 
 宿主系统、已安装工具链与只读源码是预先存在的输入；本批新增的 bootstrap、Go cache/temp、daemon/builder 存储、镜像、卷、证据与诊断全部进入有容量硬上限的存储域。不得通过先在域外构建、复制产物入域，或把 daemon 写入声明为环境开销绕过总额。环境准备与安装本身另有精确授权，不借准备过程提前执行本批构建。
 
-环境后端的选择及具体挂载/配额命令尚未冻结。实施前必须提供能核验下列条件的后端方案；普通目录、稀疏文件的表观大小、单文件 ulimit 或定时 `du` 不足以证明总额受限：
+本轮 helper 收敛为 Linux 独立整块设备上的 ext4；真实目标和挂载命令尚未冻结。环境实施前必须核验下列条件；普通目录、稀疏文件的表观大小、单文件 ulimit 或定时 `du` 不足以证明总额受限：
 
 1. 容量限制在第一个 bootstrap/daemon 写入前生效，覆盖并发写入、原子替换、被打开但已删除的文件、缓存和存储元数据；超额写入在底层失败。
 2. 多个存储域和 tmpfs 的容量上限之和不超过 `768 * 1024 * 1024` 字节。诊断保留域也在总额内，不能另获不计费空间。
@@ -50,7 +50,7 @@
 
 ### 本次细化：Linux 块设备容量域
 
-候选后端收敛为专用 Linux 环境中的固定容量块设备及 ext4 文件系统；可用受限 loop 设备承载，但不得只检查 backing file 的表观长度。`losetup --sizelimit` 能限制设备寻址范围，ext4 的总块数和块大小可用于交叉核对；是否覆盖全部实际写入还须靠挂载、路径和真实拒绝测试验证。[losetup 手册](https://man7.org/linux/man-pages/man8/losetup.8.html)、[ext4 磁盘结构](https://docs.kernel.org/filesystems/ext4/super.html)。
+候选后端为专用 Linux 环境中的固定容量块设备及 ext4 文件系统。原设计允许评估受限 loop；本轮首版 helper 明确拒绝 loop、device mapper、md 和分区，仅接受独立整盘，避免遗漏 backing 层分配及别名。以后纳入 loop 必须另补实际 backing 计费，不能只看表观长度。`losetup --sizelimit` 能限制设备寻址范围，但不是整个宿主占用的证明。[losetup 手册](https://man7.org/linux/man-pages/man8/losetup.8.html)、[ext4 磁盘结构](https://docs.kernel.org/filesystems/ext4/super.html)。
 
 本次固定用于有限实现的子额度如下；它们共同分割原 768 MiB，不是各阶段重新发放预算，也不承诺每个额度足够运行：
 
@@ -78,6 +78,44 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 - `checkHostDisk` 被预检、原监控采样和输出检查共用，拒绝缺失/多文件系统、非法数字、整数溢出及少于 1 GiB 的余量。当前仍使用原宿主路径；将它绑定到真实存储域和承载文件系统的双重检查属于后端接入，不能以这个 helper 宣称已经实现。
 - 运行入口仍硬停止。本次没有把 bootstrap、构建、daemon 或 store 的写入接入共享阶段账本，也没有建立上述容量域；文件字节账本不替代块级容量边界。
 
+### 容量探测与受限双构建 helper（2026-10-01 后续实施）
+
+[只读入口](../../scripts/check-sw-i5-resources.py)只提供 `inspect` 和 `self-test`；[容量核验](../../scripts/sw_i5_resources.py)与[构建阶段](../../scripts/sw_i5_build.py)使用 Python 标准库，不需先编译 Go。没有新增依赖、安装工具、执行 mount 或调用真实构建。Python 入口在导入本地模块前禁用 bytecode 写入。
+
+`inspect` 接受独立的配置版本 1：仅有 `schema_version`、`root`、`host_path` 和四域的预期 `major:minor`。未知字段、重复键、缺域、设备复用、非规范绝对路径及超大配置均拒绝。它不是 I5 证据 schema；输出始终含 `scope=local-block-domains-only` 和 `i5_ready=false`，退出 0 只表示本次本地探测通过，不能作为运行许可。
+
+核验直接读取当前 `/proc/self/mountinfo`、块设备节点、`/sys/dev/block` 和 `statvfs`：
+
+- 四个精确挂载点必须是完整 ext4 根、互不复用设备、无嵌套挂载/别名，域目录属于调用者且 mode 为 0700，挂载带 `nosuid,nodev`。拒绝 symlink 路径及 mountinfo/路径设备号不一致。
+- 按 sysfs 的 512-byte sector 计算设备容量，分别不得超过既定 256/160/240/64 MiB；文件系统块总量不得大于设备容量，每域还要有可用字节和 inode。文件系统有效数据容量可以更小。
+- `host_path` 必须位于域外，且与承载 batch 根目录的 ext4 文件系统一致；单独检查至少 1 GiB 可用。它只核验 Linux 本地承载层，**不能证明虚拟磁盘所在物理宿主及 hypervisor 日志的余量/计费**。
+- 检查前后重新读取挂载表；阶段内绑定 mount ID、major:minor、sysfs 身份、fsid、根 inode 和容量。身份改变、探测出错或余量不足即永久停止本阶段，后续读数恢复也不续跑。
+
+构建 helper 要求预先准备好的专用 mount namespace：除 build 外的所有挂载均只读，源码及 Go 可执行文件是域外只读输入；调用者非 root、无继承/许可/有效/ambient capabilities，启动器单线程。helper 自身不创建 namespace，也不声称已经准备好运行环境。
+
+子进程在执行 Go 前设置 `no_new_privs` 和 Landlock，要求 ABI 至少 5、架构 x86_64/aarch64，失败无降级；只允许 build 域内的文件写入、截断、目录/普通文件/FIFO/symlink 创建与 rename，禁止新建 socket、设备节点及受管 device ioctl。Landlock 对 chmod、chown、xattr、utime 等存在限制，因此还必须验证其余挂载只读；并关闭继承的非标准 FD，将输出重定向到 build 域。该组合尚无本项目 Linux 实测，不作为任意恶意程序、网络或 IPC 的完整沙箱。[Linux Landlock 文档](https://docs.kernel.org/userspace-api/landlock.html)、[Linux syscall UAPI](https://github.com/torvalds/linux/blob/master/include/uapi/asm-generic/unistd.h)。
+
+两个构建共用独占 `build/go-stage/`、缓存及临时路径；目录已存在即拒绝，不自动删除或续跑。bootstrap 和 node 均使用 `-mod=readonly -buildvcs=false -trimpath`，显式关闭工具链下载、module proxy、sumdb、GOENV、GOWORK、telemetry 和 CGO；环境从空映射建立，不继承 GOFLAGS 或用户缓存。build 整个 256 MiB 保留到批次结束，不在两个构建之间重发额度。单文件额外限制为 32 MiB，core dump 为 0；这些是更紧的拒绝条件，不能代替块设备上限。
+
+每个构建最长 300 s，每 250 ms 重新核验容量域；阻塞在编译器等待期间也检查。失败或结束后向本次创建的进程组发送 SIGKILL、等待 Go 主进程，再有界核验进程组消失；有残留或清理错误则失败，保留原错误与清理错误。失败日志和部分输出保留在 build 域，不退款、不递归删除。进程组机制尚未以真实 Go 编译器验证，不宣称能回收主动脱离进程组的程序。
+
+**接入边界**：`build_pair` 已有双构建流程和失败处理，但未接入 shell 或 Go 运行入口；只读 `inspect` 也不会修改停止策略。既有 Go 运行路径、Docker 构建/daemon 存储、store 阶段账本、阻塞控制请求监控及证据版本绑定仍需完成。不得手动调用 helper 代替尚未获得的环境实测授权。
+
+### 环境操作包草案（目标尚未指定，不能执行）
+
+本轮已询问使用新建专用 Linux VM 还是已有专用环境；截至本轮交接尚未取得具体目标。以下是待填入目标后的评审内容，不是已授权的环境配置，也不提供猜测设备号的格式化/挂载命令。
+
+| 操作 | 已收敛的参数与检查 | 仍缺的执行输入 |
+| --- | --- | --- |
+| 准备 Linux | x86_64/aarch64、Landlock ABI ≥ 5、预先安装的 Go 1.26/Python；源码/工具链只读，构建身份无 capabilities | VM/主机名称、镜像与内核版本、安装来源及许可证、已有工具清单 |
+| 建立四域 | 四块独占整盘，容量最多 256/160/240/64 MiB，ext4；独立 0700 挂载点 | 实际设备 ID、绝对路径、宿主 backing 及环境日志的计费方式；不得格式化既有共享盘 |
+| 准备构建 namespace | 所有域外挂载只读，build 是唯一可写挂载；源码、Go 与配置路径固定 | 实际 namespace 命令及其精确回收对象；特权准备者退出/移交方式 |
+| 只读探测 | `python3 -B scripts/check-sw-i5-resources.py inspect --config <已复核配置的绝对路径>` | 配置中的真实 root、host_path 与四个 major:minor；探测 stdout 的域内留存路径 |
+| 受限构建验收 | 两个构建各最多 300 s，清理最多约 5 s；验证域外写入/截断/rename 拒绝及日志留存 | 当次运行授权、宿主层 ≥ 1 GiB 复查、真实 ENOSPC/开放删除文件/并发写入与后代回收用例 |
+| daemon/builder 接入 | 独占 Unix endpoint、全部存储和日志位于 daemon 域，保持 160 MiB | 固定 Docker/containerd 版本、实际路径、driver 与启动/清理命令；此项未实现 |
+
+主副作用是创建独占磁盘与文件系统、挂载/namespace、构建产物和日志；环境准备时长需按选定平台估算，构建时间上限如表所示。失败先停止本批进程并保留域内证据，只有核对所有者、批次与精确设备/挂载身份后，才按获准方案卸载和释放本批对象。不清理现有共享 daemon、其他 VM 或用户数据。目标和完整命令未补齐前，不申请笼统环境授权。
+
 ## 写前账本与余量检查
 
 硬容量域是工具链、builder 和并发写入的最后边界；应用可控写入仍必须写前计费，两者都需要实现。
@@ -103,7 +141,7 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 | 5 | 环境实测与干净 revision 预检 | 实测证明底层容量机制拒绝超限；检查并发、开放删除文件、实际 Go/builder 路径；停止检查不能只靠 mock 放行 |
 | 6 | 固定产物并取得 I5-R 运行授权 | 完整 revision、合同/附录/profile hash、两个 binary hash、镜像和后端证据绑定，再执行原 21 样本矩阵 |
 
-第一轮完成入口停止检查；本次完成第 2/3 项中的证据/诊断输出子项，未完成整项。下一步为具体后端的设备/挂载验证、受限 bootstrap 和构建接入，再准备精确环境操作包。环境测试属于单独外部操作，不是离线回归的一部分。
+第一轮完成入口停止检查，第二轮完成第 2/3 项中的证据/诊断输出子项。本轮继续交付容量核验与受限双构建 helper 的离线实施；未完成真实环境、运行入口接入、daemon 隔离与第 4 项精确操作包。下一步在选定 Linux 目标后补齐环境命令和宿主 backing 计费，并完成 daemon/store 与证据绑定。环境测试属于单独外部操作，不是离线回归的一部分。
 
 ## 合同、版本与历史兼容
 
@@ -141,3 +179,15 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 本次失败记录：精准测试、全量 vet 和定向 race 首次均因 Go cache 权限退出 1，获准同命令沙盒外复验；精准测试中预算总额断言使用两个等价常量组成 OR，被 vet 的 `suspect or` 拒绝，已拆为独立合同值和分项合计断言。修正后全量测试、vet 和定向 race 通过。收尾 checksum 精准回归中 harness 包通过、命令包缓存权限失败，命令退出 1，同命令沙盒外复验两包通过；没有更换缓存、下载依赖或删除失败记录。
 
 实施验收交接时，本次更改尚未提交；当时只有入口停止检查的 `0f531d3` 已提交，`dev` 领先本地记录的 `origin/dev` 1 个提交，未推送。所有者随后要求提交本批更改，提交号以 Git 记录为准。没有 Docker/VM/挂载/配额环境操作，没有后台服务；这些测试不验证冷构建能容纳于 256 MiB、daemon 能容纳于 160 MiB 或环境容量机制实际生效。原 I5 合同、五 profile、依赖及证据 schema 未改，I5-R 仍禁止启动。
+
+2026-10-01 容量探测与双构建 helper 的实际验证：
+
+| 验证 | 结果与边界 |
+| --- | --- |
+| `python3 -B scripts/check-sw-i5-resources.py self-test` | 20 项通过；kernel 数据、Landlock syscall、进程启动/等待/信号均注入。覆盖配置拒绝、设备号及 sector 读取、容量/余量/inode、挂载别名与变化、symlink、只读环境、缓存归属、双构建共用额度、超时/低空间取消、进程组残留、原错误与清理错误、失败日志和半成品保留 |
+| 原入口停止回归 | `env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -count=1 -timeout=30s ./cmd/sw-v0-harness -run 'TestNetworkEntrypointsStopBeforeEnvironmentAccess\|TestI5ShellStopsBeforeBootstrap'` 在 `tools/t0` 执行通过；真实 shell 只运行 builtins，无 bootstrap、Docker 或 TCP |
+| 仓库检查 | `./scripts/check-repo.sh` 通过（182 文件）；`git diff --check` 通过 |
+
+失败保留：首次 self-test 退出 1，失败夹具沿用了 macOS 的 `arm64`，没有注入 Linux 架构；修正后下一次 self-test 因 macOS 不提供 `os.O_PATH` 报 ERROR。该次合并检查命令被后续仓库检查的退出 0 覆盖，但测试结果未计为通过。补齐 Linux 常量夹具后改为独立调用 self-test，最终 20 项均通过；没有放宽生产平台/ABI 条件或执行实际 Landlock。新增测试只创建自动回收的合成临时文件，没有启动子进程。
+
+本轮未重跑未修改的 Go 全量套件；未执行真实 Linux `inspect`、受限 Go 双构建、块设备写满、namespace、mount、Docker、VM、daemon 或 I5-R。没有安装依赖及后台服务；环境操作包仍缺真实目标和精确命令。更改尚未提交，`dev` 领先本地记录的 `origin/dev` 2 个既有提交，远程状态未改变。原 I5 合同、profile、schema 1/2/3 与依赖保持不变。
