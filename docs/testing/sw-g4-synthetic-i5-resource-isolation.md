@@ -101,20 +101,20 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 
 **接入边界**：`build_pair` 已有双构建流程和失败处理，但未接入 shell 或 Go 运行入口；只读 `inspect` 也不会修改停止策略。既有 Go 运行路径、Docker 构建/daemon 存储、store 阶段账本、阻塞控制请求监控及证据版本绑定仍需完成。不得手动调用 helper 代替尚未获得的环境实测授权。
 
-### 环境操作包草案（目标尚未指定，不能执行）
+### 环境操作包草案（专用 VM 已复制，guest 准备未执行）
 
-本轮已询问使用新建专用 Linux VM 还是已有专用环境；截至本轮交接尚未取得具体目标。以下是待填入目标后的评审内容，不是已授权的环境配置，也不提供猜测设备号的格式化/挂载命令。
+所有者随后提供 UTM 资产位置，允许从干净基线复制专用 VM 或复用通用 Debian。已选择前者，并在精确复制/原生移动授权后建立 `RadishLink-I5-Debian13-ARM64`，UUID 为 `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`；副本保持关机，结果见本页末的准备记录。下表仍是 guest 准备与容量验收的待审内容，不继承复制授权，也不提供猜测设备号的格式化/挂载命令。
 
 | 操作 | 已收敛的参数与检查 | 仍缺的执行输入 |
 | --- | --- | --- |
-| 准备 Linux | x86_64/aarch64、Landlock ABI ≥ 5、预先安装的 Go 1.26/Python；源码/工具链只读，构建身份无 capabilities | VM/主机名称、镜像与内核版本、安装来源及许可证、已有工具清单 |
+| 准备 Linux | 已选专用 Debian 13 ARM64 副本、4 GiB RAM；要求 Landlock ABI ≥ 5、Go 1.26/Python、只读源码/工具链及无 capabilities 构建身份 | guest 实际内核/ABI、已有工具及安装来源清单；首次启动前处理继承的网络与 guest 身份 |
 | 建立四域 | 四块独占整盘，容量最多 256/160/240/64 MiB，ext4；独立 0700 挂载点 | 实际设备 ID、绝对路径、宿主 backing 及环境日志的计费方式；不得格式化既有共享盘 |
 | 准备构建 namespace | 所有域外挂载只读，build 是唯一可写挂载；源码、Go 与配置路径固定 | 实际 namespace 命令及其精确回收对象；特权准备者退出/移交方式 |
 | 只读探测 | `python3 -B scripts/check-sw-i5-resources.py inspect --config <已复核配置的绝对路径>` | 配置中的真实 root、host_path 与四个 major:minor；探测 stdout 的域内留存路径 |
 | 受限构建验收 | 两个构建各最多 300 s，清理最多约 5 s；验证域外写入/截断/rename 拒绝及日志留存 | 当次运行授权、宿主层 ≥ 1 GiB 复查、真实 ENOSPC/开放删除文件/并发写入与后代回收用例 |
 | daemon/builder 接入 | 独占 Unix endpoint、全部存储和日志位于 daemon 域，保持 160 MiB | 固定 Docker/containerd 版本、实际路径、driver 与启动/清理命令；此项未实现 |
 
-主副作用是创建独占磁盘与文件系统、挂载/namespace、构建产物和日志；环境准备时长需按选定平台估算，构建时间上限如表所示。失败先停止本批进程并保留域内证据，只有核对所有者、批次与精确设备/挂载身份后，才按获准方案卸载和释放本批对象。不清理现有共享 daemon、其他 VM 或用户数据。目标和完整命令未补齐前，不申请笼统环境授权。
+后续主副作用是创建独占磁盘与文件系统、挂载/namespace、构建产物和日志；环境准备时长需在 guest 盘点后估算，构建时间上限如表所示。失败先停止本批进程并保留域内证据，只有核对所有者、批次与精确设备/挂载身份后，才按获准方案卸载和释放本批对象。不清理现有共享 daemon、其他 VM 或用户数据。guest 准备的完整命令未补齐前，不申请笼统环境授权。
 
 ## 写前账本与余量检查
 
@@ -141,7 +141,7 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 | 5 | 环境实测与干净 revision 预检 | 实测证明底层容量机制拒绝超限；检查并发、开放删除文件、实际 Go/builder 路径；停止检查不能只靠 mock 放行 |
 | 6 | 固定产物并取得 I5-R 运行授权 | 完整 revision、合同/附录/profile hash、两个 binary hash、镜像和后端证据绑定，再执行原 21 样本矩阵 |
 
-第一轮完成入口停止检查，第二轮完成第 2/3 项中的证据/诊断输出子项。本轮继续交付容量核验与受限双构建 helper 的离线实施；未完成真实环境、运行入口接入、daemon 隔离与第 4 项精确操作包。下一步在选定 Linux 目标后补齐环境命令和宿主 backing 计费，并完成 daemon/store 与证据绑定。环境测试属于单独外部操作，不是离线回归的一部分。
+第一轮完成入口停止检查，第二轮完成第 2/3 项中的证据/诊断输出子项，第三轮完成容量核验与受限双构建 helper 的离线实施。随后已复制专用 UTM 目标，但尚未启动或检查 guest；未完成真实环境、运行入口接入、daemon 隔离与第 4 项 guest 精确操作包。下一步针对该副本完成内核/工具盘点、环境命令和宿主 backing 计费，并完成 daemon/store 与证据绑定。环境测试属于单独外部操作，不是离线回归的一部分。
 
 ## 合同、版本与历史兼容
 
@@ -191,3 +191,24 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 失败保留：首次 self-test 退出 1，失败夹具沿用了 macOS 的 `arm64`，没有注入 Linux 架构；修正后下一次 self-test 因 macOS 不提供 `os.O_PATH` 报 ERROR。该次合并检查命令被后续仓库检查的退出 0 覆盖，但测试结果未计为通过。补齐 Linux 常量夹具后改为独立调用 self-test，最终 20 项均通过；没有放宽生产平台/ABI 条件或执行实际 Landlock。新增测试只创建自动回收的合成临时文件，没有启动子进程。
 
 本轮未重跑未修改的 Go 全量套件；未执行真实 Linux `inspect`、受限 Go 双构建、块设备写满、namespace、mount、Docker、VM、daemon 或 I5-R。没有安装依赖及后台服务；环境操作包仍缺真实目标和精确命令。更改尚未提交，`dev` 领先本地记录的 `origin/dev` 2 个既有提交，远程状态未改变。原 I5 合同、profile、schema 1/2/3 与依赖保持不变。
+
+## UTM 副本准备记录（2026-10-01）
+
+容量探测与双构建 helper 随后提交为 `538323f`。所有者提供 UTM 列表及 VM 存放目录，允许从干净基线复制或复用通用 Debian；只读盘点后，选用独立副本以保留通用 builder 和其他项目现场。实际复制及原生 Move 在说明目标、预计 1–5 分钟、副作用和失败保留方式后取得当次授权；没有启动、安装、格式化、挂载或执行实验。
+
+| 项目 | 实际结果 |
+| --- | --- |
+| 源 VM | `Debian13-ARM64-CleanBase`，UUID `21197987-AEBB-46E6-ABDC-B9762F5C0CE4`，复制前后均 stopped |
+| 新 VM | `RadishLink-I5-Debian13-ARM64`，UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`，ARM64、4 GiB RAM，保持 stopped |
+| 最终位置 | 操作员 `~/VirtualMachines/RadishLink-I5-Debian13-ARM64.utm`；UTM 以该外部 bundle 的快捷方式注册 |
+| 操作 | 一次 `utmctl clone 21197987-AEBB-46E6-ABDC-B9762F5C0CE4 --name RadishLink-I5-Debian13-ARM64`，退出 0；随后通过 UTM 原生 Move 移到指定目录，默认 Documents 中该目标已不存在 |
+| 注册清单 | 8 → 9；只新增上述 UUID，原 8 项 UUID/name/status 不变，终态全部 stopped |
+| 源保护 | config、EFI、qcow2 的前后完整 SHA-256 一致；hash 读取结束后精确 `lsof` 无句柄输出 |
+| 副本核验 | EFI 与 qcow2 完整 hash 等于源；配置差异仅 `Information.Name` 和 `Information.UUID` |
+| 存储口径 | 源 qcow2 文件长度为 7,589,986,304 bytes（约 7.07 GiB）；不以 APFS clone 的逻辑长度推算实际新增物理占用，也不把系统盘快照当作 768 MiB 批次容量域 |
+
+源 config SHA-256 为 `44fba0b4f260cce3b464f65a389d8bf8fcee14d1646770b6541740b123744fc9`；EFI 为 `855c86a4b77feb693c78af3d8e7101c17279c19c691163dae3306fd3c302d162`；`Data/FFF05A20-E829-493C-8F40-B40884425A3F.qcow2` 为 `3ea30804109fab315cda997f83052d0f7a2df95ea79e7ff6da643d0dbb5f248b`。记录不收录配置备注中的登录信息。
+
+保留的异常与处理：沙盒内帮助命令曾退出 134；获准沙盒外读取 `utmctl clone --help` 后正常。副本初始位于 UTM 默认 Documents；配置直接读取在沙盒内外均被 macOS 以 `Operation not permitted` 拒绝，没有通过更改隐私权限或手工搬移绕过。按已说明的原生 Move 操作完成后，在目标目录正常读取并完成验证。第一次文件夹导航未完成移动，核对目标 absent 后重新打开 Move 对话框并完成；没有重跑 clone。首次并行 hash 与句柄检查观察到读取进程，待 hash 完成后串行复查才确认零句柄。
+
+**剩余边界**：副本继承 Shared 网络和原 MAC；guest 内的 machine-id、SSH host key、实际 Debian/内核、Landlock ABI、Go/Python/Docker 与 guest agent 状态均未检查。首次启动前应明确网络隔离和克隆身份处理。四个容量域尚未创建，批次资源硬限额、宿主 backing/环境日志归属及 I5-R 验收均未通过。下一步仅为该副本的 guest 盘点与精确准备包；本次授权不包含启动或安装。
