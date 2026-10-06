@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """Read-only Linux inventory for the I5 preparation VM, not I5 acceptance.
 
-Run through UTM guest-agent with python3 -I -B; writes JSON to stdout only.
+Guest mode runs through the agent with python3 -I -B and writes JSON to stdout
+only. The macOS --collect-utm mode saves bounded local preparation evidence.
 Boot/shutdown may write system state independently of this probe. No credentials,
 machine-id contents, host keys, process arguments or user files are collected.
 """
 
 import argparse
+import base64
 import ctypes
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import subprocess
 import sys
@@ -26,6 +30,9 @@ PACKAGES = (
 TOOLS = ("go", "docker", "dockerd", "containerd", "runc", "mkfs.ext4", "unshare", "mount")
 TOOL_DIRS = ("/usr/local/go/bin", "/usr/local/bin", "/usr/bin", "/usr/sbin", "/bin", "/sbin")
 MAX_RESULT_BYTES = 128 * 1024
+MAX_TRANSPORT_BYTES = 512 * 1024
+UTM_UUID = "B86E1A47-9A67-4ECF-A51F-2B2F29CDB726"
+UTM_NAME = "RadishLink-I5-Debian13-ARM64"
 
 
 def read(path):
@@ -165,16 +172,154 @@ def validate_result(raw, nonce):
     return result
 
 
+def check_utm_config():
+    if platform.system() != "Darwin":
+        raise RuntimeError("UTM collection requires macOS")
+    path = Path.home() / "VirtualMachines" / (UTM_NAME + ".utm") / "config.plist"
+    config = plistlib.loads(path.read_bytes())
+    if config.get("Information", {}).get("UUID") != UTM_UUID or \
+            config.get("Information", {}).get("Name") != UTM_NAME:
+        raise RuntimeError("UTM config target mismatch")
+    sharing = config.get("Sharing", {})
+    if config.get("Network") != [] or sharing.get("ClipboardSharing") is not False or \
+            sharing.get("DirectoryShareMode") != "None":
+        raise RuntimeError("UTM config isolation required")
+
+
+def probe_program(case_name):
+    if case_name == "inventory":
+        return Path(__file__).read_bytes()
+    if case_name not in {"success", "failure"}:
+        raise ValueError("unknown UTM case")
+    # Delayed synthetic output tests both streams and real exit propagation.
+    # No shell, network, files, toolchain or identity access in either probe.
+    return ("import sys, time\n"
+            "time.sleep(1)\n"
+            f"print('I5_UTM_{case_name.upper()}:' + sys.argv[2])\n"
+            f"print('I5_UTM_{case_name.upper()}_STDERR:' + sys.argv[2], file=sys.stderr)\n"
+            f"raise SystemExit({17 if case_name == 'failure' else 0})\n").encode()
+
+
+def parse_execution(raw, nonce, case_name):
+    if len(raw) > MAX_TRANSPORT_BYTES:
+        raise ValueError("oversized UTM transport result")
+    try:
+        result = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object,
+                            parse_constant=reject_constant)
+    except RecursionError as exc:
+        raise ValueError("UTM result JSON nesting too deep") from exc
+    if not isinstance(result, dict) or type(result.get("schema_version")) is not int or \
+            result["schema_version"] != 1 or result.get("scope") != "utm-guest-execution":
+        raise ValueError("invalid UTM transport envelope")
+    if result.get("uuid") != UTM_UUID or result.get("nonce") != nonce or result.get("case_name") != case_name:
+        raise ValueError("UTM transport binding mismatch")
+    if result.get("exited") is not True:
+        raise ValueError("guest exit unconfirmed")
+    for field, maximum in (("exit_code", 255), ("signal_code", 255), ("polls", 10000)):
+        value = result.get(field)
+        if type(value) is not int or value < (1 if field == "polls" else 0) or value > maximum:
+            raise ValueError("missing or invalid UTM " + field)
+    streams = []
+    for field in ("stdout_base64", "stderr_base64"):
+        value = result.get(field)
+        if not isinstance(value, str):
+            raise ValueError("missing UTM stream: " + field)
+        decoded = base64.b64decode(value, validate=True)
+        if len(decoded) > MAX_RESULT_BYTES or base64.b64encode(decoded).decode() != value:
+            raise ValueError("oversized or noncanonical UTM stream: " + field)
+        streams.append(decoded)
+    return result, streams[0], streams[1]
+
+
+def verify_case(result, stdout, stderr, nonce, case_name):
+    if result["signal_code"] != 0:
+        raise ValueError("guest terminated by signal " + str(result["signal_code"]))
+    expected_exit = 17 if case_name == "failure" else 0
+    if result["exit_code"] != expected_exit:
+        raise ValueError(f"guest exit {result['exit_code']}; expected {expected_exit}")
+    if case_name == "inventory":
+        validate_result(stdout, nonce)
+        if stderr:
+            raise ValueError("unexpected inventory stderr; inspect preserved evidence")
+    elif stdout != f"I5_UTM_{case_name.upper()}:{nonce}\n".encode() or \
+            stderr != f"I5_UTM_{case_name.upper()}_STDERR:{nonce}\n".encode():
+        raise ValueError("synthetic output mismatch; inspect preserved evidence")
+
+
+def collect_utm(nonce, case_name):
+    """No VM lifecycle control; caller must shut down after success or failure."""
+    if re.fullmatch(r"[0-9a-f]{32}", nonce) is None:
+        raise ValueError("invalid nonce")
+    check_utm_config()
+    source = Path(__file__).resolve()
+    adapter = source.with_name("sw_i5_utm_result.js")
+    program = probe_program(case_name)
+    request = {"schema_version": 1, "uuid": UTM_UUID, "nonce": nonce,
+               "case_name": case_name, "program_base64": base64.b64encode(program).decode()}
+    root = source.parents[1] / ".tmp" / ("i5-guest-return-" + nonce)
+    # Reject redirected paths and prior attempts instead of overwriting evidence.
+    if root.resolve() != root:
+        raise ValueError("canonical local evidence path required")
+    evidence = root / case_name
+    evidence.mkdir(parents=True, exist_ok=False)
+    metadata = {"schema_version": 1, "uuid": UTM_UUID, "nonce": nonce, "case_name": case_name,
+                "program_sha256": hashlib.sha256(program).hexdigest(),
+                "adapter_sha256": hashlib.sha256(adapter.read_bytes()).hexdigest()}
+    (evidence / "input.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    argv = ["/usr/bin/osascript", "-l", "JavaScript", str(adapter), "--collect"]
+    try:
+        try:
+            completed = subprocess.run(argv, input=json.dumps(request).encode(), capture_output=True,
+                                       timeout=60, check=False)
+            output, diagnostic, code = completed.stdout, completed.stderr, completed.returncode
+            timed_out = False
+        except subprocess.TimeoutExpired as exc:
+            output, diagnostic, code = exc.stdout or b"", exc.stderr or b"", None
+            timed_out = True
+        # The adapter bounds each guest stream before serialization. Also cap
+        # retained transport diagnostics; truncation is failure, never success.
+        (evidence / "transport.stdout").write_bytes(output[:MAX_TRANSPORT_BYTES])
+        (evidence / "transport.stderr").write_bytes(diagnostic[:MAX_TRANSPORT_BYTES])
+        (evidence / "transport.json").write_text(json.dumps({"exit_code": code, "timeout": timed_out,
+            "stdout_bytes": len(output), "stderr_bytes": len(diagnostic)}) + "\n")
+        if timed_out:
+            raise RuntimeError("UTM result timeout; guest completion unknown; shut down VM")
+        if code != 0:
+            raise RuntimeError(f"UTM adapter exit {code}; inspect {evidence / 'transport.stderr'}; shut down VM")
+        if diagnostic:
+            raise RuntimeError("unexpected UTM adapter stderr; inspect evidence; shut down VM")
+        result, stdout, stderr = parse_execution(output, nonce, case_name)
+        (evidence / "guest.stdout").write_bytes(stdout)
+        (evidence / "guest.stderr").write_bytes(stderr)
+        (evidence / "execution.json").write_text(json.dumps(result, indent=2) + "\n")
+        check_utm_config()
+        verify_case(result, stdout, stderr, nonce, case_name)
+        return result
+    except (OSError, ValueError, RuntimeError) as exc:
+        try:
+            (evidence / "failure.txt").write_text(str(exc) + "\n")
+        except OSError as diagnostic_error:
+            raise RuntimeError(f"{exc}; failure evidence write failed: {diagnostic_error}") from exc
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nonce", required=True)
-    parser.add_argument("--validate-result", action="store_true",
-                        help="validate guest JSON from stdin locally; does not inspect this host")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--validate-result", action="store_true",
+                      help="validate guest JSON from stdin locally; does not inspect this host")
+    mode.add_argument("--collect-utm", choices=("success", "failure", "inventory"),
+                      help="authorized macOS collection from the already-running isolated VM; never starts/stops it")
     args = parser.parse_args()
     if re.fullmatch(r"[0-9a-f]{32}", args.nonce) is None:
         parser.error("nonce must be 32 lowercase hex characters")
     try:
-        if args.validate_result:
+        if args.collect_utm:
+            result = collect_utm(args.nonce, args.collect_utm)
+            print(json.dumps(result, sort_keys=True))
+            return result["exit_code"]
+        elif args.validate_result:
             validate_result(sys.stdin.buffer.read(MAX_RESULT_BYTES + 1), args.nonce)
             print("I5_GUEST_INVENTORY_VALID: inventory only; I5 remains stopped")
         else:

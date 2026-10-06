@@ -6,11 +6,13 @@ import sys
 sys.dont_write_bytecode = True
 
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
+import base64
 import importlib.util
 import io
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -164,6 +166,215 @@ class InventoryTests(unittest.TestCase):
                 guest.main()
         self.assertEqual(error.exception.code, 2)
         probe.assert_not_called()
+
+
+class UTMResultTests(unittest.TestCase):
+    def envelope(self, case_name="success", stdout=None, stderr=None, code=None):
+        return {
+            "schema_version": 1, "scope": "utm-guest-execution", "uuid": guest.UTM_UUID,
+            "nonce": NONCE, "case_name": case_name, "exited": True,
+            "exit_code": (17 if case_name == "failure" else 0) if code is None else code,
+            "signal_code": 0, "polls": 5,
+            "stdout_base64": base64.b64encode(
+                f"I5_UTM_{case_name.upper()}:{NONCE}\n".encode() if stdout is None else stdout).decode(),
+            "stderr_base64": base64.b64encode(
+                f"I5_UTM_{case_name.upper()}_STDERR:{NONCE}\n".encode() if stderr is None else stderr).decode(),
+        }
+
+    def decode(self, value, case_name="success"):
+        return guest.parse_execution(json.dumps(value).encode(), NONCE, case_name)
+
+    def test_both_streams_and_exit_17_preserved(self):
+        for case_name in ("success", "failure"):
+            result, stdout, stderr = self.decode(self.envelope(case_name), case_name)
+            guest.verify_case(result, stdout, stderr, NONCE, case_name)
+            self.assertEqual(result["exit_code"], 17 if case_name == "failure" else 0)
+            self.assertIn(NONCE.encode(), stdout)
+            self.assertIn(NONCE.encode(), stderr)
+
+    def test_inventory_reuses_existing_validation(self):
+        inventory = InventoryTests().collect()
+        value = self.envelope("inventory", stdout=json.dumps(inventory).encode(), stderr=b"")
+        result, stdout, stderr = self.decode(value, "inventory")
+        guest.verify_case(result, stdout, stderr, NONCE, "inventory")
+        inventory["nonce"] = "b" * 32
+        with self.assertRaisesRegex(ValueError, "nonce mismatch"):
+            guest.verify_case(result, json.dumps(inventory).encode(), stderr, NONCE, "inventory")
+
+    def test_empty_and_partial_output_never_passes(self):
+        for case_name in ("success", "failure", "inventory"):
+            for stdout in (b"", b"{", b"unrelated"):
+                value = self.envelope(case_name, stdout=stdout, stderr=b"")
+                result, out, err = self.decode(value, case_name)
+                with self.subTest(case_name=case_name, stdout=stdout), self.assertRaises(ValueError):
+                    guest.verify_case(result, out, err, NONCE, case_name)
+
+    def test_bad_execution_fields_rejected(self):
+        good = self.envelope()
+        for key, value in (("schema_version", True), ("schema_version", 2), ("scope", "other"),
+                           ("uuid", "other"), ("nonce", "b" * 32), ("case_name", "failure"),
+                           ("exited", False), ("exited", 1), ("exit_code", False),
+                           ("exit_code", -1), ("exit_code", 256), ("signal_code", None),
+                           ("polls", 0), ("stdout_base64", None), ("stderr_base64", 0)):
+            with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                self.decode({**good, key: value})
+        for key in good:
+            value = dict(good)
+            del value[key]
+            with self.subTest(missing=key), self.assertRaises(ValueError):
+                self.decode(value)
+
+    def test_invalid_json_and_base64_rejected(self):
+        for raw in (b"", b"[]", b"\xff", b'{"schema_version":1,"schema_version":1}',
+                    b'{"n":NaN}', b"[" * 2000 + b"]" * 2000,
+                    b" " * (guest.MAX_TRANSPORT_BYTES + 1)):
+            with self.subTest(raw=raw[:30]), self.assertRaises(ValueError):
+                guest.parse_execution(raw, NONCE, "success")
+        for stream in ("!", "eA", "eA==\n", "eB==",
+                       base64.b64encode(b"a" * (guest.MAX_RESULT_BYTES + 1)).decode()):
+            with self.subTest(stream=stream[:20]), self.assertRaises(ValueError):
+                self.decode({**self.envelope(), "stdout_base64": stream})
+
+    def test_guest_failure_signal_and_unexpected_stderr_rejected(self):
+        for change, reason in (({"exit_code": 4}, "guest exit 4"), ({"signal_code": 15}, "signal 15")):
+            result, stdout, stderr = self.decode({**self.envelope(), **change})
+            with self.assertRaisesRegex(ValueError, reason):
+                guest.verify_case(result, stdout, stderr, NONCE, "success")
+        value = self.envelope("inventory", stdout=json.dumps(InventoryTests().collect()).encode(), stderr=b"unexpected")
+        result, stdout, stderr = self.decode(value, "inventory")
+        with self.assertRaisesRegex(ValueError, "unexpected inventory stderr"):
+            guest.verify_case(result, stdout, stderr, NONCE, "inventory")
+
+    def test_config_refuses_wrong_target_or_enabled_sharing(self):
+        good = {"Information": {"UUID": guest.UTM_UUID, "Name": guest.UTM_NAME},
+                "Network": [], "Sharing": {"ClipboardSharing": False, "DirectoryShareMode": "None"}}
+        with patch.object(guest.platform, "system", return_value="Darwin"), \
+                patch.object(Path, "read_bytes", return_value=guest.plistlib.dumps(good)):
+            guest.check_utm_config()
+        for field, value in (("Information", {"UUID": "other"}), ("Network", [{}]),
+                             ("Sharing", {"ClipboardSharing": True, "DirectoryShareMode": "None"}),
+                             ("Sharing", {"ClipboardSharing": False, "DirectoryShareMode": "VirtFS"})):
+            with patch.object(guest.platform, "system", return_value="Darwin"), \
+                    patch.object(Path, "read_bytes", return_value=guest.plistlib.dumps({**good, field: value})):
+                with self.assertRaises(RuntimeError):
+                    guest.check_utm_config()
+        with patch.object(guest.platform, "system", return_value="Linux"), \
+                patch.object(Path, "read_bytes") as read:
+            with self.assertRaisesRegex(RuntimeError, "requires macOS"):
+                guest.check_utm_config()
+            read.assert_not_called()
+
+    def collector_fixture(self, directory, case_name="success"):
+        source = Path(directory).resolve() / "scripts" / "inspect-sw-i5-guest.py"
+        source.parent.mkdir()
+        source.write_bytes(b"fixture inventory source\n")
+        source.with_name("sw_i5_utm_result.js").write_bytes(b"fixture adapter source\n")
+        evidence = source.parents[1] / ".tmp" / ("i5-guest-return-" + NONCE) / case_name
+        return source, evidence
+
+    def test_collector_executes_once_and_preserves_evidence(self):
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-return.") as directory:
+            source, evidence = self.collector_fixture(directory)
+            response = subprocess.CompletedProcess([], 0, json.dumps(self.envelope()).encode(), b"")
+            with patch.object(guest, "__file__", str(source)), \
+                    patch.object(guest, "check_utm_config") as check, \
+                    patch.object(guest.subprocess, "run", return_value=response) as run:
+                result = guest.collect_utm(NONCE, "success")
+                self.assertEqual(check.call_count, 2)
+                run.assert_called_once()
+                self.assertEqual(run.call_args.args[0][0], "/usr/bin/osascript")
+                self.assertEqual(run.call_args.kwargs["timeout"], 60)
+                request = json.loads(run.call_args.kwargs["input"])
+                self.assertEqual(base64.b64decode(request["program_base64"]), guest.probe_program("success"))
+                self.assertEqual(json.loads((evidence / "execution.json").read_text()), result)
+                self.assertEqual((evidence / "guest.stdout").read_bytes(), f"I5_UTM_SUCCESS:{NONCE}\n".encode())
+                with self.assertRaises(FileExistsError):
+                    guest.collect_utm(NONCE, "success")
+                run.assert_called_once()
+
+    def test_collector_timeout_records_partial_evidence_no_retry(self):
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-return.") as directory:
+            source, evidence = self.collector_fixture(directory)
+            timeout = subprocess.TimeoutExpired("fixture osascript", 60, output=b"partial", stderr=b"timeout detail")
+            with patch.object(guest, "__file__", str(source)), patch.object(guest, "check_utm_config"), \
+                    patch.object(guest.subprocess, "run", side_effect=timeout) as run:
+                with self.assertRaisesRegex(RuntimeError, "completion unknown"):
+                    guest.collect_utm(NONCE, "success")
+                run.assert_called_once()
+            self.assertTrue(json.loads((evidence / "transport.json").read_text())["timeout"])
+            self.assertEqual((evidence / "transport.stdout").read_bytes(), b"partial")
+            self.assertEqual((evidence / "transport.stderr").read_bytes(), b"timeout detail")
+            self.assertTrue((evidence / "failure.txt").exists())
+
+    def test_transport_failure_and_empty_return_preserved(self):
+        for code, stdout, stderr in ((1, b"", b"fixture event failure"), (0, b"", b""),
+                                    (0, b"{}", b"fixture unexpected diagnostic")):
+            with tempfile.TemporaryDirectory(prefix="radishlink-i5-return.") as directory:
+                source, evidence = self.collector_fixture(directory)
+                with patch.object(guest, "__file__", str(source)), patch.object(guest, "check_utm_config"), \
+                        patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], code, stdout, stderr)) as run:
+                    with self.assertRaises((RuntimeError, ValueError)):
+                        guest.collect_utm(NONCE, "success")
+                    run.assert_called_once()
+                self.assertEqual((evidence / "transport.stdout").read_bytes(), stdout)
+                self.assertEqual((evidence / "transport.stderr").read_bytes(), stderr)
+
+    def test_cli_preserves_expected_nonzero_guest_exit(self):
+        with patch.object(sys, "argv", ["probe", "--nonce", NONCE, "--collect-utm", "failure"]), \
+                patch.object(guest, "collect_utm", return_value=self.envelope("failure")), \
+                redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(guest.main(), 17)
+        self.assertEqual(json.loads(output.getvalue())["exit_code"], 17)
+
+    def test_no_collection_before_config_or_nonce_checks(self):
+        with patch.object(guest.subprocess, "run") as run, patch.object(guest, "check_utm_config") as check:
+            with self.assertRaises(ValueError):
+                guest.collect_utm("bad", "success")
+            check.assert_not_called()
+            check.side_effect = RuntimeError("fixture config rejection")
+            with self.assertRaisesRegex(RuntimeError, "config rejection"):
+                guest.collect_utm(NONCE, "success")
+            run.assert_not_called()
+
+
+    def test_post_collection_config_change_rejects_preserved_result(self):
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-return.") as directory:
+            source, evidence = self.collector_fixture(directory)
+            response = subprocess.CompletedProcess([], 0, json.dumps(self.envelope()).encode(), b"")
+            with patch.object(guest, "__file__", str(source)), \
+                    patch.object(guest, "check_utm_config", side_effect=[None, RuntimeError("fixture isolation changed")]), \
+                    patch.object(guest.subprocess, "run", return_value=response):
+                with self.assertRaisesRegex(RuntimeError, "isolation changed"):
+                    guest.collect_utm(NONCE, "success")
+            self.assertTrue((evidence / "execution.json").exists())
+            self.assertIn("isolation changed", (evidence / "failure.txt").read_text())
+
+    def test_evidence_write_failure_preserves_original_error(self):
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-return.") as directory:
+            source, _ = self.collector_fixture(directory)
+            write_text = Path.write_text
+
+            def write(path, *args, **kwargs):
+                if path.name == "failure.txt":
+                    raise OSError("fixture diagnostic disk full")
+                return write_text(path, *args, **kwargs)
+
+            with patch.object(guest, "__file__", str(source)), patch.object(guest, "check_utm_config"), \
+                    patch.object(Path, "write_text", write), \
+                    patch.object(guest.subprocess, "run", side_effect=OSError("fixture launch error")):
+                with self.assertRaisesRegex(RuntimeError, "fixture launch error;.*fixture diagnostic disk full"):
+                    guest.collect_utm(NONCE, "success")
+
+    def test_oversized_transport_keeps_bounded_failure_evidence(self):
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-return.") as directory:
+            source, evidence = self.collector_fixture(directory)
+            output = b"x" * (guest.MAX_TRANSPORT_BYTES + 1)
+            with patch.object(guest, "__file__", str(source)), patch.object(guest, "check_utm_config"), \
+                    patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, output, b"")):
+                with self.assertRaisesRegex(ValueError, "oversized UTM transport"):
+                    guest.collect_utm(NONCE, "success")
+            self.assertEqual((evidence / "transport.stdout").stat().st_size, guest.MAX_TRANSPORT_BYTES)
+            self.assertEqual(json.loads((evidence / "transport.json").read_text())["stdout_bytes"], len(output))
 
 
 if __name__ == "__main__":

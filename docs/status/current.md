@@ -8,7 +8,7 @@
 
 本页只保存当前结论、关键风险、下一项决策与停止线。历史 run、hash、失败时间线和当时授权见[2026-09-03 状态与批次快照](2026-09-03-progress.md)及对应测试专题；I1 算法、I2 有界读写与 I3 合成持久路径均完成离线验证，不重判历史结果，不代表重新执行正式实验或复核远程配置。
 
-I1–I5-I 已提交并通过有限离线验证。2026-10-01 完成 I5 入口停止、证据/诊断计费、Linux 容量域探测及受限双构建 helper；后两者尚未接入运行入口，真实环境与 daemon 隔离未完成。整批预算仍为 768 MiB。已复制专用 UTM `RadishLink-I5-Debian13-ARM64`，最后运行状态记录为关机，四个容量域未创建。2026-10-06 接续完成盘点脚本的拒绝路径修正、宿主返回校验和 12 项离线回归；只读配置核对仍有 Shared 网络、剪贴板和目录共享，未启动或修改 VM。下一步为提交经复核的脚本并取得[首次盘点操作包](../testing/sw-g4-synthetic-i5-resource-isolation.md#首次-guest-盘点操作包2026-10-06-复核待授权)的精确授权；guest 环境事实仍未知，环境验收前继续禁止 I5-R。
+I1–I5-I 已提交并通过有限离线验证。2026-10-01 完成 I5 入口停止、证据/诊断计费、Linux 容量域探测及受限双构建 helper；后两者尚未接入运行入口，真实环境与 daemon 隔离未完成。整批预算仍为 768 MiB。2026-10-06 盘点脚本修正及 12 项离线回归提交为 `3a346af`；获准后已移除专用 UTM `RadishLink-I5-Debian13-ARM64` 的网卡、关闭剪贴板/目录共享，并启动一次尝试盘点。`utmctl exec` 返回 0 但 stdout/stderr 均为空，宿主校验退出 2，因此盘点失败、guest 环境事实仍未知。目标已正常关机，其他 8 台 VM 状态不变；四个容量域未创建。首次失败记录见[盘点结果](../testing/sw-g4-synthetic-i5-resource-isolation.md#首次-guest-盘点执行结果2026-10-06)。随后已在原盘点入口接入 UTM 官方进程接口的宿主回收适配层，24 项 JXA 合成用例及 27 项 Python 回归通过；只证明离线行为，尚未通过真实接口收集结果。下一步按[受限实测操作包](../testing/sw-g4-synthetic-i5-resource-isolation.md#宿主结果回收适配层与受限实测包2026-10-06)先确认提交及一次新的运行授权；不自动重跑，环境验收前继续禁止 I5-R。
 
 ## 已确定的产品与工程基线
 
@@ -52,7 +52,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 1. 按已确认的熟人小队、上海、整套 2000 元和文字/语音优先范围，补齐使用条件、复用设备及地区合规路径；不承诺预算可行性或日期。
 2. 形成按实际渠道区分的许可证政策评审输入，分别处置 `debug_tree` 与 `r-efi`；保留全部现行 STOP 和 R2 条件。
 3. 收敛 Node/手机身份、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)完成专用 Linux 环境操作包、受限构建运行接入与 daemon/store 计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
+4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)先处理首次盘点的结果回收失败，再完成专用 Linux 环境操作包、受限构建运行接入与 daemon/store 计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
 5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成硬件复用及能量/体积/成本预算；I4 本轮未修改 CI。
 
 ## 关键风险
@@ -66,7 +66,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前停止线
 
-- I5 shell preflight/run 与直接 Go synthetic-run 均因缺少整批资源隔离而停止；不绕过停止检查、先在域外构建或自动调整共享 daemon。环境准备需另行精确授权，离线拒绝回归不构成资源修复完成或 I5-R 放行。
+- 首次 guest 盘点的一次授权已执行并因空返回失败，不能继承为再次启动/重跑授权。I5 shell preflight/run 与直接 Go synthetic-run 均因缺少整批资源隔离而停止；不绕过停止检查、先在域外构建或自动调整共享 daemon。环境准备需另行精确授权，离线拒绝回归不构成资源修复完成或 I5-R 放行。
 - 不采购 HaLow、不射频发射、不做量产 PCB、不冻结生产技术栈；`HW-G2` 前不采购，`HW-G3` 前不刷写或启动实体台架，无线操作另受 `RF-R*` 约束。
 - OpenMLS 两个固定图的 Phase B 禁止；mls-rs D2 的 `PASS` 不授权 Phase B。许可证证据轨和 R2 未完成，`SW-G2` 未通过。
 - 不自动第四次运行 R1、不扩展 selector、不补写或重判 R1c evidence、不改 gate/allowlist/advisory ignore、版本、provider、source 或 lockfile；新证据与策略变更须另行明确范围。

@@ -213,9 +213,9 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 
 **剩余边界**：副本继承 Shared 网络和原 MAC；guest 内的 machine-id、SSH host key、实际 Debian/内核、Landlock ABI、Go/Python/Docker 与 guest agent 状态均未检查。首次启动前应明确网络隔离和克隆身份处理。四个容量域尚未创建，批次资源硬限额、宿主 backing/环境日志归属及 I5-R 验收均未通过。下一步仅为该副本的 guest 盘点与精确准备包；本次授权不包含启动或安装。
 
-## 首次 guest 盘点操作包（2026-10-06 复核，待授权）
+## 首次 guest 盘点操作包（2026-10-06，一次授权已执行）
 
-副本准备记录已提交为 `40a588c`。2026-10-01 晚所有者要求停止推进，当时仅准备本地未跟踪草稿并完成语法、帮助及 macOS 拒绝检查。2026-10-06 所有者要求接续开发，本轮复核并修正[盘点脚本](../../scripts/inspect-sw-i5-guest.py)，增加[离线回归](../../scripts/test_sw_i5_guest.py)。脚本与本次文档尚未提交，实际启动前仍需提交并取得本包精确授权；本轮开发指令不自动授权 VM 设置与启动。
+副本准备记录已提交为 `40a588c`。2026-10-01 晚所有者要求停止推进，当时仅准备本地未跟踪草稿并完成语法、帮助及 macOS 拒绝检查。2026-10-06 所有者要求接续开发，本轮复核并修正[盘点脚本](../../scripts/inspect-sw-i5-guest.py)，增加[离线回归](../../scripts/test_sw_i5_guest.py)。该实施包随后提交为 `3a346af`。所有者审阅精确目标、副作用、时间和关机/强制停止范围后确认执行；一次授权已使用，以下为当次操作合同，结果见本页末，不再作为待执行或可重复授权。
 
 本包只针对 UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`、`~/VirtualMachines/RadishLink-I5-Debian13-ARM64.utm`，预计 5–10 分钟。先复核 UUID、路径及 stopped 状态，通过 UTM 原生设置移除全部网卡、关闭剪贴板和目录共享，保存后读取配置核验，再启动一次。保留源 VM 及其他 VM 状态。此变更将持久修改该副本配置；启动和关机会写系统盘日志，不属于 768 MiB 批次实测。配置失败则不启动；本包结束保留隔离设置，不自动恢复 Shared 网络。
 
@@ -233,7 +233,7 @@ guest agent 或 Python 不可用时保留具体错误并关机，不临时安装
 
 本地验证：脚本语法解析通过；`--help` 退出 0；macOS 上传入合法 nonce 时按预期退出 2，报告 `Linux guest required`。这不证明 guest agent、Linux 内核或实际工具可用；实际执行结果待授权后补充。
 
-### 2026-10-06 操作与返回校验补充
+### 2026-10-06 操作与返回校验补充（当次合同）
 
 1. 执行前用 `utmctl list`、`utmctl status B86E1A47-9A67-4ECF-A51F-2B2F29CDB726` 核对目标及全部 VM 状态；目标必须 stopped。只读解析目标 `config.plist`，仅输出 Name、UUID、网络模式与共享开关白名单，不输出 Notes、MAC、登录信息或完整配置。2026-10-06 本轮已核对 Name/UUID 与目标相符、网络为 Shared、剪贴板为 true、目录共享为 VirtFS；未核验实时运行状态。
 2. 本包获准后，打开 UTM，使用该副本的原生设置移除全部网卡、关闭剪贴板及目录共享。保存后重新解析配置，要求 Network 为空、ClipboardSharing 为 false、DirectoryShareMode 为 None；不满足则不启动，不猜测其他配置值可等价放行。不改源 VM、其他副本、身份文件或系统权限。
@@ -247,7 +247,7 @@ python3 -B scripts/inspect-sw-i5-guest.py --validate-result --nonce <nonce> < .t
 
 6. 不论盘点成功或失败，均对同一 UUID 请求正常关机，每次最多间隔 30 秒复查，共等至 120 秒；本包单独包含获准后的超时 `utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --force` 一次，记录非正常关机风险（系统盘可能未完成写回），不用 `--kill`。最后复核目标 stopped 与其他 VM 状态；失败则明确报告，不删除副本。保持新隔离设置，恢复原 Shared 网络/共享须另行授权。
 
-本包预计 5–10 分钟，副作用为持久修改目标配置及启动/关机日志写入；不安装工具、不修改 machine-id/SSH key、不创建容量域、不启动构建/daemon/I5-R。执行前请求将本轮脚本、回归和相应文档作为一个本地提交保存，再执行上述范围；commit 不包含 push。若未获外部操作授权，本轮交付止于离线实现与可审阅操作包。
+本包原预计 5–10 分钟，副作用为持久修改目标配置及启动/关机日志写入；不安装工具、不修改 machine-id/SSH key、不创建容量域、不启动构建/daemon/I5-R。当次获准先提交脚本、回归和相应文档，再执行上述范围；commit 不包含 push。后续结果记录不扩大这次单次运行授权。
 
 ### 2026-10-06 离线复核记录
 
@@ -255,4 +255,83 @@ python3 -B scripts/inspect-sw-i5-guest.py --validate-result --nonce <nonce> < .t
 - 增加同一脚本的 `--validate-result` 宿主模式，不新建另一套运行入口；不修改 I5 合同、profile、schema 1/2/3 或资源额度。
 - `python3 -B scripts/test_sw_i5_guest.py`：12 项合成回归通过，覆盖完整采集与身份内容保护、网卡前置/结束拒绝、读取异常、非 Linux 拒绝、包缺失/失败/超时、返回封装负例、CLI 非零退出和宿主校验不调用探测。测试注入平台/文件系统/包查询，不执行 VM、真实 dpkg、Go/Docker 或 Landlock。
 - `--help` 退出 0；本机 macOS 直接盘点按预期退出 2（`Linux guest required`）。`./scripts/check-repo.sh` 通过（185 文件），`git diff --check` 通过。未改 Go 代码，未重跑 Go 套件或历史正式实验。
-- 实际 Linux 盘点、VM 启停、工具安装、容量域创建、构建与 I5-R 均未执行；guest 事实与环境验收保持未知。未改远程状态，无本轮后台进程。
+- 上述离线复核完成时，VM 启停等外部操作尚未执行；随后单次获准操作见下节，离线通过不替代其失败结果。
+
+## 首次 guest 盘点执行结果（2026-10-06）
+
+**结论：盘点失败，结果回收未通过；VM 已正常关机，I5-R 仍停止。** 所有者确认后先提交 5 个文件为 `3a346af`，再按当次合同启动一次、发起一次盘点。没有自动重跑，不能以 CLI 的退出 0 推断 guest 完成或环境就绪。
+
+| 项目 | 实际证据与结论 |
+| --- | --- |
+| 目标与基线 | UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`，名称/路径与合同一致；初始共 9 台 VM，全部 stopped |
+| 隔离配置 | UTM 原生设置移除唯一网卡；最终 `Network=[]`、`ClipboardSharing=false`、`DirectoryShareMode=None`。配置保存后、启动前及关机后均复查；不从 UI 选中状态直接推导落盘成功 |
+| 工具 | 本机 UTM `4.7.5 (118)`，`utmctl` 指向应用自带二进制；未更新或安装 |
+| 启动 | `utmctl start ... --hide` 退出 0，等待 30 秒后发起一次盘点 |
+| 盘点 | `utmctl exec ... --input --cmd /usr/bin/python3 -I -B - --nonce ...` 退出 0，stdout 和 stderr 均为 0 bytes；无法确认 guest 脚本完成或其真实退出码 |
+| 返回校验 | 宿主 `--validate-result` 退出 2，`I5_GUEST_INVENTORY_FAILED: Expecting value: line 1 column 1 (char 0)`；没有取得可接受 JSON、nonce 或任何内核/工具/容量事实 |
+| 关机 | 无论失败均执行 `utmctl stop ... --request`，退出 0；首次状态为 started，约 30 秒后的下一次为 stopped；未调用 force/kill |
+| 最终状态 | 全部 9 台 VM 的 UUID/name/status 清单与基线逐字一致；目标保留隔离配置，其他 VM 未操作。宿主控制脚本退出 2，无遗留批次进程；UTM 桌面应用保留打开 |
+| 未执行 | 依赖安装、身份重建、容量域创建、构建、daemon、I5-R、远程写入均未发生；环境精确准备包仍缺有效 guest 盘点 |
+
+本地忽略证据目录为 `.tmp/i5-guest-inventory-f4ff9922a903d2b5d2b59c59a2ba8713/`，保留控制脚本、命令/退出码、stdout/stderr、配置白名单、运行前后清单及 `result.json`；不将完整 VM 配置或登录信息复制进证据文件。盘点脚本 SHA-256 为 `0517094f18759c930548655a54980622fd082b254a01d93b0286ce5eab6b36f9`，宿主单次控制脚本为 `5b8d505b81fd0bee11b8dea30516ec25e6551fa1d0302f3a0fe2ee95cc20575e`；隔离完成至关机后的配置 SHA-256 保持 `6c70116bf220ec2b5fbaa13fdcf2806c06c85f82939335b3bd16e8565d9132dc`。这些是准备操作证据，不计作 I5 批次验收。
+
+保留的失败与中间状态：沙盒内 Python 包装的首次 `utmctl list` 未返回输出，包装因断言退出 1，当时未保存子进程退出码；沙盒外同目的只读复验退出 0。`utmctl start/stop --help` 在沙盒内均退出 134、无输出，沙盒外同命令复验退出 0。UI 首轮未保存修改、后续一次保存仍读到 VirtFS，均未启动；重新打开确认并保存后才满足三项配置条件。最后的盘点空返回是独立失败，不能被此前成功复验覆盖。
+
+### 结果回收诊断与下一步
+
+只读核对本机 `UTM.sdef` 可见结果属性名为 `exited`，其 Cocoa key 为 `hasExited`。上游 [v4.7.5 的 Exec 实现](https://github.com/utmapp/UTM/blob/v4.7.5/utmctl/UTMCtl.swift#L437-L485) 使用 `result["hasExited"]` 轮询，并把缺失的退出码默认为 0；[官方脚本接口](https://docs.getutm.app/scripting/reference/#execute-result)提供进程对象及结果读取。[上游问题 #7932](https://github.com/utmapp/UTM/issues/7932)报告这一字段差异导致提前返回空输出。安装版本、静态代码与本次现象吻合，因此**宿主过早回收结果是有依据的候选根因**；本轮未通过另一执行通道取得真实 guest 结果，不能写成已在本机证明根因或 guest 无故障。
+
+下一工作包先收敛宿主结果回收方式：保留同一个 guest 进程句柄，显式等待 `exited=true`，要求真实退出码及完整 stdout/stderr，保留 60 秒上限和现有 JSON/nonce 校验；先用离线用例覆盖尚未退出、缺失字段、超时、非零退出和空返回。具体通道及精确命令另行审阅，不修改系统安装的 UTM、不把延长启动等待当作修复、不自动退回网络/共享或 guest 落盘方案。再次启动/执行需要新的明确范围；现有授权已消费。有效盘点之前，不猜测工具缺失、设备号、Landlock ABI 或四个容量域的可行性。
+
+
+## 宿主结果回收适配层与受限实测包（2026-10-06）
+
+状态：所有者要求实施下一工作包；宿主适配及离线验证已完成，尚未提交或运行真实 UTM 接口。既有四份结果文档的未提交内容保留并接续更新。首次盘点失败结论不变；该节不重新授权已消费的运行，也不开放 I5-R。
+
+### 实现与证据边界
+
+- 沿用 [inspect-sw-i5-guest.py](../../scripts/inspect-sw-i5-guest.py)，增加 macOS `--collect-utm success|failure|inventory` 模式；原 guest 采集与 `--validate-result` 语义不变，新增参数互斥。宿主执行前后只读核对精确 VM 名称/UUID、无网卡、剪贴板关闭和目录共享 None；配置不符即拒绝。
+- [sw_i5_utm_result.js](../../scripts/sw_i5_utm_result.js) 是该入口的单一 UTM 适配层。使用系统 `/usr/bin/osascript -l JavaScript`（JXA）调用 UTM 官方进程接口，不替换 UTM 二进制、不新增第三方依赖，也不通过 UI 输入命令。源码按本机 `UTM.sdef`、[UTM 脚本接口](https://docs.getutm.app/scripting/reference/)与 [Apple JXA 文档](https://developer.apple.com/library/archive/releasenotes/InterapplicationCommunication/RN-JavaScriptForAutomation/Articles/OSX10-10.html)独立编写；无复制上游实现。
+- 仅选择 UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`，要求其已经 started；一次 `execute` 返回的进程句柄供后续全部 `getResult` 使用，每 250 ms 查询，明确等待布尔 `exited=true`。缺失字段、错类型及事件错误直接失败，不改读 `hasExited`、不重发 execute、不默认退出码 0。
+- JXA 内部使用单调时钟，总限时 55 秒，结果查询事件单次最多 5 秒；Python 外层 `subprocess.run` 用 60 秒上限覆盖 JXA 启动及阻塞事件，并负责终止/等待宿主子进程。终止宿主适配器**不证明 guest 进程结束**；外层当次操作必须进入 VM 关机收尾，不能继续下一命令。
+- 结果包含真实 exit/signal、同次 nonce/case/UUID、轮询次数和 base64 双输出。每条 guest 输出最多 128 KiB，缺失流、错误 base64、错误绑定或未确认退出均拒绝；对传输 stdout/stderr 各保留最多 512 KiB，超过上限保留原长度并失败。这里是返回/证据限额，不是 JXA/UTM 的 RSS 硬隔离，也不属于 I5 的 768 MiB 批次环境验收。
+- 正常回收后保留 exit 17 等非零结果；成功/失败合成探针分别要求 stdout/stderr 中的精确 nonce 标记和退出 0/17。`failure` 用例确认通过时，宿主入口仍退出 17，不能通过默认 0 掩盖。inventory 仅在 guest exit 0、无异常 stderr 且既有 JSON 校验通过后接受。
+- 自动保存到仓库忽略目录 `.tmp/i5-guest-return-<nonce>/<case>/`：输入源/适配层 SHA-256、传输退出码/超时、原始双输出、解析后的执行记录、guest 双输出和失败原因。拒绝同 nonce/case 重复目录及路径重定向，不覆盖旧证据；诊断写入失败同时保留原始原因。此目录只供准备证据，不代表正式实验产物。
+
+### 离线验证
+
+```bash
+python3 -B scripts/test_sw_i5_guest.py
+osascript -l JavaScript scripts/sw_i5_utm_result.js --self-test
+python3 -B scripts/inspect-sw-i5-guest.py --help
+```
+
+- Python 27 项回归通过：包含原 12 项，以及真实非零退出保留、双流与 nonce 校验、空/部分/超限返回、signal、配置隔离、证据保留/不覆盖、超时不重发、诊断写失败和 CLI exit 17。
+- JXA 24 项合成用例通过：同一进程句柄等待、执行一次、缺字段/错类型、退出码/signal、超时、迟到结果、事件错误、停止 VM 拒绝，以及原生适配方法的对象/参数绑定。
+- `--help` 退出 0；`./scripts/check-repo.sh` 通过（186 文件），`git diff --check` 通过。没有修改 Go 代码、原 I5 profile 或实验合同，未重跑无关 Go 套件。
+- `--self-test` 分支只运行纯 JavaScript 与假应用对象，不调用 `Application`、`ObjC` 或 UTM。Python 测试只使用合成临时目录及注入子进程结果，不执行真实 `osascript --collect`、guest 命令或 VM 操作。
+- 这些结果不证明 macOS 自动化权限、JXA 与实际 UTM 记录的映射或 guest 可用。真实成功/失败探针尚未运行，不能将候选根因改判为已经实证修复。
+
+### 待确认的一次受限实测
+
+目标仍为同一专用 VM，保持现有网络/共享隔离；预计 5–10 分钟。拟先本地提交本工作包（代码及接续结果文档，不 push），再固定新 revision、guest/适配层/控制脚本 hash 和本次新 nonce。启动前核验 UUID、配置及 stopped，并保存全部 VM 的状态清单。若配置不符，不修改或启动。
+
+```text
+utmctl list
+utmctl status B86E1A47-9A67-4ECF-A51F-2B2F29CDB726
+utmctl start B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --hide
+python3 -B scripts/inspect-sw-i5-guest.py --collect-utm success --nonce <nonce>
+python3 -B scripts/inspect-sw-i5-guest.py --collect-utm failure --nonce <nonce>
+python3 -B scripts/inspect-sw-i5-guest.py --collect-utm inventory --nonce <nonce>
+utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --request
+```
+
+精确执行条件：
+
+1. 启动一次后等待 30 秒，再调用 success；该合成程序只等待 1 秒、向 stdout/stderr 打印绑定 nonce 的标记并退出 0，不访问文件、身份或网络。宿主执行退出 0 且记录满足约定才继续。
+2. failure 同样只等待 1 秒、输出两条合成标记，随后退出 17；**宿主退出 17 且 `execution.json` 的 exited/exit/signal/nonce/双流均正确**才算该负例通过。其他退出或缺证据均停止，不把任何非零退出笼统当作预期失败。
+3. 前两项通过后，才执行一次现有 guest inventory（`/usr/bin/python3 -I -B - --nonce <nonce>`，源码经 stdin 传入）；保留原只读范围和全部校验。不继续使用本次已知可能提前返回的 `utmctl exec`，不用延长 sleep 代替可靠结果回收。每项最多一次，最多共三次 guest execute，不自动重试、不加额外探针。
+4. 宿主控制必须使用 finally 收尾：成功、失败、权限拒绝或超时均请求同一 VM 正常关机；每次最多间隔 30 秒复查，等至 120 秒仍未 stopped 时才使用本包待批准的同一 UUID `utmctl stop ... --force` 一次；最后核对 stopped 和其他 VM 状态，不使用 kill。强制停止存在未完成写回风险。
+5. 失败保留证据，停止后续 case。若系统提示新的自动化权限，停在提示处由用户确认，不自动授予权限或换通道。JXA 不负责关闭 VM，也不假装超时已取消 guest 工作。
+
+该次副作用仅为启动/关机系统日志及宿主准备证据；不改 VM 配置、不开放网络/共享、不安装/更新工具、不改身份、不写 guest 脚本文件、不建容量域、不构建、不启动 daemon/I5-R、不修改源 VM 或其他 VM。收尾保留隔离配置和失败证据。取得有效盘点后，再据实际内核、工具和设备资料准备四个容量域与 daemon 接入的下一操作包，不从本次结果直接授权那些操作。
