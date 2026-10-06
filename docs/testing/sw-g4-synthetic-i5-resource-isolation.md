@@ -1,6 +1,6 @@
 # I5 整批资源隔离设计与运行停止检查
 
-- 日期：2026-10-01
+- 更新日期：2026-10-06
 - 状态：保留整批 768 MiB；证据计费、容量探测及受限双构建 helper 离线通过，真实环境、运行接入与 daemon 隔离未完成，I5-R 禁止启动
 - 目标读者：I5 实现、运行环境准备及证据复核者
 - 用途：关闭构建及运行写入绕过批次计费的问题，给出下一实施包的可检验边界
@@ -213,9 +213,11 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 
 **剩余边界**：副本继承 Shared 网络和原 MAC；guest 内的 machine-id、SSH host key、实际 Debian/内核、Landlock ABI、Go/Python/Docker 与 guest agent 状态均未检查。首次启动前应明确网络隔离和克隆身份处理。四个容量域尚未创建，批次资源硬限额、宿主 backing/环境日志归属及 I5-R 验收均未通过。下一步仅为该副本的 guest 盘点与精确准备包；本次授权不包含启动或安装。
 
-## 首次 guest 盘点操作包（已推迟至次日，未授权执行）
+## 首次 guest 盘点操作包（2026-10-06 复核，待授权）
 
-副本准备记录已提交为 `40a588c`。2026-10-01 晚所有者要求停止推进、将下一步写入明日事项，因此本包留作次日复核材料，今晚不再等待或执行启动。`scripts/inspect-sw-i5-guest.py` 目前仅是本地未跟踪草稿，未纳入本次文档提交；执行前须复核并提交脚本，不能把本包当作完整可执行交付。本包只针对 UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`、`~/VirtualMachines/RadishLink-I5-Debian13-ARM64.utm`，预计 5–10 分钟。先复核 UUID、路径及 stopped 状态，通过 UTM 原生设置移除全部网卡、关闭剪贴板和目录共享，保存后读取配置核验，再启动一次。保留源 VM 及其他 VM 状态。此变更将持久修改该副本配置；启动和关机会写系统盘日志，不属于 768 MiB 批次实测。配置失败则不启动；本包结束保留隔离设置，不自动恢复 Shared 网络。
+副本准备记录已提交为 `40a588c`。2026-10-01 晚所有者要求停止推进，当时仅准备本地未跟踪草稿并完成语法、帮助及 macOS 拒绝检查。2026-10-06 所有者要求接续开发，本轮复核并修正[盘点脚本](../../scripts/inspect-sw-i5-guest.py)，增加[离线回归](../../scripts/test_sw_i5_guest.py)。脚本与本次文档尚未提交，实际启动前仍需提交并取得本包精确授权；本轮开发指令不自动授权 VM 设置与启动。
+
+本包只针对 UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`、`~/VirtualMachines/RadishLink-I5-Debian13-ARM64.utm`，预计 5–10 分钟。先复核 UUID、路径及 stopped 状态，通过 UTM 原生设置移除全部网卡、关闭剪贴板和目录共享，保存后读取配置核验，再启动一次。保留源 VM 及其他 VM 状态。此变更将持久修改该副本配置；启动和关机会写系统盘日志，不属于 768 MiB 批次实测。配置失败则不启动；本包结束保留隔离设置，不自动恢复 Shared 网络。
 
 启动与只读检查的命令形态如下，`<nonce>` 须替换为本次新生成的 32 位小写十六进制值；不能把占位文本原样执行：
 
@@ -225,8 +227,32 @@ utmctl exec B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --input --cmd /usr/bin/python3 
 utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --request
 ```
 
-盘点脚本草稿通过 guest agent 的 stdin 执行，只把 JSON 写到 stdout。读取内核、架构、内存、块设备容量、根盘余量、网卡/路由、指定包版本与工具位置，并只查询 Landlock ABI；不执行 Go/Docker、不建立隔离规则、不安装软件、不复制源码或创建 guest 文件。仅记录 machine-id 是否非空及 SSH 公钥文件数量，不收集其内容、不重新生成身份；`identity_regeneration_verified` 和 `i5_ready` 始终为 false。返回必须包含匹配 nonce 的可解析 JSON；空输出或仅退出 0 不算完成。网卡必须只有 `lo`，否则立即停止盘点并关机。
+盘点脚本通过 guest agent 的 stdin 执行，只把 JSON 写到 stdout。读取内核、架构、内存、块设备容量、根盘余量、网卡/路由、指定包版本与工具位置，并只查询 Landlock ABI；不执行 Go/Docker、不建立隔离规则、不安装软件、不复制源码或创建 guest 文件。仅记录 machine-id 是否非空及 SSH 公钥文件数量，不收集其内容、不重新生成身份；`identity_regeneration_verified` 和 `i5_ready` 始终为 false。返回必须包含匹配 nonce 的可解析 JSON；空输出或仅退出 0 不算完成。脚本在其他信息读取及包查询前要求网卡只有 `lo`，盘点结束时再次检查；任一次不满足即退出 2，不输出成功 JSON，由操作员进入关机收尾。前后快照不能代替启动前移除 VM 网卡。
 
 guest agent 或 Python 不可用时保留具体错误并关机，不临时安装；正常关机请求后最多等待 120 秒，若本包获准的超时处置也被授权，才对同一 UUID 使用 `utmctl stop ... --force`，记录为非正常关机，随后复核全部 VM 状态。即使盘点失败也进入关机收尾；没有单独授权时不使用 `--kill`、不删除副本或系统盘。安装依赖、修改 machine-id/SSH key、创建四个容量域、构建、启动 daemon 和 I5-R 均不在本包范围内。
 
 本地验证：脚本语法解析通过；`--help` 退出 0；macOS 上传入合法 nonce 时按预期退出 2，报告 `Linux guest required`。这不证明 guest agent、Linux 内核或实际工具可用；实际执行结果待授权后补充。
+
+### 2026-10-06 操作与返回校验补充
+
+1. 执行前用 `utmctl list`、`utmctl status B86E1A47-9A67-4ECF-A51F-2B2F29CDB726` 核对目标及全部 VM 状态；目标必须 stopped。只读解析目标 `config.plist`，仅输出 Name、UUID、网络模式与共享开关白名单，不输出 Notes、MAC、登录信息或完整配置。2026-10-06 本轮已核对 Name/UUID 与目标相符、网络为 Shared、剪贴板为 true、目录共享为 VirtFS；未核验实时运行状态。
+2. 本包获准后，打开 UTM，使用该副本的原生设置移除全部网卡、关闭剪贴板及目录共享。保存后重新解析配置，要求 Network 为空、ClipboardSharing 为 false、DirectoryShareMode 为 None；不满足则不启动，不猜测其他配置值可等价放行。不改源 VM、其他副本、身份文件或系统权限。
+3. 生成本次 32 位小写十六进制 nonce，固定脚本 SHA-256。只在仓库忽略目录 `.tmp/i5-guest-inventory-<nonce>/` 保存该次 stdout、stderr、退出码、校验结果及操作摘要；不复制完整 VM 配置。本次准备证据与系统启动日志不是 768 MiB 批次实验，不能写成批次验收证据。
+4. 按上文命令启动一次，通过 guest agent 的 stdin 执行一次脚本。宿主为 start/exec/stop 单次控制命令设置最多 60 秒等待；guest 内唯一包查询最多 15 秒。超时、guest agent 不可用、Python 不可用、非零退出或返回校验失败，保留真实错误并进入关机收尾，不自动重跑盘点或安装依赖。
+5. 只有 guest 命令退出 0，才用下述宿主命令校验完整 stdout；不以管道最后一项退出码覆盖 guest 失败。校验器不探测宿主，限读 128 KiB，拒绝空/截断 JSON、重复键、非有限数字、过深嵌套、错误 nonce/版本/范围、缺失或类型错误字段、非 loopback 返回以及伪称环境就绪/身份已重建。通过仅表示返回封装和字段完整，内部事实仍需人工核对；nonce 不证明 VM 身份或结果真实性。
+
+```text
+python3 -B scripts/inspect-sw-i5-guest.py --validate-result --nonce <nonce> < .tmp/i5-guest-inventory-<nonce>/stdout.json
+```
+
+6. 不论盘点成功或失败，均对同一 UUID 请求正常关机，每次最多间隔 30 秒复查，共等至 120 秒；本包单独包含获准后的超时 `utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --force` 一次，记录非正常关机风险（系统盘可能未完成写回），不用 `--kill`。最后复核目标 stopped 与其他 VM 状态；失败则明确报告，不删除副本。保持新隔离设置，恢复原 Shared 网络/共享须另行授权。
+
+本包预计 5–10 分钟，副作用为持久修改目标配置及启动/关机日志写入；不安装工具、不修改 machine-id/SSH key、不创建容量域、不启动构建/daemon/I5-R。执行前请求将本轮脚本、回归和相应文档作为一个本地提交保存，再执行上述范围；commit 不包含 push。若未获外部操作授权，本轮交付止于离线实现与可审阅操作包。
+
+### 2026-10-06 离线复核记录
+
+- 原草稿发现额外网卡后仍继续采集并退出 0，仅返回 `loopback_only=false`，与操作包的立即停止要求不符；现已改为前置拒绝及结束复查。
+- 增加同一脚本的 `--validate-result` 宿主模式，不新建另一套运行入口；不修改 I5 合同、profile、schema 1/2/3 或资源额度。
+- `python3 -B scripts/test_sw_i5_guest.py`：12 项合成回归通过，覆盖完整采集与身份内容保护、网卡前置/结束拒绝、读取异常、非 Linux 拒绝、包缺失/失败/超时、返回封装负例、CLI 非零退出和宿主校验不调用探测。测试注入平台/文件系统/包查询，不执行 VM、真实 dpkg、Go/Docker 或 Landlock。
+- `--help` 退出 0；本机 macOS 直接盘点按预期退出 2（`Linux guest required`）。`./scripts/check-repo.sh` 通过（185 文件），`git diff --check` 通过。未改 Go 代码，未重跑 Go 套件或历史正式实验。
+- 实际 Linux 盘点、VM 启停、工具安装、容量域创建、构建与 I5-R 均未执行；guest 事实与环境验收保持未知。未改远程状态，无本轮后台进程。
