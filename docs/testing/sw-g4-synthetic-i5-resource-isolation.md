@@ -101,13 +101,13 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 
 **接入边界**：`build_pair` 已有双构建流程和失败处理，但未接入 shell 或 Go 运行入口；只读 `inspect` 也不会修改停止策略。既有 Go 运行路径、Docker 构建/daemon 存储、store 阶段账本、阻塞控制请求监控及证据版本绑定仍需完成。不得手动调用 helper 代替尚未获得的环境实测授权。
 
-### 环境操作包草案（专用 VM 已复制，guest 准备未执行）
+### 环境操作包草案（盘点已通过，安装与容量准备未执行）
 
-所有者随后提供 UTM 资产位置，允许从干净基线复制专用 VM 或复用通用 Debian。已选择前者，并在精确复制/原生移动授权后建立 `RadishLink-I5-Debian13-ARM64`，UUID 为 `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`；副本保持关机，结果见本页末的准备记录。下表仍是 guest 准备与容量验收的待审内容，不继承复制授权，也不提供猜测设备号的格式化/挂载命令。
+所有者随后提供 UTM 资产位置，允许从干净基线复制专用 VM 或复用通用 Debian。已选择前者，并在精确复制/原生移动授权后建立 `RadishLink-I5-Debian13-ARM64`，UUID 为 `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`；2026-10-06 完成隔离与有效盘点后已正常关机，事实见本页实测结果。下表仍是工具安装、身份和容量验收的待审内容，不继承已消费的启动授权，也不提供猜测设备号的格式化/挂载命令。
 
 | 操作 | 已收敛的参数与检查 | 仍缺的执行输入 |
 | --- | --- | --- |
-| 准备 Linux | 已选专用 Debian 13 ARM64 副本、4 GiB RAM；要求 Landlock ABI ≥ 5、Go 1.26/Python、只读源码/工具链及无 capabilities 构建身份 | guest 实际内核/ABI、已有工具及安装来源清单；首次启动前处理继承的网络与 guest 身份 |
+| 准备 Linux | 已实测 Debian 13 ARM64、内核 6.12.101、Landlock ABI 6、Python 3.13.5；无网卡/共享；当前 guest agent 为 root | 固定 Go 1.26 与 Docker/containerd/runc 来源、版本、校验及离线导入方式；克隆身份处置和无 capabilities 构建身份；不得复用 root agent 作为构建身份 |
 | 建立四域 | 四块独占整盘，容量最多 256/160/240/64 MiB，ext4；独立 0700 挂载点 | 实际设备 ID、绝对路径、宿主 backing 及环境日志的计费方式；不得格式化既有共享盘 |
 | 准备构建 namespace | 所有域外挂载只读，build 是唯一可写挂载；源码、Go 与配置路径固定 | 实际 namespace 命令及其精确回收对象；特权准备者退出/移交方式 |
 | 只读探测 | `python3 -B scripts/check-sw-i5-resources.py inspect --config <已复核配置的绝对路径>` | 配置中的真实 root、host_path 与四个 major:minor；探测 stdout 的域内留存路径 |
@@ -141,7 +141,7 @@ Docker 侧保留独占 daemon 与本地 Unix endpoint。不能仅设置 `data-ro
 | 5 | 环境实测与干净 revision 预检 | 实测证明底层容量机制拒绝超限；检查并发、开放删除文件、实际 Go/builder 路径；停止检查不能只靠 mock 放行 |
 | 6 | 固定产物并取得 I5-R 运行授权 | 完整 revision、合同/附录/profile hash、两个 binary hash、镜像和后端证据绑定，再执行原 21 样本矩阵 |
 
-第一轮完成入口停止检查，第二轮完成第 2/3 项中的证据/诊断输出子项，第三轮完成容量核验与受限双构建 helper 的离线实施。随后已复制专用 UTM 目标，但尚未启动或检查 guest；未完成真实环境、运行入口接入、daemon 隔离与第 4 项 guest 精确操作包。下一步针对该副本完成内核/工具盘点、环境命令和宿主 backing 计费，并完成 daemon/store 与证据绑定。环境测试属于单独外部操作，不是离线回归的一部分。
+第一轮完成入口停止检查，第二轮完成第 2/3 项中的证据/诊断输出子项，第三轮完成容量核验与受限双构建 helper 的离线实施。随后已复制专用 UTM 目标，并于 2026-10-06 完成隔离、宿主结果回收和有效 guest 盘点；未完成真实容量环境、运行入口接入、daemon 隔离与第 4 项安装/容量精确操作包。下一步针对盘点缺口固定工具来源、无特权执行、环境命令和宿主 backing/日志计费，并完成 daemon/store 与证据绑定。环境测试属于单独外部操作，不是离线回归的一部分。
 
 ## 合同、版本与历史兼容
 
@@ -286,7 +286,7 @@ python3 -B scripts/inspect-sw-i5-guest.py --validate-result --nonce <nonce> < .t
 
 ## 宿主结果回收适配层与受限实测包（2026-10-06）
 
-状态：所有者要求实施下一工作包；宿主适配及离线验证已完成，尚未提交或运行真实 UTM 接口。既有四份结果文档的未提交内容保留并接续更新。首次盘点失败结论不变；该节不重新授权已消费的运行，也不开放 I5-R。
+状态：宿主适配及离线验证随后提交为 `4ce4a25`。所有者明确要求“提交工作区更改，然后确认，继续推进”，确认下述一次受限操作包；真实执行已完成，结果见下一节。首次盘点失败记录保留，本节操作合同的单次授权已经消费，不开放 I5-R。
 
 ### 实现与证据边界
 
@@ -310,11 +310,11 @@ python3 -B scripts/inspect-sw-i5-guest.py --help
 - JXA 24 项合成用例通过：同一进程句柄等待、执行一次、缺字段/错类型、退出码/signal、超时、迟到结果、事件错误、停止 VM 拒绝，以及原生适配方法的对象/参数绑定。
 - `--help` 退出 0；`./scripts/check-repo.sh` 通过（186 文件），`git diff --check` 通过。没有修改 Go 代码、原 I5 profile 或实验合同，未重跑无关 Go 套件。
 - `--self-test` 分支只运行纯 JavaScript 与假应用对象，不调用 `Application`、`ObjC` 或 UTM。Python 测试只使用合成临时目录及注入子进程结果，不执行真实 `osascript --collect`、guest 命令或 VM 操作。
-- 这些结果不证明 macOS 自动化权限、JXA 与实际 UTM 记录的映射或 guest 可用。真实成功/失败探针尚未运行，不能将候选根因改判为已经实证修复。
+- 以上离线结果本身不证明 macOS 自动化权限、JXA 与实际 UTM 记录的映射或 guest 可用；当时真实探针尚未运行。后续实测结果单独记在下一节，不用成功实测覆盖第一次失败。
 
-### 待确认的一次受限实测
+### 已执行的一次受限实测合同
 
-目标仍为同一专用 VM，保持现有网络/共享隔离；预计 5–10 分钟。拟先本地提交本工作包（代码及接续结果文档，不 push），再固定新 revision、guest/适配层/控制脚本 hash 和本次新 nonce。启动前核验 UUID、配置及 stopped，并保存全部 VM 的状态清单。若配置不符，不修改或启动。
+目标仍为同一专用 VM，保持现有网络/共享隔离；当次预计 5–10 分钟。合同要求先本地提交本工作包（代码及接续结果文档，不 push），再固定新 revision、guest/适配层/控制脚本 hash 和本次新 nonce。启动前核验 UUID、配置及 stopped，并保存全部 VM 的状态清单。若配置不符，不修改或启动。
 
 ```text
 utmctl list
@@ -331,7 +331,59 @@ utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --request
 1. 启动一次后等待 30 秒，再调用 success；该合成程序只等待 1 秒、向 stdout/stderr 打印绑定 nonce 的标记并退出 0，不访问文件、身份或网络。宿主执行退出 0 且记录满足约定才继续。
 2. failure 同样只等待 1 秒、输出两条合成标记，随后退出 17；**宿主退出 17 且 `execution.json` 的 exited/exit/signal/nonce/双流均正确**才算该负例通过。其他退出或缺证据均停止，不把任何非零退出笼统当作预期失败。
 3. 前两项通过后，才执行一次现有 guest inventory（`/usr/bin/python3 -I -B - --nonce <nonce>`，源码经 stdin 传入）；保留原只读范围和全部校验。不继续使用本次已知可能提前返回的 `utmctl exec`，不用延长 sleep 代替可靠结果回收。每项最多一次，最多共三次 guest execute，不自动重试、不加额外探针。
-4. 宿主控制必须使用 finally 收尾：成功、失败、权限拒绝或超时均请求同一 VM 正常关机；每次最多间隔 30 秒复查，等至 120 秒仍未 stopped 时才使用本包待批准的同一 UUID `utmctl stop ... --force` 一次；最后核对 stopped 和其他 VM 状态，不使用 kill。强制停止存在未完成写回风险。
+4. 宿主控制必须使用 finally 收尾：成功、失败、权限拒绝或超时均请求同一 VM 正常关机；每次最多间隔 30 秒复查，等至 120 秒仍未 stopped 时才使用本包已批准的同一 UUID `utmctl stop ... --force` 一次；最后核对 stopped 和其他 VM 状态，不使用 kill。强制停止存在未完成写回风险。
 5. 失败保留证据，停止后续 case。若系统提示新的自动化权限，停在提示处由用户确认，不自动授予权限或换通道。JXA 不负责关闭 VM，也不假装超时已取消 guest 工作。
 
 该次副作用仅为启动/关机系统日志及宿主准备证据；不改 VM 配置、不开放网络/共享、不安装/更新工具、不改身份、不写 guest 脚本文件、不建容量域、不构建、不启动 daemon/I5-R、不修改源 VM 或其他 VM。收尾保留隔离配置和失败证据。取得有效盘点后，再据实际内核、工具和设备资料准备四个容量域与 daemon 接入的下一操作包，不从本次结果直接授权那些操作。
+
+## 宿主回收与第二次盘点实测结果（2026-10-06）
+
+**结论：成功/失败双流探针及有效盘点通过，目标正常关机；I5 容量环境未准备，I5-R 继续停止。** 本次先提交 7 个文件为 `4ce4a2564e927047c33f55cd3b38a689c0322ebf`，再启动同一专用 VM 一次。没有重新调用已知空返回的 `utmctl exec`，没有重试任何 case。控制脚本最终退出 0。
+
+| 步骤 | 实测结果 |
+| --- | --- |
+| 启动前 | 精确 UUID/name 及隔离配置通过；目标及全部 9 台 VM 均 stopped；list/status/start 退出 0 |
+| success | CLI 退出 0；同一进程句柄查询 5 次后确认 exited=true；guest exit 0 / signal 0；stdout/stderr 精确匹配本次 nonce 标记 |
+| failure | CLI **退出 17**；查询 5 次后确认 exited=true；guest exit 17 / signal 0；双流标记精确匹配，因此负例通过 |
+| inventory | CLI 退出 0；查询 2 次确认 exited=true、exit 0 / signal 0；stderr 为空；完整 JSON、nonce、隔离与非就绪声明校验通过 |
+| 关机 | 正常关机请求退出 0；首次状态为 started，30 秒后复查 stopped；未使用 force/kill |
+| 最终复核 | 全部 VM 清单逐字等于启动前，目标及其他 8 台均 stopped；配置白名单与完整配置 hash 不变 |
+
+宿主适配器均退出 0、无 stderr、未超时；失败探针的 17 是 guest 真实退出经宿主入口保留后的结果。该次实际证明 JXA/UTM 进程接口可以等待并回收双流及非零退出，盘点成功；没有对系统安装的 `utmctl` 修补或对照重测，因此不把第一次失败的候选代码根因写成已独立实证。
+
+### 实际 guest 事实及含义
+
+| 盘点项 | 事实 | 证据边界 |
+| --- | --- | --- |
+| 系统与 ABI | Debian GNU/Linux 13 (trixie)，aarch64，内核 `6.12.101+deb13-arm64`；Landlock ABI 6 | 满足 helper 的 ABI ≥ 5 前置；未建立规则或验证真实写入拒绝 |
+| Python/agent | Python `3.13.5`；python3 包 `3.13.5-1`；qemu-guest-agent `1:10.0.11+ds-0+deb13u1` | 本次 stdin 程序及结果回收可用 |
+| 已有基础工具 | util-linux `2.41-5`、e2fsprogs `1.47.2-3+b11`；找到 mount/unshare/mke2fs | 只查包及可执行文件存在性，未执行格式化、挂载或 namespace |
+| 待准备工具 | 指定包清单无 Go/Docker/containerd/runc；已查固定目录中的对应可执行文件列表为空 | 不能排除未搜索目录或其他包名；足以说明既定入口所需工具尚未证明可用，不能宣称全盘无任何副本 |
+| 包查询状态 | `dpkg-query` 退出 1，返回已安装包及八条包缺失诊断 | 缺包属于盘点事实，诊断保留在 JSON 中；不等于 inventory 失败，也不静默抹去该退出 |
+| 身份与权限 | uid/euid 0；CapEff/CapPrm 均 `000001ffffffffff`；NoNewPrivs=0、Seccomp=0 | 当前 agent 进程不满足无特权构建条件，不能直接作为 build helper 调用者 |
+| 克隆身份 | machine-id 非空，SSH 公钥文件计数 3；identity_regeneration_verified=false | 未读取任何身份/密钥内容，未验证与源的差异，也未重建身份 |
+| 网络 | 只有 lo，IPv4 路由仅表头、IPv6 路由均 lo；启动前后 VM 配置无网卡/共享 | 只覆盖本次隔离状态，不授权开放联网安装 |
+| 存储 | `vda` 53,687,091,200 bytes（可写），`sr0` 1,073,741,312 bytes（只读）；根文件系统可用 40,936,665,088 bytes | 四个独占容量盘未创建；未取得新盘设备号或证明虚拟磁盘 backing/宿主物理余量，不把根盘当批次域 |
+| 内存 | MemTotal=4,007,504 kB，MemAvailable=3,355,660 kB，SwapTotal=2,709,500 kB | 单次快照，不能替代批次资源限制、RSS 或容量验收 |
+
+### 证据与后续工作包
+
+本次 nonce 为 `376bad7d1e03645dac69df2f7067c86a`；本地忽略目录 `.tmp/i5-guest-return-376bad7d1e03645dac69df2f7067c86a/` 保留三项完整执行记录、传输/guest 双流、输入 hash、命令退出码、控制脚本、配置白名单、前后 VM 清单及 `result.json`。没有保存完整配置或登录信息。
+
+| 固定输入 | SHA-256 |
+| --- | --- |
+| `scripts/inspect-sw-i5-guest.py` | `bee566862fe37f340ca48f735a81c00a89b3e3469014ad7f6905dbc0b8ae1afb` |
+| `scripts/sw_i5_utm_result.js` | `247549218c87dc2624afe08d543366a40eb18dc870d118dec7bceeccdf0e6391` |
+| 本次 `run_inventory.py` | `b622f871cfd4e56887e2fb90135ea69cc2e2b1cfaa841e5bb3ef45a83cde2674` |
+| 隔离配置（前后相同） | `6c70116bf220ec2b5fbaa13fdcf2806c06c85f82939335b3bd16e8565d9132dc` |
+
+每个 JXA 调用仍由 Python 限时 60 秒；单次控制脚本对 CLI 外层多留 5 秒，仅用于宿主回收及记录超时，不延长 guest 执行时限或重发 execute。该次未触发超时。沙盒外调用只执行已确认的精确 VM 操作；未因自动化权限受阻。控制脚本和宿主适配器均已退出，无本轮遗留测试进程。
+
+下一包先完成可审阅设计与离线实现，再申请具体外部操作：
+
+1. 固定 Go 1.26 的具体补丁版本，以及 Docker/containerd/runc 的来源、版本、许可证、校验和依赖闭包；设计保持现有隔离的导入路径、安装清单、磁盘增量及回滚方式。本次不推断可联网安装或复用其他项目工具。
+2. 给出克隆身份处置及独立无特权构建身份的精确操作；将 root 准备阶段与构建进程区分，列出只读源码/工具链、namespace、capabilities 清空与特权移交的可验证条件。身份重建尚未获执行授权。
+3. 固定四个独占磁盘的宿主格式、完整容量上限、目标路径和创建后设备绑定办法，先解决 backing 元数据、UTM/guest 日志及诊断的额度归属，再形成创建/格式化/挂载命令；不得假设新盘必为 vdb–vde。完整物理开销不能被证明纳入 768 MiB 时保持 STOP。
+4. 在现有 helper 上完成 daemon/store 及构建运行接入、证据版本绑定和负例，再给出容量超限、域外写入、进程回收与真实构建的有界环境验收包。不开旁路入口，不用本次盘点通过解除运行停止。
+
+本次单次授权已消费；没有安装工具、改身份、创建磁盘、构建、启动 daemon、运行 I5-R 或远程写入。本次结果记录随后更新于既有四份文档；`./scripts/check-repo.sh` 通过（186 文件），`git diff --check` 通过。实测后没有改代码，不重复已通过的离线套件。交接时这四份文档尚未提交；先前的 `4ce4a25` 已提交且未 push。
