@@ -281,6 +281,8 @@ python3 -B scripts/inspect-sw-i5-guest.py --validate-result --nonce <nonce> < .t
 
 ### 结果回收诊断与下一步
 
+以下保留首次失败后的判断与计划；后续已完成适配层及第二次盘点，见[实测结果](#宿主回收与第二次盘点实测结果2026-10-06)。
+
 只读核对本机 `UTM.sdef` 可见结果属性名为 `exited`，其 Cocoa key 为 `hasExited`。上游 [v4.7.5 的 Exec 实现](https://github.com/utmapp/UTM/blob/v4.7.5/utmctl/UTMCtl.swift#L437-L485) 使用 `result["hasExited"]` 轮询，并把缺失的退出码默认为 0；[官方脚本接口](https://docs.getutm.app/scripting/reference/#execute-result)提供进程对象及结果读取。[上游问题 #7932](https://github.com/utmapp/UTM/issues/7932)报告这一字段差异导致提前返回空输出。安装版本、静态代码与本次现象吻合，因此**宿主过早回收结果是有依据的候选根因**；本轮未通过另一执行通道取得真实 guest 结果，不能写成已在本机证明根因或 guest 无故障。
 
 下一工作包先收敛宿主结果回收方式：保留同一个 guest 进程句柄，显式等待 `exited=true`，要求真实退出码及完整 stdout/stderr，保留 60 秒上限和现有 JSON/nonce 校验；先用离线用例覆盖尚未退出、缺失字段、超时、非零退出和空返回。具体通道及精确命令另行审阅，不修改系统安装的 UTM、不把延长启动等待当作修复、不自动退回网络/共享或 guest 落盘方案。再次启动/执行需要新的明确范围；现有授权已消费。有效盘点之前，不猜测工具缺失、设备号、Landlock ABI 或四个容量域的可行性。
@@ -296,7 +298,7 @@ python3 -B scripts/inspect-sw-i5-guest.py --validate-result --nonce <nonce> < .t
 - [sw_i5_utm_result.js](../../scripts/sw_i5_utm_result.js) 是该入口的单一 UTM 适配层。使用系统 `/usr/bin/osascript -l JavaScript`（JXA）调用 UTM 官方进程接口，不替换 UTM 二进制、不新增第三方依赖，也不通过 UI 输入命令。源码按本机 `UTM.sdef`、[UTM 脚本接口](https://docs.getutm.app/scripting/reference/)与 [Apple JXA 文档](https://developer.apple.com/library/archive/releasenotes/InterapplicationCommunication/RN-JavaScriptForAutomation/Articles/OSX10-10.html)独立编写；无复制上游实现。
 - 仅选择 UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`，要求其已经 started；一次 `execute` 返回的进程句柄供后续全部 `getResult` 使用，每 250 ms 查询，明确等待布尔 `exited=true`。缺失字段、错类型及事件错误直接失败，不改读 `hasExited`、不重发 execute、不默认退出码 0。
 - JXA 内部使用单调时钟，总限时 55 秒，结果查询事件单次最多 5 秒；Python 外层 `subprocess.run` 用 60 秒上限覆盖 JXA 启动及阻塞事件，并负责终止/等待宿主子进程。终止宿主适配器**不证明 guest 进程结束**；外层当次操作必须进入 VM 关机收尾，不能继续下一命令。
-- 结果包含真实 exit/signal、同次 nonce/case/UUID、轮询次数和 base64 双输出。每条 guest 输出最多 128 KiB，缺失流、错误 base64、错误绑定或未确认退出均拒绝；对传输 stdout/stderr 各保留最多 512 KiB，超过上限保留原长度并失败。这里是返回/证据限额，不是 JXA/UTM 的 RSS 硬隔离，也不属于 I5 的 768 MiB 批次环境验收。
+- 结果包含真实 exit/signal、同次 nonce/case/UUID、轮询次数和 base64 双输出。每条 guest 输出的验收上限为 128 KiB，缺失流、错误 base64、错误绑定或未确认退出均拒绝；对传输 stdout/stderr 各保留最多 512 KiB，超过上限保留原长度并失败。`capture_output=True` 仍会先在宿主内存中接收输出，再校验/截断留存；这些是返回验收与证据留存上限，不是 Python/JXA/UTM 的采集内存硬隔离，也不属于 I5 的 768 MiB 批次环境验收。
 - 正常回收后保留 exit 17 等非零结果；成功/失败合成探针分别要求 stdout/stderr 中的精确 nonce 标记和退出 0/17。`failure` 用例确认通过时，宿主入口仍退出 17，不能通过默认 0 掩盖。inventory 仅在 guest exit 0、无异常 stderr 且既有 JSON 校验通过后接受。
 - 自动保存到仓库忽略目录 `.tmp/i5-guest-return-<nonce>/<case>/`：输入源/适配层 SHA-256、传输退出码/超时、原始双输出、解析后的执行记录、guest 双输出和失败原因。拒绝同 nonce/case 重复目录及路径重定向，不覆盖旧证据；诊断写入失败同时保留原始原因。此目录只供准备证据，不代表正式实验产物。
 
@@ -379,7 +381,7 @@ utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --request
 | 本次 `run_inventory.py` | `b622f871cfd4e56887e2fb90135ea69cc2e2b1cfaa841e5bb3ef45a83cde2674` |
 | 隔离配置（前后相同） | `6c70116bf220ec2b5fbaa13fdcf2806c06c85f82939335b3bd16e8565d9132dc` |
 
-每个 JXA 调用仍由 Python 限时 60 秒；单次控制脚本对 CLI 外层多留 5 秒，仅用于宿主回收及记录超时，不延长 guest 执行时限或重发 execute。该次未触发超时。沙盒外调用只执行已确认的精确 VM 操作；未因自动化权限受阻。控制脚本和宿主适配器均已退出，无本轮遗留测试进程。
+每个 JXA 调用仍由 Python 限时等待 60 秒；单次控制脚本对 CLI 外层多留 5 秒，仅用于宿主回收及记录超时，不重发 execute。这些是宿主等待上限，不构成 guest 执行的硬超时或取消保证；超时后 guest 完成状态仍未知，必须进入 VM 关机收尾。该次未触发超时。沙盒外调用只执行已确认的精确 VM 操作；未因自动化权限受阻。控制脚本和宿主适配器均已退出，无本轮遗留测试进程。
 
 下一包先完成可审阅设计与离线实现，再申请具体外部操作：
 
