@@ -1,7 +1,7 @@
 # D0/P0 软件工作计划
 
 - 状态：Accepted（`SW-G0`，2026-08-24）
-- 更新日期：2026-10-06（宿主回收与第二次 guest 盘点通过；不改变 SW-G0 接受范围）
+- 更新日期：2026-10-09（完整补充盘点与正常回收通过；不改变 SW-G0 接受范围）
 - 适用范围：D0 的无射频软件方案设计，以及进入 P0 前的 `SW-*` 证据准备
 - 目标读者：产品、网络、安全、协议与测试协作者
 
@@ -157,7 +157,9 @@ I2 提交后形成的[I3 持久文字路径合同](../testing/sw-g4-synthetic-i3
 
 后续 SW-G4 包应先交付一个从用户动作到恢复结果的小而完整的路径，再逐项扩展矩阵：已验证身份 → origin 原子入队 → B custody → C 安全状态/消息/去重提交 → 认证 delivery evidence → A/B 验证后清理 → 重启后的用户状态保持。
 
-I3 提交为 `112f1e8` 后形成的[I4 场景与证据接入包](../testing/sw-g4-synthetic-i4-plan.md)已获所有者接受，13 个 Go 文件和 5 个 JSON 完成实施：offline-i3 variant 消费实际提交/发送/预算事实，接通有限 schema 2、断言重算和三次比较。五 profile 七子用例共 21 个独立样本通过，负例覆盖重算 checksum 后的事实/指标篡改、版本混合、观测失败与 FAIL/INVALID 分类；全量 vet/test 通过。它不覆盖全部矩阵；现有 echo 端点不等于消息 Node，后续 [I5 三进程闭环方案](../testing/sw-g4-synthetic-i5-plan.md)的 I5-I 已获有限接受并完成控制协议、进程入口、监督时钟/屏障、TCP 适配器和 V3 证据消费者。全量离线回归及控制/生命周期负例通过；七场景字节流 fixture 不是网络结果。2026-10-01 的后续实施已加入入口停止、证据写前计费、Linux 容量核验及受限双构建 helper；helper 仅离线通过，尚未接入运行入口。2026-10-06 已获准隔离并启动专用 VM 一次，但盘点命令返回空输出，宿主校验拒绝，目标已正常关机；当时 guest 事实仍未知。随后宿主回收适配层提交为 `4ce4a25`，获新的一次授权后，成功/失败双流探针及第二次盘点通过；负例准确返回 17，VM 正常关机，其他 VM 状态与隔离配置不变。有效盘点确认 Debian 13 ARM64、Landlock ABI 6，已查包和路径未发现 Go/Docker/containerd/runc；构建身份及四域尚未准备。两个单次运行授权均已消费。实测结果随后提交为 `c7b0aa1`；[环境准备评审包](../testing/sw-g4-synthetic-i5-environment-preparation.md)已细化候选来源、无特权身份交接和容量关系，签名/依赖闭包与宿主硬上限尚未关闭。整批资源隔离与真实验收通过后，再固定源码和产物并进行预检。21 样本三容器 I5-R 尚未执行，当前不可启动，详见[资源隔离设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)。
+I3 提交为 `112f1e8` 后形成的[I4 场景与证据接入包](../testing/sw-g4-synthetic-i4-plan.md)已获所有者接受，13 个 Go 文件和 5 个 JSON 完成实施：offline-i3 variant 消费实际提交/发送/预算事实，接通有限 schema 2、断言重算和三次比较。五 profile 七子用例共 21 个独立样本通过，负例覆盖重算 checksum 后的事实/指标篡改、版本混合、观测失败与 FAIL/INVALID 分类；全量 vet/test 通过。它不覆盖全部矩阵；现有 echo 端点不等于消息 Node，后续 [I5 三进程闭环方案](../testing/sw-g4-synthetic-i5-plan.md)的 I5-I 已获有限接受并完成控制协议、进程入口、监督时钟/屏障、TCP 适配器和 V3 证据消费者。全量离线回归及控制/生命周期负例通过；七场景字节流 fixture 不是网络结果。2026-10-01 的后续实施已加入入口停止、证据写前计费、Linux 容量核验及受限双构建 helper；helper 仅离线通过，尚未接入运行入口。历史 UTM 准备、首次空返回失败和 10 月 6 日有效盘点见[资源隔离专题](../testing/sw-g4-synthetic-i5-resource-isolation.md)。
+
+2026-10-09 [完整补充盘点](../testing/sw-g4-synthetic-i5-environment-preparation.md#完整补充盘点与正常回收通过2026-10-09)及正常关机通过，增强诊断和包表专属限额提交为 `3aab466`。独立 details scope 保留旧 inventory 合同，取得完整包表、APT/dpkg/gpgv/sqv、swap/挂载和服务事实；始终 `i5_ready=false`。全部既有单次授权已消费；来源签名、安装差量、构建/克隆身份及四域与宿主硬限制未关闭。整批资源隔离和真实验收通过后，再固定源码/产物并进行预检；21 样本三容器 I5-R 尚未执行，当前不可启动。
 
 设计至少给出每一步的输入、所有者、库接口、提交边界、UI 状态、失败原因与对应断言。优先覆盖确认丢失、满盘、身份变化和提交点崩溃；合成认证占位的结果只能登记为 SW-V1/V2，不能在交接中把它提升为安全切片完成。真实 E2EE 场景继续以 SW-G2、R2 和精确运行前置为界。
 
@@ -174,7 +176,7 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./...
 
 此入口只执行 Go 单元测试并写入构建缓存；不下载依赖、不启动 Docker，不替代 `run-sw-v0-harness.sh run`。工具链或缓存不满足时报告失败，依赖安装另行授权。2026-09-05 文档整理前的审阅已在 macOS ARM64 / Go 1.26.3 通过该测试；这不是 Linux ARM64、密码候选或产品场景证据。
 
-CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 的 I1/I2 当轮未修改脚本、runner 或 workflow；后续 I4/I5-I 已扩展现有 harness 命令包，I5 新增独立 shell 入口与 Dockerfile，并拆分证据职责。workflow、旧 V0 runner 与 t0node 未变；全量离线回归通过不证明新增 shell、Docker 或真实 TCP 入口已运行。I1–I5-I 的历史提交见[2026-09-26 收尾记录](2026-09-26-progress.md)；资源隔离的最新实现、验证边界与下一次接续见[2026-10-01 收尾记录](2026-10-01-progress.md)。
+CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 的 I1/I2 当轮未修改脚本、runner 或 workflow；后续 I4/I5-I 已扩展现有 harness 命令包，I5 新增独立 shell 入口与 Dockerfile，并拆分证据职责。workflow、旧 V0 runner 与 t0node 未变；全量离线回归通过不证明新增 shell、Docker 或真实 TCP 入口已运行。I1–I5-I 的历史提交见[2026-09-26 收尾记录](2026-09-26-progress.md)；资源隔离的历史实施见[2026-10-01 收尾记录](2026-10-01-progress.md)，补充盘点代码核对、验证边界与下一次接续见[2026-10-09 收尾记录](2026-10-09-progress.md)。
 
 ## 授权与停止线
 

@@ -6,6 +6,8 @@
 - 范围：承接有效 guest 盘点，收敛工具输入、身份分工、写入归属和下一离线实施顺序
 - 非目标：安装或更新依赖、改变身份/系统配置、创建磁盘、运行构建/daemon/I5-R；文内盘点操作只按各自明确授权的单次合同执行
 
+当前接续：增强诊断、包表专属 512 KiB 限额与完整实测记录已提交为 `3aab466`。最新事实以[完整补充盘点](#完整补充盘点与正常回收通过2026-10-09)为准，次日工作见[2026-10-10 事项](../status/2026-10-09-progress.md#明日事项2026-10-10)。下文按执行阶段保留历史额度、失败、源摘要与当时提交状态，不代表旧操作包仍可执行。
+
 ## 初次准备结果（2026-10-06）
 
 所有者要求“提交工作区更改，继续推进下一步”。四份实测结果文档已提交为 `c7b0aa1`，未 push；本轮随后只读核对源码、公开发布/安全资料及官方包索引，形成本文和[候选来源清单](../../tools/t0/i5-environment-candidates.json)。没有下载候选软件包或执行 guest 命令。
@@ -89,7 +91,7 @@ tmpfs 默认可以换出到 swap；三个 16 MiB 节点 tmpfs 不能仅凭“内
 
 dpkg 的字段语义来自 [Debian dpkg-query 手册](https://manpages.debian.org/trixie/dpkg/dpkg-query.1.en.html)，属性选择来自 [systemctl 手册](https://manpages.debian.org/trixie/systemd/systemctl.1.en.html)，挂载字段来自 [proc_pid_mountinfo](https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html)。这是独立实现，无复制第三方实现或新增依赖。不会读取 apt 凭据、任意源配置、私钥、machine-id 正文、进程参数、服务 Environment/ExecStart 或用户文件内容。
 
-新 scope 的完整 stdout/stderr 每条最多 512 KiB，传输 stdout/stderr 每条最多留存 2 MiB；原 case 仍为 128 KiB/512 KiB。新增命令各限时 8 秒，stdout 验收上限 256 KiB、stderr 8 KiB；proc 单文件最多读取 256 KiB 加一个越界检测字节。超限、重复包、缺列、部分服务记录、错类型、未知顶层字段、nonce/scope 混淆均失败，不截短为成功结果。JXA/Python 的 55/60 秒回收限时不变。子进程输出仍先 capture 再检查，这是返回与留存上限，不是内存/文件系统硬隔离或 768 MiB 验收。
+`3331167` 初版中，新 scope 的完整 stdout/stderr 每条最多 512 KiB，传输 stdout/stderr 每条最多留存 2 MiB；原 case 仍为 128 KiB/512 KiB。新增命令各限时 8 秒，当时 stdout 验收上限统一为 256 KiB、stderr 8 KiB；proc 单文件最多读取 256 KiB 加一个越界检测字节。后续 `3aab466` 仅将 package-table stdout 调整为 512 KiB，见[已应用提案](#调整提案及证据边界已获准应用)，其他限额不变。超限、重复包、缺列、部分服务记录、错类型、未知顶层字段、nonce/scope 混淆均失败，不截短为成功结果。JXA/Python 的 55/60 秒回收限时不变。子进程输出仍先 capture 再检查，这是返回与留存上限，不是内存/文件系统硬隔离或 768 MiB 验收。
 
 ### 已执行的单次操作合同
 
@@ -411,7 +413,7 @@ python3 -B scripts/sw_i5_utm_control.py --authorized-once --nonce bc35d1722b5534
 2. 将发布密钥独立可信依据、现有 Packages/InRelease 和 guest 现有验签器收敛成有界验签/离线解析操作包；本次只确认工具存在和归属，尚无签名验证结果。候选来源 JSON 的 `signature_verified=false`、`install_authorized=false` 继续保留。
 3. 基于已确认的 `/dev/vda4` swap、可写根/EFI 和共享传播挂载，明确系统新增写入与宿主 backing 的额度归属；不先创建满额四盘或安装 Docker，再尝试补计费。768 MiB、公开运行 STOP 与 I5-R 条件不变。
 
-当前没有下一份已授权 VM 操作包；七个 VM 相关单次包和一次宿主观察均已消费。本次控制进程已结束、目标最后为 stopped，UTM 应用本身未查询或关闭。文档更新后仓库检查（191 文件）和 `git diff --check` 通过；四文件改动尚未提交，未 push。
+当前没有下一份已授权 VM 操作包；七个 VM 相关单次包和一次宿主观察均已消费。本次控制进程已结束、目标最后为 stopped，UTM 应用本身未查询或关闭。实测记录更新后仓库检查（191 文件）和 `git diff --check` 通过；当时四文件尚未提交，随后按所有者收尾要求提交为 `3aab466`，未 push。
 
 ## 工具来源与固定输入
 
