@@ -171,6 +171,151 @@ python3 -B .tmp/i5-guest-return-aaaf701e67ec731dafe6432503f34635/run_inventory.p
 
 本次未修改执行代码，也未生成新的启动授权。是否能消除事件错误、完成 details 并正常关机仍需一次另行批准的真实操作；强制停止后的 guest 文件系统完整性也未验证。10-06 三项 guest 结果仍有有效原始证据，本次补记其启动 stderr 和旧控制层局限，不回写旧证据或把“guest 结果有效”扩展成“整个生命周期无错误”。
 
+## 启动控制最小修正与单次包（2026-10-09）
+
+在 `8652928` 诊断提交之后，已将旧单次目录中的控制逻辑收敛到 [sw_i5_utm_control.py](../../scripts/sw_i5_utm_control.py) 和[离线回归](../../scripts/test_sw_i5_utm_control.py)。旧操作目录及其中脚本保持原样；新入口只负责已授权补充盘点的启动/回收，不接入 I5 运行入口。采集器、JXA 适配层、guest scope/schema/限额、768 MiB 合同和全部 STOP 均未改动。
+
+### 实施结果与时序含义
+
+- 启动 argv 固定为 `/Applications/UTM.app/Contents/MacOS/utmctl start B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`，移除 `--hide`；不执行窗口关闭或 auto terminate 设置，允许 UTM 窗口显示。绝对工具路径及摘要绑定避免 PATH 换用其他副本。
+- 任意 stderr、非零退出、超时、超限或证据写入错误仍失败。启动失败后不进入 details，即使 VM 实际已启动也不忽略错误；始终转入回收。
+- 单调时钟事件分别记录 start-attempt、start-returned、vm-started-observed、boot-grace-complete、details-attempt、guest-details-verified 和关机阶段。`started` 只说明 VM 状态；保留启动调用返回后的 30 秒缓冲期，不是 guest 就绪探针。只有一次 details 的真实返回、scope 校验及落盘证据逐字匹配全部通过，才设置 `guest_details_verified=true`。
+- 被拒绝的启动也可能已生效，因此失败后正常关机请求同样不早于启动调用返回后的 30 秒；没有增加缓冲长度或关机超时，也不把这一时序安排声称为 ACPI/文件系统修复。超时启动可能已运行多久仍未知，不重试启动或追加 guest 探针。
+- 完整结果的 `passed` 只有在采集验证、目标停止、全部 VM 状态和配置不变、无错误且无强制停止时才为 true；有效采集与成功回收分开记录。新本地操作/结果分别使用 `i5-preparation-lifecycle-operation` / `i5-preparation-lifecycle-result`、schema 1，不是公共协议或 I5 evidence schema 的扩展；旧操作包不被新入口接收。
+
+### 新单次操作合同：已授权执行并消费
+
+精确目标仍为 `RadishLink-I5-Debian13-ARM64`，UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`。新 nonce 为 `84eef7a6f33f18cb4aa86c385d6c71a7`；本地忽略目录 `.tmp/i5-guest-return-84eef7a6f33f18cb4aa86c385d6c71a7/operation.json` 已固定上述基准 revision、五份源码/测试摘要、安装工具摘要及目标配置摘要，准备时 `authorized=false` 且没有 attempt。源码摘要覆盖基准之后的未提交实现；随后所有者明确授权本包，复核摘要一致后置 true 并执行一次，现已消费，结果见下节。
+
+本次唯一执行入口为：
+
+```text
+python3 -B scripts/sw_i5_utm_control.py --authorized-once --nonce 84eef7a6f33f18cb4aa86c385d6c71a7
+```
+
+1. 在任何应用调用前检查当前授权、schema/字段、nonce/UUID、全部源摘要、工具摘要、配置摘要与无网卡/无共享条件；拒绝重定向的操作路径、缺失摘要和已有证据。独占新建 attempt，失败也消费该次尝试。读取全部 VM 状态及目标 stopped 基线；前置失败不启动、不停止用户已运行的 VM。
+2. 上述精确 start 一次，最多 60 秒；不带 `--hide`。成功后检查同一 UUID 的 started 状态，经过上述 30 秒缓冲后复核隔离配置，再执行一次 `python3 -B scripts/inspect-sw-i5-guest.py --collect-utm details --nonce 84eef7a6f33f18cb4aa86c385d6c71a7`，控制层最多 65 秒。guest 仍只执行 `/usr/bin/python3 -I -B - --nonce <nonce> --details`，不重发或重跑其他 case。
+3. 启动尝试后，无论结果如何，按上述缓冲时序对同一 UUID 执行 `utmctl stop <UUID> --request`；查询最多等待 120 秒、间隔不超过 30 秒。仍未确认 stopped 才执行一次 `utmctl stop <UUID> --force`，随后复查。这里的 utmctl 均指上述固定绝对路径；普通单命令最多 15 秒，不使用 kill。
+4. 复核全部 VM 状态和目标配置，保存各命令双流/退出信息、阶段时序及最终结果；超时、强制停止、状态变化、配置变化和证据错误均保留为失败，不自动修复或重跑。关机命令/日志写入失败不跳过后续收尾步骤。
+
+预计 5–10 分钟。主要副作用为可能显示 UTM 窗口、目标 VM 一次启动和关机、系统盘及宿主日志写入、宿主证据文件；强制停止可能留下未完成写回。正常关机及超时一次强制停止是本包完整回收范围；保留专用 VM、隔离配置及全部证据，不删除磁盘或退出用户应用。源 VM 和其他 VM 不操作。普通命令双流各最多留存 64 KiB，details CLI 各 2 MiB，超限失败；这不是进程内存、宿主写入硬上限或 I5 容量证明。
+
+本包不包含联网/共享、安装更新、权限或签名修改、swapoff、挂载/格式化、身份重建、文件系统修复、构建、daemon 或 I5-R。此前强制停止后的文件系统完整性尚未证明；若此次启动或盘点失败，保留证据后停止，不另跑 fsck 或改变 guest。完成采集后可在宿主离线分析依赖、验签工具与 swap/容量事实，不能从盘点成功直接放行安装。
+
+### 本轮离线验证与限制
+
+- 新控制回归 3 个测试方法通过，覆盖 25 个生命周期/前置场景及 4 个非法 nonce：精确无 `--hide` argv、退出 0 加 stderr 拒绝、启动超时/启动异常/日志失败后不采集、started 未确认、采集失败/超时/证据不符、正常与强制回收、强制停止失败、其他 VM/配置变化、未授权/源或工具漂移/旧证据拒绝、单次消费和阶段时序。全部外部调用与时钟被 mock。
+- 原采集器 40 项回归通过；控制入口 `--help` 退出 0。适配层未改动，本轮未执行真实 JXA、应用或 VM 调用。
+- `./scripts/check-repo.sh` 通过（191 文件），`git diff --check` 通过；本轮四个文件尚未提交，未 push，未启动后台进程。当时新操作清单保持未授权且无 attempt；后续实测独立记录如下。
+- 上述离线工作只完成实现和新包准备；随后实测在启动前停止，仍未证明去掉 `--hide` 能消除事件错误，也未验证真实包表返回或正常关机。
+
+## 无 hide 单次包的启动前拒绝结果（2026-10-09）
+
+**结果：控制入口退出 1，停在启动前基线检查；目标状态为 stopped，没有执行 start、guest details 或关机命令。** 所有者已明确授权上节完整单次包；本次没有修改冻结源码或放宽 stderr 检查，也没有重试。新建 attempt 后失败同样消费 nonce，四个历史单次授权现均已消费。
+
+| 步骤 | 实际结果与限制 |
+| --- | --- |
+| 授权与输入 | 五份源码/测试、utmctl 安装文件及目标配置摘要一致；记录本次授权并新建 attempt；源码尚未提交，按操作清单 SHA-256 绑定 |
+| `utmctl list` | 退出 0，stdout 750 bytes、stderr 666 bytes。stdout 摘要与前次 VM 状态清单相同；stderr 包含 TISFileInterrogator 的输入源缓存无效诊断及三组 duplicate keyboard layout identifier/replaced 诊断，因此被严格拒绝 |
+| 目标状态 | 随后的 `utmctl status <UUID>` 退出 0、无 stderr，stdout 为 stopped；控制层随后报告 pre-boot baseline failed 并退出 1 |
+| 未进入的阶段 | 无 start 命令、无 details 目录、无 guest 新事实；没有因本次失败触发正常/强制关机，也不能说已经验证无 `--hide` 的真实启动效果 |
+| 退出后只读核对 | 配置摘要仍为 `6c70116bf220ec2b5fbaa13fdcf2806c06c85f82939335b3bd16e8565d9132dc`；仅比较已有本地文件，没有再次调用应用接口或查询 VM |
+
+证据保留于 `.tmp/i5-guest-return-84eef7a6f33f18cb4aa86c385d6c71a7/`。`list-before.stderr` SHA-256 为 `0dcf51a4e58c40822f26b9311c23a751b1eba9d72212058385cf0cc6c3177930`，stdout 为 `c6ae13589ae5b9473a3edd813ac7250bfe977b0a1ca2b8126620c6a58a4d952d`。启动前拒绝分支位于生命周期 try/finally 之前，因此没有生成控制器 `result.json`；原始命令双流、退出 JSON、attempt 和工具退出码仍在，另存 `review.json` 明确标为事后复核，不冒充控制器或 guest 结果。
+
+对现存各单次目录的顶层 stderr 只读比对发现，本次输入源诊断与过去两次 start 的 `OSStatus -10004` 不同，所查历史文件中未见相同输入源诊断。这只是已保留证据范围内的事实，不能推定警告必然无害、每次会复现、源自某一输入法，或与 VM guest 有关。此次调用未请求修改系统输入源；诊断中的 replaced 字样也不能解释为本控制脚本修改了键盘配置。未调查或修改兄弟项目、输入法注册、TCC、应用签名或 UTM 安装。
+
+下一步先只读定位宿主输入源诊断的来源及可重复条件，并补齐启动前拒绝的结构化结果与精准回归；若需真实复现、修改诊断接受策略或改变系统配置，应提出具体范围再确认。不得靠重复运行等候 stderr 消失、过滤字符串或忽略诊断放行。现有源码保持此次冻结版本；完整依赖、验签、swap/容量和 I5-R 缺口继续保留。本次控制进程已结束，目标在最后一次查询时 stopped；没有查询或关闭 UTM 应用本身，不推定整个应用已退出。
+
+## 宿主输入源静态诊断与启动前报告修复（2026-10-09）
+
+本轮根据所有者“继续推进”开展文件/源码只读诊断及离线修复；没有再次执行 utmctl、应用脚本或 VM 操作，四次既有单次授权仍已消费。没有将宿主诊断改成允许列表或忽略 stderr。
+
+### 静态证据与尚未定位的部分
+
+- `/Library/Keyboard Layouts/` 和用户级 `Library/Keyboard Layouts/` 本次枚举均为空；系统对应目录只有 `AppleKeyboardLayouts.bundle`，其 Info.plist 的标识为 `com.apple.keyboardlayout.all`、版本 226。这只能排除所查两个目录中当前存在的自定义布局文件，不能排除输入法内置隐藏布局、运行时注册或缓存问题。
+- 只读检查 HIToolbox 偏好中的当前/启用/选择输入源字段，未见错误日志中的三个数字 ID；这些字段不等于所有运行时输入源或缓存的完整表。本轮没有收集输入内容、输入历史、任意环境变量或用户文件正文，也不将偏好中的个人配置复制到仓库。
+- 本机 SDK `TextInputSources.h` 说明输入源包含布局、输入法及模式，也存在对系统 UI 不可见的输入法专用布局。因此不能从目录为空或可见偏好中没有该 ID 推定不存在重复，也不能从负数 ID 推定第三方输入法有错。
+- [UTM v4.7.5 固定源码](https://github.com/utmapp/UTM/blob/v4.7.5/utmctl/UTMCtl.swift#L174-L192)中 List 只读取 VM 列表并打印 id/status/name；同文件导入 AppKit 和 ScriptingBridge，本机 `otool -L` 可见 Foundation/ScriptingBridge 依赖。这支持“宿主框架初始化路径出现诊断”的候选解释，不能确定是哪一次调用、哪个资源或缓存项触发。未读取到该私有诊断的 Apple 实现依据；网页文档读取失败或搜索无直接解释，不作为根因证据。
+
+现有静态证据不足以确定缓存损坏、重复布局来源或可重复条件，也不足以证明警告无害。没有依据去删除输入源缓存、修改键盘布局、操作输入法注册、重置 TCC、重签名或重装 UTM。兄弟项目保持未修改。
+
+### 已完成的报告修复
+
+修改前将上次执行清单中的五份源码逐字保存到原证据目录的 `source-snapshot/scripts/`，全部与历史清单 SHA-256 一致。旧命令证据、操作清单、事后 review 和缺失的 result 均保持原状；不为旧失败补造新格式结果，也不更新旧源摘要来复用授权。
+
+[控制入口](../../scripts/sw_i5_utm_control.py)现在将 list/status 基线检查纳入异常记录与最终结果保存。新执行若在这一阶段失败，会返回 2、记录 `failure_phase=pre-boot-baseline`、`start_attempted=false`，并保留命令诊断。仅在有干净且明确的状态返回时设置 `status_before` / `stopped`；无法确认时为 null，不能默认为 stopped。没有做前后 VM 比较时 `all_vm_states_unchanged=null`，不伪造未变化结论。启动前拒绝不发出 stop，也不追加应用查询；源码/授权/配置等尚未通过且未创建 attempt 的拒绝仍不写结果。
+
+已进入启动阶段的正常关机、120 秒等待、一次强制停止及后置核对保持原合同。命令证据写入失败现在也直接返回拒绝；最终 result 文件写失败时，控制层在控制台输出带真实原因的失败报告并返回 2，不能先打印 passed 后才暴露落盘失败。结果 scope/schema 1 保留，新增可为空的观测与失败阶段字段；仓库搜索未发现回归测试以外的结果消费者，不修改 guest schema 或 I5 运行证据。
+
+本轮新控制回归 4 个测试方法通过，覆盖 37 个操作场景和 4 个非法 nonce；新增 list/status 的诊断、非零退出、超时、超限、目标缺失、日志写失败、状态未知和结果落盘失败，明确验证不启动/不关机、不补查 VM、真实诊断留存及 attempt 不复用。全部进程与时钟为合成 mock；原采集器 40 项回归和控制入口 help 通过。真实宿主输入源问题与无 hide 的 VM 启动效果仍未实测通过。
+
+`./scripts/check-repo.sh` 通过（191 文件），`git diff --check` 通过。本轮仍为四个未提交文件，未 push；未启动应用、VM 或后台进程，未改系统或远程状态。当时宿主取证包尚未执行；后续获准观察结果独立记录如下。
+
+### 有界取证包：仅宿主观察，已授权执行并消费
+
+为区分现有静态推断与新的宿主观测，已准备 `.tmp/i5-host-input-diagnostic-4d34a7df66809deff3bfdae901ee59a7/`，含 `probe.py`、源码/工具摘要及 `plan.json`；准备时为 `authorized=false` 且无 attempt，随后所有者明确确认执行，复核摘要后置 true，结果见下节。独占 attempt 限制一次执行，现已消费。此包不使用生命周期入口，也不会在诊断干净后继续启动 VM。
+
+本次唯一执行入口：
+
+```text
+python3 -B .tmp/i5-host-input-diagnostic-4d34a7df66809deff3bfdae901ee59a7/probe.py --authorized-once
+```
+
+精确顺序是 `/Applications/UTM.app/Contents/MacOS/utmctl list` 一次，再对 UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726` 执行同一路径的 `status` 一次，各限时 15 秒，双流各最多留存 64 KiB，保留真实退出/超时/诊断/截断标识。即使首条出现诊断也只按计划完成第二条观察，不重试任何命令；有诊断仍返回 2，结果固定 `i5_ready=false`，无 VM 启动/关机，不运行 guest。无诊断只表示本次未复现，不能追认旧失败、证明根因解决或放行 I5。
+
+预计 1–2 分钟，命令自身累计限时 30 秒；可能激活或显示 UTM，产生宿主框架/应用日志与本地诊断文件，不请求更改系统输入源或 VM 配置。控制进程结束后保留证据，不删除缓存，不退出用户 UTM 应用，不停止任何 VM。此包不包含安装、修复、模拟按键、输入源切换、启动 VM、联网或改变 stderr 接受策略。未经本次明确授权不执行；独立合成检查的未授权、正常、诊断和超时四种场景已通过，所有外部进程均被 mock。
+
+## 宿主单次观察结果与下一盘点包（2026-10-09）
+
+所有者明确确认后，按上述宿主取证包只执行 list 和目标 status 各一次；控制进程退出 0。两条命令均退出 0、无 stderr、无超时或超限。list stdout 为 750 bytes、SHA-256 `c6ae13589ae5b9473a3edd813ac7250bfe977b0a1ca2b8126620c6a58a4d952d`，与前次已保存清单相同；status stdout 为 `stopped` 加换行、8 bytes，SHA-256 `f247a76b2893208aae7751dbf51f4c495efacfb6d9e743802870300f31ac45c8`。没有发出 start、stop 或 guest 命令。
+
+原始证据保留于 `.tmp/i5-host-input-diagnostic-4d34a7df66809deff3bfdae901ee59a7/`；`observation.json` SHA-256 为 `6f2039ec408998cc0b376e4ce10f20ec6a6cbc336ee03aaf5f0eee7f70505df0`，固定 `i5_ready=false`。随后仅通过文件读取核对目标配置，摘要仍为 `6c70116bf220ec2b5fbaa13fdcf2806c06c85f82939335b3bd16e8565d9132dc`。未进一步查询应用/VM 状态或退出 UTM 应用。
+
+**本次输入源诊断未复现，不能证明根因已修复，也不改判此前的失败。** 没有发现本次查询阻断，后续无需仅为等候空 stderr 而反复诊断；若另获准的一次盘点再遇到任何 stderr，仍按原规则停止。宿主观察授权已消费，不能转用为 VM 启动授权。
+
+### 修复后控制层的单次盘点包：已授权执行并消费
+
+已准备新 nonce `d2296e284bb28efceea73d121e1e08f9`，位于 `.tmp/i5-guest-return-d2296e284bb28efceea73d121e1e08f9/operation.json`，准备时 `authorized=false`、无 attempt，随后所有者明确授权并执行一次，现已消费。清单绑定基准 `8652928f1685d73ccb2c8adc6f9c2c67600b699c` 和其后的五份源码/测试摘要，包括已修复的启动前结构化报告；控制脚本 SHA-256 为 `03db020f3fead3b1dbd01b8f08db84e5b6dd446c385e4a0aab23f76d15d9aae9`，测试为 `e596bd6223fbf81c480de9aea4651f53fd6a38a04c48cecc8c5d943b45dcff26`。源码仍未提交；安装工具和隔离配置摘要继续精确绑定。
+
+本次唯一执行入口为：
+
+```text
+python3 -B scripts/sw_i5_utm_control.py --authorized-once --nonce d2296e284bb28efceea73d121e1e08f9
+```
+
+精确目标为 `RadishLink-I5-Debian13-ARM64`，UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`。通过全源/工具/配置校验、无网卡/共享检查及 list/status stopped 基线后，执行一次固定绝对路径 `/Applications/UTM.app/Contents/MacOS/utmctl start <UUID>`，不带 `--hide`，最多 60 秒；检查 started，保留 30 秒启动缓冲，复核配置后调用一次既有 `--collect-utm details --nonce d2296e284bb28efceea73d121e1e08f9`，外层最多 65 秒，guest 内容及限额不变。不重复执行，也不改用其他通道。
+
+启动尝试后不论结果都按同一时序执行 `stop <UUID> --request`，最多等待 120 秒、状态间隔不超过 30 秒；仍未 stopped 才强制停止一次并复查。所有 utmctl 均为上述固定绝对路径，普通命令最多 15 秒；最后比较全部 VM 状态和目标配置。未进入 start 的基线失败只保存失败结果，不关机、不追加应用查询。任意 stderr/超时/超限/日志错误仍失败，强制停止也不能报告完整成功。
+
+预计 5–10 分钟。副作用为可能显示 UTM 窗口、目标 VM 启动/关机、系统盘和宿主日志写入及本地证据；强制停止可能留下未完成写回。正常关机和超时一次强制停止构成整个回收范围，保留专用 VM 与证据，不退出用户应用、不删除磁盘或缓存。采集仅查询现有包/工具归属、swap、挂载和选定 unit；不安装、联网、开共享、改输入源/TCC/签名、swapoff、挂载/格式化、修复文件系统、改身份、构建、启动 daemon 或运行 I5-R。成功采集后只做宿主离线复核，不自动安装或放行运行。
+
+本轮未修改执行代码，沿用上节通过的离线回归；文档更新后仓库检查（191 文件）与 `git diff --check` 通过。工作区四个文件仍未提交，未 push；本次宿主取证控制进程已结束，最后目标查询为 stopped，UTM 应用本身未被查询或关闭。
+
+## 无 hide 启动及正常回收通过、details 超限失败（2026-10-09）
+
+所有者明确授权后，复核新单次包 `d2296e284bb28efceea73d121e1e08f9` 的全部源码/工具/配置摘要，执行一次。**控制入口最终退出 2，失败阶段为 details；无 hide 启动和正常关机在本次条件下通过，没有使用强制停止，但完整补充盘点仍失败。** 本次没有重复启动、重发采集或扩大限额。
+
+| 阶段 | 本次真实返回 |
+| --- | --- |
+| 启动前 | list/status 均退出 0、stderr 为空，目标 stopped；约 0.474 秒完成基线 |
+| 启动 | `start <UUID>` 无 `--hide`，退出 0、stdout/stderr 均为空；约 2.789 秒返回，3.411 秒观察到 started。此前两类宿主诊断本次均未出现，不代表已逐项证明其历史根因 |
+| guest 采集 | 32.797 秒发出一次 details；JXA 传输退出 0、无 stderr/超时，正确返回 guest exited=true、exit_code=2、signal_code=0；guest stdout 为空，stderr 67 bytes，内容为 `I5_GUEST_INVENTORY_FAILED: dpkg-query output exceeds details limit` 加换行 |
+| 失败传播 | 宿主 details CLI 退出 2，控制器记录 `failure_phase=details`、`guest_details_verified=false`、`passed=false`；没有把传输成功写成盘点成功 |
+| 回收 | 33.344 秒请求正常关机；63.718 秒确认 stopped，`forced_stop=false`。前后全部 VM 状态逐字一致，配置 SHA-256 一致；控制进程已结束 |
+
+本地证据根为 `.tmp/i5-guest-return-d2296e284bb28efceea73d121e1e08f9/`。`result.json` SHA-256 为 `678f2b4c927400dbe9a1c1b3b89d48dc90b58aec7be4eb9b1d98b9fdeda0781f`；`details/guest.stderr` 为 `d99cf7e8afc5a7bf05e98c30738ccdcad1844561b00dd154290a22d4228fde2b`；前后 list 摘要均为 `c6ae13589ae5b9473a3edd813ac7250bfe977b0a1ca2b8126620c6a58a4d952d`，配置摘要均为 `6c70116bf220ec2b5fbaa13fdcf2806c06c85f82939335b3bd16e8565d9132dc`。五份已执行源码逐字归档到 `source-snapshot/scripts/`，与授权清单摘要一致；review 仅记录授权已消费及真实 result 摘要，不更改原始结果。
+
+### 已定位的边界与剩余诊断缺口
+
+`details_command()` 在子进程 stdout 大于 256 KiB **或** stderr 大于 8 KiB 时返回同一错误；包表 `dpkg-query -W` 与路径归属 `dpkg-query -S` 都经过这个 helper。因此现有失败文本只能证明其中一次 dpkg-query 触发流限额，不能确定是哪条子命令、哪个流、实际字节数或包数量，也不能推定 512 KiB guest 结果上限被触发。guest 结果未序列化输出，不能把之前内部执行的检查当作已取得的新盘点事实。
+
+下一步先在离线实现中补齐超限错误的操作阶段、stdout/stderr 实际字节数及各自限额，覆盖两种 dpkg 查询和两个流的拒绝回归；再依据可核对的体积证据设计完整且有界的采集方式。不得把错误猜成“包太多”后直接扩大预算、删掉依赖字段、截断为成功或再用同一授权尝试。当前没有修改采集器限额或 scope，没有依赖安装、swap/挂载变更、身份处理、构建或 daemon/I5-R 运行。
+
+本次只证明上述一次启动、失败结果传输和正常回收，不证明 guest 文件系统完整性、完整包表、依赖闭包、验签或 768 MiB 容量条件满足。五个 VM 相关单次操作包和一次宿主观察均已消费；后续真实操作仍需新的精确范围。UTM 应用本身未查询或关闭，目标以本次最后状态确认 stopped 为准。
+
+文档更新后 `./scripts/check-repo.sh` 通过（191 文件），`git diff --check` 通过；执行代码本轮未改动，四个文件仍未提交，未 push。
+
 ## 工具来源与固定输入
 
 以下保留 2026-10-06 的固定候选与准备设计；2026-10-09 的复核没有更新版本、来源候选 JSON、运行配置或 evidence schema。候选缺失的关系字段及新增容量证据以上节为准。
