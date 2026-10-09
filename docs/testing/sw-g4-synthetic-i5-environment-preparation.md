@@ -60,7 +60,7 @@ tmpfs 默认可以换出到 swap；三个 16 MiB 节点 tmpfs 不能仅凭“内
 
 当前否决“按 256/160/240/64 MiB 直接创建四盘，然后装 Docker 并运行”的操作路线。建议保留目标 VM 作为准备候选，先补齐软件输入和承载证据；安装不解决系统盘、swap 或宿主 backing 的额度问题。若 UTM/APFS 始终不能给出硬限制证明，再单独评审具备直接有界块设备的 Linux 后端，不能静默更换平台、扩大 768 MiB 或放宽合同。
 
-下一次 guest 补充盘点应一次收齐下表，以免反复启动。当前没有这项新运行授权，现有盘点脚本也尚不提供完整输出；先在既有入口设计独立的补充盘点 scope、回收上限和离线拒绝验证，再形成包含精确命令、时限、启动写入与关机回收的 L3 包。不要直接扩大旧 scope 或把旧结果补写成新证据。
+下一次 guest 补充盘点应一次收齐下表，以免反复启动。当前没有这项新运行授权；本次核对后已按所有者“提交工作区更改，继续推进下一步”的要求完成既有入口的离线扩展和[待执行包](#补充盘点实施与待执行包2026-10-09)。旧 scope 不扩张，旧结果不补写成新证据。
 
 | 必要事实 | 用途与边界 |
 | --- | --- |
@@ -70,6 +70,56 @@ tmpfs 默认可以换出到 swap；三个 16 MiB 节点 tmpfs 不能仅凭“内
 | Docker/containerd 的现有 unit/socket 状态与服务启动策略存在性 | 为后续安装抑制与独占 daemon 设计提供输入；不启动、停止或改 unit |
 
 上述缺口闭合前，可完成的仍是离线设计和精确操作包；运行接入、真实构建及 21 样本矩阵不具备放行条件。
+
+## 补充盘点实施与待执行包（2026-10-09）
+
+上一轮复核的两份文档已提交为 `be7a874`，未 push。本单元是准备工具的局部实现与离线验证，实际启动/采集/关机仍属于待单独确认的 L3 操作。没有修改 I5 运行配置、profile、evidence schema 或 STOP；补充盘点也不能证明签名可信、依赖闭包已解出或容量已满足。
+
+### 独立范围与采集边界
+
+沿用 [inspect-sw-i5-guest.py](../../scripts/inspect-sw-i5-guest.py)、[UTM 适配层](../../scripts/sw_i5_utm_result.js)及[回归入口](../../scripts/test_sw_i5_guest.py)，不另设运行后端。新增 guest `--details`、宿主 `--collect-utm details` 和离线 `--validate-details`；使用独立 `scope=guest-preparation-details`、`schema_version=1`，始终 `i5_ready=false`。旧 `guest-preparation-inventory` 和三个原 case 的输出格式/限额保持不变；旧验证器拒绝新 scope，新验证器拒绝旧 scope，不能交叉解释。
+
+| 新字段 | 采集与解释 |
+| --- | --- |
+| `base_inventory` | 复用原采集，保留其 schema、nonce、网络、内核、块设备和身份存在性事实；补充采集结束再次检查仅 loopback |
+| `packages` | `dpkg-query --no-pager -W` 不附包名过滤，返回完整字段表；包含名称/版本/架构、Status（含 hold）、Essential/Protected/Multi-Arch、Pre-Depends/Depends/Recommends/Suggests/Conflicts/Breaks/Replaces/Provides 和 Installed-Size；保留非 installed 行，不冒充全已安装 |
+| `tools` / `tool_ownership` | 查询固定目录的 apt-get、dpkg、dpkg-query、gpgv、sqv 存在性及解析后的路径，用 `dpkg-query -S` 查询归属；结合包表确定所属包版本，不执行这些工具的版本探针。未找到是空路径列表；存在但归属查询失败则停止，不猜测版本 |
+| `mounts` / `swaps` / `filesystems` | 读取 proc mountinfo/swaps 与 `/`、`/var`、`/tmp`、`/run` 的设备号和可用字节；保留挂载拓扑/传播关系/路径/文件系统、`/dev/` 来源，分别保存单个挂载和 superblock 的 ro/rw/noswap/size/nr_inodes，避免将只读 bind 与底层可写混为一项。剔除其他来源和任意 options，不留存原始 mountinfo。swap 保留承载路径/类型/大小/已用量/优先级，不读内容 |
+| `services` | 仅对 docker.service、docker.socket、containerd.service、containerd.socket 执行 `systemctl show --all --no-pager`，限定 Id/LoadState/ActiveState/SubState/UnitFileState；另查 policy-rc.d 存在性，不读其正文或执行。exit 1 只有在全部四条记录完整且含明确 not-found、无 stderr 时接受；不从空返回推定服务不存在 |
+
+dpkg 的字段语义来自 [Debian dpkg-query 手册](https://manpages.debian.org/trixie/dpkg/dpkg-query.1.en.html)，属性选择来自 [systemctl 手册](https://manpages.debian.org/trixie/systemd/systemctl.1.en.html)，挂载字段来自 [proc_pid_mountinfo](https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html)。这是独立实现，无复制第三方实现或新增依赖。不会读取 apt 凭据、任意源配置、私钥、machine-id 正文、进程参数、服务 Environment/ExecStart 或用户文件内容。
+
+新 scope 的完整 stdout/stderr 每条最多 512 KiB，传输 stdout/stderr 每条最多留存 2 MiB；原 case 仍为 128 KiB/512 KiB。新增命令各限时 8 秒，stdout 验收上限 256 KiB、stderr 8 KiB；proc 单文件最多读取 256 KiB 加一个越界检测字节。超限、重复包、缺列、部分服务记录、错类型、未知顶层字段、nonce/scope 混淆均失败，不截短为成功结果。JXA/Python 的 55/60 秒回收限时不变。子进程输出仍先 capture 再检查，这是返回与留存上限，不是内存/文件系统硬隔离或 768 MiB 验收。
+
+### 待确认的一次完整操作
+
+精确目标为 `RadishLink-I5-Debian13-ARM64`，UUID `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`；新 nonce 为 `aaaf701e67ec731dafe6432503f34635`，没有消费。操作包保留在本地忽略目录 `.tmp/i5-guest-return-aaaf701e67ec731dafe6432503f34635/`：`operation.json` 记录待授权状态、基准 revision 和执行源摘要；`run_inventory.py` 沿用先前一次性控制顺序并增加失败收尾保护，`test_control.py` 仅为合成生命周期验证。它们不是常驻服务或第二套 I5 运行入口。
+
+当前 `operation.json` 的 `authorized=false`，控制脚本会在任何应用调用前拒绝。得到当前任务的明确批准后，先提交本单元并绑定执行 revision，复核所有源摘要，再将该次授权记录置 true。唯一启动入口为：
+
+```text
+python3 -B .tmp/i5-guest-return-aaaf701e67ec731dafe6432503f34635/run_inventory.py --authorized-once
+```
+
+入口按下列顺序执行；所有子命令的 stdout/stderr、退出/超时、配置摘要与结果留存于同一目录，不覆盖既有证据：
+
+1. 校验源摘要、精确目录及新建 `attempt.json`，已有 attempt 即拒绝，不续跑。只读检查目标配置；必须无网卡、剪贴板关闭、目录共享 None。调用 `utmctl list` 和 `utmctl status <UUID>`，目标必须 stopped，保存全部 VM 状态。前置失败不启动、不停止用户已在运行的 VM。
+2. 一次 `utmctl start <UUID> --hide`，最多 60 秒；启动后等待 30 秒。再复核配置，执行一次 `python3 -B scripts/inspect-sw-i5-guest.py --collect-utm details --nonce aaaf701e67ec731dafe6432503f34635`。控制层最多等待 65 秒供原 60 秒回收层保存失败；不重发 execute、不重跑旧 success/failure/inventory case。guest 命令为 `/usr/bin/python3 -I -B - --nonce <nonce> --details`，源码经 stdin 传入。
+3. 仅在真实退出 0、无 signal/stderr、新 scope 验证及保存文件逐字匹配均通过时记录采集成功。缺工具、查询失败、权限提示、超限或超时均停止采集；不安装、不更换通道或自动授权系统权限。
+4. 启动尝试后无论成功失败，通过 finally 对同一 UUID 执行 `utmctl stop <UUID> --request`。每次最多间隔 30 秒复查，等待最多 120 秒；仍未 stopped 时才执行一次 `utmctl stop <UUID> --force`，随后检查状态，不使用 kill。单个命令或日志写入失败会被记录，不跳过其余关机步骤。强制停止作为非正常结果保留，不能把该次报告为完整成功。
+5. 最后比较全部 VM 状态及目标配置摘要；其他 VM 不修改。保存 `result.json`；目标未停、配置变化、其他 VM 状态变化、强制停止或任意错误均返回失败，交由人工处理，不自行修复或重试。
+
+预计 5–10 分钟。主要副作用为 UTM/该 VM 的一次启动和关机、正常系统日志/虚拟磁盘写入及宿主准备证据；这些启动写入尚无 I5 容量证明，本包不是 I5 批次运行。控制层普通命令双流各留存最多 64 KiB，details CLI 双流各最多 2 MiB，超限仍为失败；不声称 UTM/QEMU 的内存或系统写入受这些输出限额约束。清理采用正常关机及上述超时强制停止，保留专用副本、隔离配置、源码包与全部失败证据，不删除磁盘或恢复共享。强制停止有未完成写回风险。
+
+本次确认范围应同时包含启动、一次 details、正常关机及超时强制停止；不包含开网/共享、依赖安装更新、swapoff、挂载/格式化、身份修改、构建、daemon 启动、I5-R、源 VM/其他 VM 修改或远程写入。采集后在宿主离线复核新事实，再收敛依赖与容量设计，不能从采集成功直接放行安装。
+
+### 本单元验证
+
+- Python 回归 40 项通过，含原 27 项及完整包表、hold/Pre-Depends 保留、范围分离、512 KiB 新限额与旧限额保留、嵌套字段/部分输出拒绝、挂载敏感 options 过滤、网络前后检查、命令超时与证据回收。
+- 适配层纯 JavaScript 自测 26 项通过；使用 Node 的独立 vm context 运行原 `--self-test`，无 Application/ObjC/UTM 调用。这不是本轮实际 JXA 或 guest 验证。
+- 一次性控制脚本 7 项合成测试通过：正常完成、采集失败、采集超时、等待超时后的强制停止、关机日志写失败后继续收尾、已启动目标拒绝及未授权拒绝；同时覆盖已消费 attempt 不重跑。全部外部命令被 mock，未控制真实 VM。
+- `--help` 退出 0；真实 Debian 字段返回、包表实际体积、UTM 新 case 传输及关机结果均待上述单次操作验证。
+- `./scripts/check-repo.sh` 通过（189 文件），`git diff --check` 通过。本单元未提交，未启动应用/VM、安装依赖或改变远程状态；临时执行包仍为未授权且无 attempt。
 
 ## 工具来源与固定输入
 

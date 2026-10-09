@@ -377,5 +377,203 @@ class UTMResultTests(unittest.TestCase):
             self.assertEqual(json.loads((evidence / "transport.json").read_text())["stdout_bytes"], len(output))
 
 
+class PreparationDetailsTests(unittest.TestCase):
+    def packages(self):
+        values = {"binary:Package": "fixture:arm64", "Version": "1.0", "Architecture": "arm64",
+                  "Status": "hold ok installed", "Pre-Depends": "init-system-helpers (>= 1.54~)",
+                  "Depends": "libc6 (>= 2.38)", "Provides": "fixture-api (= 1)", "Installed-Size": "12"}
+        return {"fields": list(guest.PACKAGE_FIELDS), "rows": [[values.get(f, "") for f in guest.PACKAGE_FIELDS]]}
+
+    def services(self):
+        return {"exit_code": 1, "policy_rc_d_present": False,
+                "units": {name: {"Id": name, "LoadState": "not-found", "ActiveState": "inactive",
+                                 "SubState": "dead", "UnitFileState": ""} for name in guest.SERVICE_UNITS}}
+
+    def fixture(self):
+        return {"schema_version": 1, "scope": guest.DETAILS_SCOPE, "nonce": NONCE, "i5_ready": False,
+                "base_inventory": InventoryTests().collect(), "packages": self.packages(),
+                "tools": {name: [] for name in guest.DETAIL_TOOLS}, "tool_ownership": [],
+                "mounts": guest.mount_details("1 0 8:0 / / rw,relatime - ext4 /dev/vda rw\n"),
+                "swaps": guest.swap_details("Filename Type Size Used Priority\n/swapfile file 1024 0 -2\n"),
+                "filesystems": {p: {"device": "8:0", "available_bytes": 4096} for p in ("/", "/var", "/tmp", "/run")},
+                "services": self.services()}
+
+    def decode(self, value):
+        return guest.validate_details(json.dumps(value).encode(), NONCE)
+
+    def test_complete_details_and_separate_scope(self):
+        value = self.fixture()
+        self.assertEqual(self.decode(value), value)
+        with self.assertRaises(ValueError):
+            guest.validate_result(json.dumps(value).encode(), NONCE)
+        with self.assertRaises(ValueError):
+            self.decode(value["base_inventory"])
+        self.assertEqual(value["packages"]["rows"][0][3], "hold ok installed")
+
+    def test_full_package_query_preserves_relations_and_rejects_partial(self):
+        expected = self.packages()
+        output = "\t".join(expected["rows"][0]) + "\n"
+        with patch.object(guest, "details_command", return_value=(output, 0)) as command:
+            self.assertEqual(guest.package_details(), expected)
+        argv = command.call_args.args[0]
+        self.assertEqual(argv[:3], ["/usr/bin/dpkg-query", "--no-pager", "-W"])
+        self.assertIn("${Pre-Depends}", argv[3])
+        for output in ("", "pkg\t1\n", output + output):
+            with patch.object(guest, "details_command", return_value=(output, 0)), self.assertRaises(ValueError):
+                guest.package_details()
+
+    def test_commands_fail_closed_and_do_not_use_shell_or_inherit_environment(self):
+        argv = ["/usr/bin/dpkg-query", "-W"]
+        with patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess(argv, 0, b"ok", b"")) as run:
+            self.assertEqual(guest.details_command(argv), ("ok", 0))
+            self.assertEqual(run.call_args.kwargs["timeout"], 8)
+            self.assertNotIn("shell", run.call_args.kwargs)
+            self.assertNotIn("HOME", run.call_args.kwargs["env"])
+        for code, out, err in ((1, b"", b"fixture failure"), (0, b"partial", b"unexpected"),
+                               (0, b"a" * (256 * 1024 + 1), b""), (0, b"", b"a" * 8193)):
+            with patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess(argv, code, out, err)), \
+                    self.assertRaises(RuntimeError):
+                guest.details_command(argv)
+        with patch.object(guest.subprocess, "run", side_effect=subprocess.TimeoutExpired(argv, 8)), \
+                self.assertRaises(subprocess.TimeoutExpired):
+            guest.details_command(argv)
+
+    def test_mounts_omit_arbitrary_source_and_options(self):
+        text = "7 1 0:5 / /run ro,nosuid shared:2 - tmpfs tmpfs rw,size=16M,nr_inodes=10,noswap\n"
+        text += "8 1 0:6 / /fixture ro - cifs //fixture:synthetic-secret@server/share ro,password=synthetic-secret\n"
+        rows = guest.mount_details(text)
+        self.assertEqual(rows[0]["mount_flags"], ["ro"])
+        self.assertEqual(rows[0]["super_flags"], ["noswap", "nr_inodes=10", "rw", "size=16M"])
+        self.assertEqual(rows[0]["propagation"], ["shared:2"])
+        self.assertIsNone(rows[1]["device_source"])
+        self.assertNotIn("synthetic-secret", json.dumps(rows))
+        for invalid in ("", "1 2 broken", text + text, "x 1 8:0 / / rw - ext4 /dev/vda rw"):
+            with self.assertRaises(ValueError):
+                guest.mount_details(invalid)
+
+    def test_swaps_empty_negative_priority_and_invalid(self):
+        header = "Filename Type Size Used Priority\n"
+        self.assertEqual(guest.swap_details(header), [])
+        self.assertEqual(guest.swap_details(header + "/dev/vda2 partition 42 1 -2\n")[0]["priority"], -2)
+        for text in ("", "wrong header", header + "/swap file 1 2 -2", header + "/swap other 1 0 -2"):
+            with self.assertRaises(ValueError):
+                guest.swap_details(text)
+
+    def test_service_query_accepts_explicit_not_found_and_rejects_partial(self):
+        expected = self.services()
+        text = "\n\n".join("\n".join(f"{key}={value}" for key, value in row.items())
+                            for row in expected["units"].values()) + "\n"
+        with patch.object(guest, "details_command", return_value=(text, 1)) as command, \
+                patch.object(guest.os.path, "lexists", return_value=False):
+            self.assertEqual(guest.service_details(), expected)
+        argv = command.call_args.args[0]
+        self.assertEqual(argv[:2], ["/usr/bin/systemctl", "show"])
+        self.assertFalse(any("ExecStart" in arg or "Environment" in arg for arg in argv))
+        for invalid, code in (("", 0), (text.split("\n\n")[0], 0), (text + text, 0),
+                              (text.replace("not-found", "loaded"), 1), (text + "Environment=fixture\n", 0)):
+            with patch.object(guest, "details_command", return_value=(invalid, code)), self.assertRaises(ValueError):
+                guest.service_details()
+
+    def test_details_read_limit(self):
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-details.") as directory:
+            path = Path(directory) / "synthetic-proc"
+            path.write_bytes(b"x" * (256 * 1024 + 1))
+            with self.assertRaisesRegex(RuntimeError, "read limit"):
+                guest.read_details(path)
+
+    def test_supplement_runs_after_base_guard_and_checks_network_again(self):
+        value = self.fixture()
+        with patch.object(guest, "inventory", side_effect=RuntimeError("fixture network rejection")), \
+                patch.object(guest, "package_details") as packages:
+            with self.assertRaisesRegex(RuntimeError, "network rejection"):
+                guest.preparation_details(NONCE)
+            packages.assert_not_called()
+        facts = {"/proc/self/mountinfo": "1 0 8:0 / / rw - ext4 /dev/vda rw\n",
+                 "/proc/swaps": "Filename Type Size Used Priority\n"}
+        with patch.object(guest, "inventory", return_value=value["base_inventory"]), \
+                patch.object(guest, "package_details", return_value=self.packages()), \
+                patch.object(Path, "is_file", return_value=False), \
+                patch.object(guest, "read_details", side_effect=lambda p: facts[p]), \
+                patch.object(guest.os, "stat", return_value=SimpleNamespace(st_dev=0)), \
+                patch.object(guest.os, "statvfs", return_value=SimpleNamespace(f_bavail=10, f_frsize=4096)), \
+                patch.object(guest, "service_details", return_value=self.services()), \
+                patch.object(guest, "require_loopback_only") as network:
+            result = guest.preparation_details(NONCE)
+            network.assert_called_once()
+            self.decode(result)
+            network.side_effect = RuntimeError("fixture changed network")
+            with self.assertRaisesRegex(RuntimeError, "changed network"):
+                guest.preparation_details(NONCE)
+
+    def test_missing_unknown_and_malformed_nested_fields_rejected(self):
+        value = self.fixture()
+        for field in value:
+            changed = dict(value)
+            del changed[field]
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.decode(changed)
+        for field, bad in (("unexpected", 1), ("i5_ready", 0), ("schema_version", True),
+                            ("nonce", "b" * 32), ("mounts", [{}]), ("swaps", [{}]),
+                            ("services", {"exit_code": 0, "units": None, "policy_rc_d_present": False}),
+                            ("tools", {name: [3] for name in guest.DETAIL_TOOLS}),
+                            ("filesystems", {p: {} for p in ("/", "/var", "/tmp", "/run")})):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.decode({**value, field: bad})
+        for raw in (b"", b"[]", b'{"a":1,"a":2}', b'{"a":NaN}', b"[" * 2000 + b"]" * 2000,
+                    b" " * (guest.DETAILS_RESULT_BYTES + 1)):
+            with self.assertRaises(ValueError):
+                guest.validate_details(raw, NONCE)
+
+    def test_case_limits_and_details_transport_binding(self):
+        value = self.fixture()
+        # A larger valid table tests the real 128/512 KiB case separation.
+        template = value["packages"]["rows"][0]
+        value["packages"]["rows"] = [["fixture" + str(i), *template[1:]] for i in range(1000)]
+        raw = json.dumps(value).encode()
+        self.assertGreater(len(raw), guest.MAX_RESULT_BYTES)
+        fixture = UTMResultTests()
+        envelope = fixture.envelope("details", stdout=raw, stderr=b"")
+        result, out, err = fixture.decode(envelope, "details")
+        guest.verify_case(result, out, err, NONCE, "details")
+        envelope["case_name"] = "inventory"
+        with self.assertRaises(ValueError):
+            fixture.decode(envelope, "inventory")
+        with self.assertRaises(ValueError):
+            guest.parse_execution(json.dumps(envelope).encode(), NONCE, "unknown")
+
+    def test_details_cli_validator_never_probes_and_failure_has_no_success(self):
+        raw = json.dumps(self.fixture()).encode()
+        with patch.object(sys, "argv", ["probe", "--nonce", NONCE, "--validate-details"]), \
+                patch.object(sys, "stdin", SimpleNamespace(buffer=io.BytesIO(raw))), \
+                patch.object(guest, "preparation_details") as probe, redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(guest.main(), 0)
+            probe.assert_not_called()
+            self.assertIn("I5 remains stopped", output.getvalue())
+        with patch.object(sys, "argv", ["probe", "--nonce", NONCE, "--details"]), \
+                patch.object(guest, "preparation_details", return_value={}), \
+                redirect_stdout(io.StringIO()) as output, redirect_stderr(io.StringIO()):
+            self.assertEqual(guest.main(), 2)
+            self.assertEqual(output.getvalue(), "")
+
+    def test_details_program_and_adapter_input_size(self):
+        program = guest.probe_program("details")
+        self.assertEqual(program, Path(guest.__file__).read_bytes())
+        self.assertLessEqual(len(base64.b64encode(program)), 64 * 1024)
+
+    def test_details_collector_preserves_and_verifies_new_scope(self):
+        value = self.fixture()
+        fixture = UTMResultTests()
+        envelope = fixture.envelope("details", stdout=json.dumps(value).encode(), stderr=b"")
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-details.") as directory:
+            source, evidence = fixture.collector_fixture(directory, "details")
+            with patch.object(guest, "__file__", str(source)), patch.object(guest, "check_utm_config"), \
+                    patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess(
+                        [], 0, json.dumps(envelope).encode(), b"")) as run:
+                self.assertEqual(guest.collect_utm(NONCE, "details"), envelope)
+                run.assert_called_once()
+                self.assertEqual(json.loads(run.call_args.kwargs["input"])["case_name"], "details")
+            self.assertEqual(json.loads((evidence / "guest.stdout").read_text()), value)
+
+
 if __name__ == "__main__":
     unittest.main()

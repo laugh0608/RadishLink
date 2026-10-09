@@ -10,7 +10,7 @@
 
 I1–I5-I 已提交并通过有限离线验证；容量核验和受限双构建 helper 尚未接入运行入口，真实环境与 daemon 隔离未完成，整批预算仍为 768 MiB。2026-10-06 宿主结果回收与有效 guest 盘点通过：Debian 13 ARM64、Landlock ABI 6，已查包和路径未发现 Go/Docker/containerd/runc；构建身份、克隆身份处理及四个容量域仍未准备。详见[实测结果](../testing/sw-g4-synthetic-i5-resource-isolation.md#宿主回收与第二次盘点实测结果2026-10-06)。
 
-[环境准备评审包](../testing/sw-g4-synthetic-i5-environment-preparation.md)已细化官方工具候选、身份交接与完整容量关系；Docker 索引摘要一致但签名未验证，依赖闭包及宿主 backing/日志硬上限仍缺。下一步与当天全部提交见[2026-10-06 回顾及明日事项](2026-10-06-progress.md)。最近一次实测收尾确认 VM 正常关机、其他 8 台 VM 状态及隔离配置不变；晚间文档收尾未重新查询 VM。两次单次运行授权均已消费，不自动再次启动，I5-R 继续禁止。
+[环境准备评审包](../testing/sw-g4-synthetic-i5-environment-preparation.md)已细化官方工具候选、身份交接与完整容量关系；Docker 索引摘要一致但签名未验证，依赖闭包及宿主 backing/日志硬上限仍缺。2026-10-09 已在原入口实现独立补充盘点 scope，完成完整包表、swap/挂载及服务状态采集的离线回归，并准备[一次性待执行包](../testing/sw-g4-synthetic-i5-environment-preparation.md#补充盘点实施与待执行包2026-10-09)；尚未获得新 VM 运行授权或实测。此前提交见[2026-10-06 回顾](2026-10-06-progress.md)。最近一次实测收尾确认 VM 正常关机、其他 8 台 VM 状态及隔离配置不变；本轮未重新查询 VM。两次历史单次运行授权均已消费，I5-R 继续禁止。
 
 ## 已确定的产品与工程基线
 

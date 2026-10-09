@@ -22,7 +22,7 @@ function validateRequest(request) {
     requireFact(request && typeof request === "object" && !Array.isArray(request), "invalid request");
     requireFact(request.schema_version === 1 && request.uuid === TARGET_UUID, "request target/schema mismatch");
     requireFact(typeof request.nonce === "string" && /^[0-9a-f]{32}$/.test(request.nonce), "invalid nonce");
-    requireFact(["success", "failure", "inventory"].indexOf(request.case_name) >= 0, "unknown case");
+    requireFact(["success", "failure", "inventory", "details"].indexOf(request.case_name) >= 0, "unknown case");
     requireFact(typeof request.program_base64 === "string" && request.program_base64.length > 0 &&
         request.program_base64.length <= 64 * 1024 &&
         /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(request.program_base64),
@@ -61,7 +61,8 @@ function collect(request, api) {
             "missing or invalid exitCode");
         requireFact(integer(result.signalCode) && result.signalCode >= 0, "missing or invalid signalCode");
         ["outputData", "errorData"].forEach(function (key) {
-            requireFact(typeof result[key] === "string" && result[key].length <= MAX_DATA_CHARS,
+            var limit = request.case_name === "details" ? 4 * Math.ceil(512 * 1024 / 3) : MAX_DATA_CHARS;
+            requireFact(typeof result[key] === "string" && result[key].length <= limit,
                 "missing or oversized " + key);
         });
         return {
@@ -83,8 +84,10 @@ function nativeAPI(app, clock, sleeper) {
             return {uuid: vm.id({timeout: timeout}), status: vm.status({timeout: timeout})};
         },
         execute: function (request, timeout) {
+            var args = ["-I", "-B", "-", "--nonce", request.nonce];
+            if (request.case_name === "details") { args.push("--details"); }
             return app.execute(vm, {
-                at: "/usr/bin/python3", withArguments: ["-I", "-B", "-", "--nonce", request.nonce],
+                at: "/usr/bin/python3", withArguments: args,
                 usingInput: request.program_base64, base64Encoding: true, outputCapturing: true
             }, {timeout: timeout});
         },
@@ -211,6 +214,24 @@ function selfTest() {
         };
         collect(request(), nativeAPI(app, function () { return 0; }, function () { throw new Error("unexpected wait"); }));
         equal(calls, 1, "wrong execute count");
+    });
+    test("details limit does not expand old inventory", function () {
+        var r = request(); r.case_name = "details";
+        var record = done(); record.outputData = "A".repeat(MAX_DATA_CHARS + 4);
+        equal(collect(r, fixture([record]).api).case_name, "details", "lost details binding");
+        rejects(function () { collect(request(), fixture([record]).api); }, "oversized");
+        record.outputData = "A".repeat(4 * Math.ceil(512 * 1024 / 3) + 4);
+        rejects(function () { collect(r, fixture([record]).api); }, "oversized");
+    });
+    test("details native arguments and unknown case rejection", function () {
+        var r = request(); r.case_name = "details";
+        var app = {virtualMachines: {byId: function () { return {}; }},
+            execute: function (vm, options) {
+                equal(options.withArguments, ["-I", "-B", "-", "--nonce", r.nonce, "--details"], "details not selected");
+            }};
+        nativeAPI(app).execute(r, 1);
+        r.case_name = "other";
+        rejects(function () { collect(r, {}); }, "unknown case");
     });
     return "I5_UTM_RESULT_SELF_TEST_PASS: " + count + " synthetic cases; no application calls";
 }
