@@ -10,7 +10,7 @@
 
 I1–I5-I 已提交并通过有限离线验证；容量核验和受限双构建 helper 尚未接入运行入口，真实环境与 daemon 隔离未完成，整批预算仍为 768 MiB。2026-10-06 宿主结果回收与有效 guest 盘点通过：Debian 13 ARM64、Landlock ABI 6，已查包和路径未发现 Go/Docker/containerd/runc；构建身份、克隆身份处理及四个容量域仍未准备。详见[实测结果](../testing/sw-g4-synthetic-i5-resource-isolation.md#宿主回收与第二次盘点实测结果2026-10-06)。
 
-[环境准备评审包](../testing/sw-g4-synthetic-i5-environment-preparation.md)已细化官方工具候选、身份交接与完整容量关系；Docker 索引摘要一致但签名未验证，依赖闭包及宿主 backing/日志硬上限仍缺。2026-10-09 独立补充盘点实现及离线回归已提交为 `3331167`，随后获准的一次操作在 `start --hide` 返回 `OSStatus -10004` stderr 后停止，未执行 guest 采集；正常关机等待超时后强制停止一次，最终 stopped，全部 VM 状态及目标配置与启动前一致。详见[本次结果](../testing/sw-g4-synthetic-i5-environment-preparation.md#补充盘点单次操作结果2026-10-09)。此次授权及两次历史授权均已消费；下一步只读诊断启动事件错误，不能直接重跑，I5-R 继续禁止。
+[环境准备评审包](../testing/sw-g4-synthetic-i5-environment-preparation.md)已细化官方工具候选、身份交接与完整容量关系；Docker 索引摘要一致但签名未验证，依赖闭包及宿主 backing/日志硬上限仍缺。2026-10-09 独立补充盘点实现及离线回归已提交为 `3331167`，随后获准的一次操作在 `start --hide` 返回 `OSStatus -10004` stderr 后停止，未执行 guest 采集；正常关机等待超时后强制停止一次，最终 stopped，全部 VM 状态及目标配置与启动前一致。详见[本次结果](../testing/sw-g4-synthetic-i5-environment-preparation.md#补充盘点单次操作结果2026-10-09)。[后续只读诊断](../testing/sw-g4-synthetic-i5-environment-preparation.md#启动事件错误的只读诊断2026-10-09)发现 10-06 启动时也有相同 stderr，旧控制层未拒绝；`--hide` 附带应用/窗口事件是高概率触发点，尚未逐事件实证。下一步准备去掉该可选参数、保留错误拒绝和有界回收的最小修正包；三个历史单次授权均已消费，不能直接重跑，I5-R 继续禁止。
 
 ## 已确定的产品与工程基线
 

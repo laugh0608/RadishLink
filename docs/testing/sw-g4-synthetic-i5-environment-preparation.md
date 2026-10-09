@@ -141,6 +141,36 @@ python3 -B .tmp/i5-guest-return-aaaf701e67ec731dafe6432503f34635/run_inventory.p
 
 下一步先在宿主只读定位 `start --hide` 的事件错误及启动/关机行为，再按具体根因决定是否修改控制层和制定新单次操作包。不得把“VM 最后启动过”作为忽略 stderr 的理由，或将本次授权沿用为再次启动/盘点。原依赖、验签、swap 和容量缺口继续保留。
 
+## 启动事件错误的只读诊断（2026-10-09）
+
+上述失败记录已提交为 `71def9a`，未 push。本次仅核对已有两次原始证据、控制脚本、安装文件和上游固定版本源码；未调用 utmctl/应用脚本接口或重新查询、启动 VM，也未改系统权限、签名、安装文件或控制逻辑。
+
+**诊断结论：高概率触发点是 `--hide` 附带的应用/窗口事件；本次提前收尾的直接原因，则已确定为新控制脚本拒绝非空 stderr。** 这两层要分开：尚无逐条 Apple event 的本机观测，不能声称已经证明具体哪条窗口调用被拒绝，也不能据错误码推定 VM 启动命令未生效。
+
+| 核对对象 | 实际发现及含义 |
+| --- | --- |
+| 两次启动 stderr | 2026-10-06 成功盘点目录中的 `start.stderr` 也有相同两条 `-10004`，与 2026-10-09 失败目录逐字相同，均为 164 bytes、SHA-256 `4f4bedf1feb156b4ef0c65a1f55a72b85090c305df18065df7034075feb8de45`。这是原记录未明确披露的启动诊断，不是此次 guest details 新引入的错误 |
+| 两版控制层 | 10-06 的 `command()` 保存 stderr，但启动分支只检查 exit code，随后等待 30 秒并执行三项 guest case；10-09 的 `command()` 同时拒绝 stderr，因而在执行等待和 details 之前进入 finally。保留严格拒绝是正确的，不能恢复旧脚本的漏检 |
+| UTM v4.7.5 CLI | 通用入口在 `hide=true` 时先设置 auto terminate、枚举窗口并尝试关闭名为 UTM 的窗口，再执行子命令；真正 Start 子命令调用 VM 的 startSaving。事件失败 delegate 写 stderr 后返回 nil，没有在该处抛出错误；因此“打印事件错误但命令退出 0、VM 实际启动”与源码路径一致 |
+| 本机权限和术语 | 实际 PATH 指向 `/Applications/UTM.app/Contents/MacOS/utmctl`，UTM 为 4.7.5（118）。现代方式读取的 entitlement 声明 app-sandbox 与 `com.utmapp.UTM.vm-access` scripting target；安装的 UTM.sdef 将 VM 接口放在此组，同时包含 CocoaStandard 的窗口接口。这支持可选窗口操作与 VM 操作权限范围不同的候选解释，但不等于本机拒绝事件已被逐项定位 |
+| 错误码与关机语义 | 本机 SDK 的 MacErrors.h 将 `-10004` 定义为 `errAEPrivilegeError`。该名称只表达权限违例，不能据此要求重置 TCC 或扩大系统权限。UTM 的 request 定义明确允许 guest 忽略电源请求，返回 0 不代表已关机 |
+
+源码与定义依据：[UTMCtl.swift v4.7.5](https://github.com/utmapp/UTM/blob/v4.7.5/utmctl/UTMCtl.swift#L49-L68)、[事件错误处理](https://github.com/utmapp/UTM/blob/v4.7.5/utmctl/UTMCtl.swift#L108-L126)、[上游 entitlement](https://github.com/utmapp/UTM/blob/v4.7.5/utmctl/utmctl.entitlements)、[Apple 错误定义](https://developer.apple.com/documentation/coreservices/erraeprivilegeerror)、[UTM stop method](https://docs.getutm.app/scripting/reference/#utm-suite)。上游用户的 [Issue #5509](https://github.com/utmapp/UTM/issues/5509)也报告过带 `--hide` 的 clone 返回该错误但实际完成操作；其版本与操作不同，只作旁证，不能替代本机验证。
+
+本机只读签名核验需保留环境差异：首次使用旧 `codesign -d --entitlements :-` 得到 deprecated/invalid entitlements blob 警告；改用 `codesign -d --entitlements -` 能读取声明。随后 `codesign --verify --strict --verbose=2 /Applications/UTM.app/Contents/MacOS/utmctl` 在沙盒内退出 1，报 invalid signature；同一命令获准在沙盒外复核退出 0，报告 valid on disk 且满足 Designated Requirement。不能将沙盒内结果写成工具损坏或发生篡改，也不能把核验通过当作全部运行行为已证明。
+
+本轮读取的 `utmctl` SHA-256 为 `288e61a73f0b70d9986687a8adc0f05bf2009e8f3843754288d2d174551c8ba5`，UTM.sdef 为 `b4fd52c64433658aeb3777774a06c2c1a77e2de611050928f5d55e9e626928b3`；这些绑定本次安装文件，不追溯证明过去所有运行的二进制相同。
+
+关机超时的一个合理解释是：本次在启动返回错误后直接发送 request，跳过原定的 30 秒启动等待，guest 可能尚未准备好处理电源请求。旧次采集完成后再关机成功与此解释相容，但没有本次 guest 启动日志，不能排除其他 guest 原因，也不能说已证明 ACPI 故障或系统盘损坏。
+
+### 最小修正方向与验证边界
+
+下一实现建议只从新操作包的 `utmctl start <UUID> --hide` 去掉 `--hide`，保留同一 UUID、现有采集器、网络/共享隔离、stderr 非空即停止、单次执行和关机回收。该选项不是无网隔离或 VM 无显示后端的开关；去掉后不再执行 CLI 的 auto terminate/窗口关闭分支，允许 UTM 窗口保持可见。不通过忽略特定错误、改权限、重新签名、安装新版或换执行通道取得表面成功。
+
+新包还应把启动尝试时刻与“VM started/guest 就绪”分开记录，并在失败收尾设计中明确启动尚未完成时的处理时序；不要把盲目增加 sleep 或仅延长关机超时当成已修复。首先覆盖无 `--hide` 的精确 argv、任意 stderr 仍拒绝、失败后不采集、单次启动及有界回收的离线回归，再提交新的精确操作包。现有 nonce/attempt 和源摘要均保留，不原地改写已消费操作包。
+
+本次未修改执行代码，也未生成新的启动授权。是否能消除事件错误、完成 details 并正常关机仍需一次另行批准的真实操作；强制停止后的 guest 文件系统完整性也未验证。10-06 三项 guest 结果仍有有效原始证据，本次补记其启动 stderr 和旧控制层局限，不回写旧证据或把“guest 结果有效”扩展成“整个生命周期无错误”。
+
 ## 工具来源与固定输入
 
 以下保留 2026-10-06 的固定候选与准备设计；2026-10-09 的复核没有更新版本、来源候选 JSON、运行配置或 evidence schema。候选缺失的关系字段及新增容量证据以上节为准。
