@@ -1,12 +1,12 @@
 # I5 专用环境准备评审包
 
-- 更新日期：2026-10-06
-- 状态：来源候选与权限/容量边界已细化；安装清单和宿主硬容量证明未闭合，禁止据此执行环境操作
+- 更新日期：2026-10-09
+- 状态：离线可行性核对完成；现有 UTM 配置不满足运行条件，依赖闭包与完整容量证明仍未闭合
 - 目标读者：环境准备、I5 后端实现与证据复核者
 - 范围：承接有效 guest 盘点，收敛工具输入、身份分工、写入归属和下一离线实施顺序
 - 非目标：启动 VM、安装或更新依赖、改变身份/系统配置、创建磁盘、运行构建/daemon/I5-R
 
-## 本轮结果
+## 初次准备结果（2026-10-06）
 
 所有者要求“提交工作区更改，继续推进下一步”。四份实测结果文档已提交为 `c7b0aa1`，未 push；本轮随后只读核对源码、公开发布/安全资料及官方包索引，形成本文和[候选来源清单](../../tools/t0/i5-environment-candidates.json)。没有下载候选软件包或执行 guest 命令。
 
@@ -18,7 +18,62 @@
 2. agent 为 root，而现有 Go 构建 helper 要求非 root、无 capabilities、单线程及域外只读挂载；安装工具不能自动满足这些前置。
 3. 四域上限 720 MiB 加节点 tmpfs 48 MiB 已占满总额。四个满额 guest 盘加未计费的 backing/系统日志不能作为合格后端；完整物理占用边界仍未证明。
 
+## 工具输入与容量复核（2026-10-09）
+
+本次只读复核已保存的原始索引、guest 返回、宿主上的目标 VM 配置和官方说明；没有启动 UTM/VM、下载软件包、安装工具或运行 guest 命令。结论是：**当前配置不能进入 I5-R；768 MiB 方案尚未证明可行，也没有证据证明所有 Linux 后端均不可行。** 继续保留合同和公开入口 STOP，不先接入运行代码来代替环境证明。
+
+### 输入闭包：发现前置依赖遗漏
+
+四个固定 deb 的版本、架构、Size、SHA256、Depends 和 Recommends 与保存的 Packages 逐项一致；Packages/InRelease 的大小与摘要复算一致。候选 JSON 仍只是索引摘录，不是完整依赖锁：它没有记录以下全部关系字段，后续解析必须直接使用经验证的完整索引，不能只递归其 `depends` 字段。
+
+| 固定包 | Installed-Size（KiB，索引声明） | 摘录之外必须处理的关系 |
+| --- | ---: | --- |
+| `containerd.io` | 80,956 | Conflicts/Replaces/Provides：`containerd, runc` |
+| `docker-buildx-plugin` | 67,053 | Replaces：`docker-ce-cli` |
+| `docker-ce` | 105,905 | **Pre-Depends：`init-system-helpers (>= 1.54~)`**；Conflicts：`docker.io`；Replaces：`docker-ce-cli (<< 5:28.0.0)` |
+| `docker-ce-cli` | 43,965 | Conflicts：`docker-cli, docker.io`；Breaks/Replaces：`docker-ce (<< 5:0)` |
+
+四包声明安装体积合计 297,879 KiB，约 290.90 MiB；它既不含 Go、Debian 传递依赖和维护脚本写入，也不是实际文件系统占用或构建峰值。预先安装且在批次内真正只读的工具输入与批次新增写入分开核算，不能把该数直接与 build 域 256 MiB 比较后判定可行或不可行。
+
+依赖解析还必须固定 Recommends 的处理策略。Engine 推荐 rootless extras 等包，CLI 推荐 Compose；本批需求不自动包含它们，Git 等实际必需工具也不能因关闭推荐包而遗漏。应在离线解析中显式列出安装、保留、升级、删除及排除项，并拒绝未经评审的删除/升级；不能用包名的字符串集合自行替代 Debian 的版本、替代依赖、Provides 和安装顺序语义。[Debian 包关系规则](https://www.debian.org/doc/debian-policy/ch-relationships.html)。
+
+旧 guest 盘点仅查询预设包名，不是完整 dpkg 数据库；成功返回中只有四个已安装包条目，无法据此判断所有依赖已满足。宿主本次仍未找到 `gpg/gpgv`，也没有 `apt-get/dpkg-query`；不安装替代工具或自行实现 OpenPGP。来源真实性应先闭合发布密钥信任与 InRelease 签名，再沿索引核验每个归档；现有摘要内部一致不等于这条信任链已通过。[apt-secure](https://manpages.debian.org/trixie/apt/apt-secure.8.en.html)。
+
+### 容量：发现 swap 与现有 backing 的未闭合写入
+
+旧 guest 返回来自 2026-10-06 已通过的第二次盘点，原始 `guest.stdout` SHA-256 为 `b226c10590f90f5e31c954481f89ba30b72712024691490f22ac4c82e661f9b6`。本次重新读取其中 `SwapTotal=2709500 kB`，约 2.584 GiB；这只证明当时配置了 swap，不能声称发生了同等写入或已经超额。旧返回没有 `/proc/swaps` 和完整挂载拓扑，因此其承载路径和额度归属未知。
+
+tmpfs 默认可以换出到 swap；三个 16 MiB 节点 tmpfs 不能仅凭“内存盘”排除磁盘写入。准备方案应明确禁用 guest swap，或证明所有换出写入在既有额度内；若考虑 `noswap`，必须核验目标内核/实际挂载支持，且它不能解决其他 guest 内存的换出。关闭 swap 是后续系统操作，不在本次执行。[Linux tmpfs 文档](https://docs.kernel.org/filesystems/tmpfs.html)。
+
+本次只读检查宿主上的目标 `config.plist`：其 UUID 与本包一致，无网卡/目录共享/剪贴板共享，启用 UEFI、关闭 QEMU debug log；仅一个只读 CD 和一个可写 VirtIO QCOW2 系统盘，没有四个资源域盘。配置摘要为 `6c70116bf220ec2b5fbaa13fdcf2806c06c85f82939335b3bd16e8565d9132dc`。安装的 UTM 为 4.7.5（118）；这些是文件配置事实，不是运行状态、QEMU 实际参数或挂载只读性证明。
+
+| 写入面 | 本次判断 | 继续条件 |
+| --- | --- | --- |
+| 四资源域 | 配置未创建；满额四盘之外没有余量 | 每域证明 `D + H <= C`，并验证容量拒绝路径 |
+| 系统盘与 swap | 系统盘可写，旧 guest 配置约 2.584 GiB swap，完整归属未知 | 获得 swap/mount 事实；系统新增写入只读阻断或落入有硬上限的域 |
+| 宿主 backing 与控制文件 | QCOW2 元数据另计；关闭 debug log 只覆盖一种日志 | 列清实际 QEMU 写入目标，包括是否有可写 UEFI 变量/状态、日志和临时文件，逐项绑定硬上限 |
+| 构建和 daemon 峰值 | 未安装固定工具，未执行真实构建或 daemon | 在完整边界先成立后实测；不足即失败，不能依靠宿主空闲空间兜底 |
+
+不采用 QEMU `-snapshot` 作为“系统盘不写”的证明：该选项仍将改动写入临时文件。宿主 ENOSPC 还可能使 QEMU 暂停，不能假定它等价于 guest 内可回收的拒绝；后续容量验收必须覆盖监督器失联/暂停及证据回收。[QEMU invocation](https://www.qemu.org/docs/master/system/invocation.html)。UEFI 与 debug log 的配置含义参考 [UTM QEMU 设置](https://docs.getutm.app/settings-qemu/qemu/)；本次没有推断或修改未经核对的变量文件路径。
+
+### 取舍与下一交付
+
+当前否决“按 256/160/240/64 MiB 直接创建四盘，然后装 Docker 并运行”的操作路线。建议保留目标 VM 作为准备候选，先补齐软件输入和承载证据；安装不解决系统盘、swap 或宿主 backing 的额度问题。若 UTM/APFS 始终不能给出硬限制证明，再单独评审具备直接有界块设备的 Linux 后端，不能静默更换平台、扩大 768 MiB 或放宽合同。
+
+下一次 guest 补充盘点应一次收齐下表，以免反复启动。当前没有这项新运行授权，现有盘点脚本也尚不提供完整输出；先在既有入口设计独立的补充盘点 scope、回收上限和离线拒绝验证，再形成包含精确命令、时限、启动写入与关机回收的 L3 包。不要直接扩大旧 scope 或把旧结果补写成新证据。
+
+| 必要事实 | 用途与边界 |
+| --- | --- |
+| 全部已安装包的名称、版本、架构、状态及关系字段；APT/dpkg 版本和 hold 状态 | 绑定 guest 基线并解析安装差量；不是运行 `apt update/install`，不读取凭据或输出任意源配置 |
+| `gpgv`/`sqv` 等现有验签器的存在性、版本与所属包 | 选择成熟验证工具；缺失即记录，不在盘点过程中安装 |
+| `/proc/swaps`、mountinfo、根/var/tmp/run 的挂载与块设备对应关系 | 确定 swap 和域外写入面；不执行 swapoff、mount、磁盘创建或格式化 |
+| Docker/containerd 的现有 unit/socket 状态与服务启动策略存在性 | 为后续安装抑制与独占 daemon 设计提供输入；不启动、停止或改 unit |
+
+上述缺口闭合前，可完成的仍是离线设计和精确操作包；运行接入、真实构建及 21 样本矩阵不具备放行条件。
+
 ## 工具来源与固定输入
+
+以下保留 2026-10-06 的固定候选与准备设计；2026-10-09 的复核没有更新版本、来源候选 JSON、运行配置或 evidence schema。候选缺失的关系字段及新增容量证据以上节为准。
 
 以下是本轮选定的**评审候选**，不是已验证安装锁。清单使用独立 `scope=i5-environment-source-candidates`，固定 `install_authorized=false`、`i5_ready=false`，没有运行入口读取它。后续正式安装锁必须来自通过真实性校验的索引、完整依赖解析和实际文件校验，不能简单把两个布尔值改成 true。
 
@@ -111,7 +166,7 @@ guest 根文件系统的 ≥ 1 GiB 可用与 macOS 上承载 VM 的物理文件�
 
 当前可推进的是来源真实性/闭包和承载机制设计；不能把尚未闭合的安装清单包装成可批准执行的命令。无需为了这些宿主离线工作再次启动 VM。后续完整操作包准备好后按仓库 L3 规则一次说明副作用与回收，不重复索要已经授权的包内步骤。
 
-## 本轮验证与限制
+## 初次准备验证与限制（2026-10-06）
 
 - `c7b0aa1` 提交前，仓库检查（186 文件）和 `git diff --check` 通过，提交后工作树干净；随后才产生本包文件。
 - 机器可读候选清单与抓取的 Packages 精确版本/架构/大小/SHA-256 对照；共四个 deb 候选及一个 Go 归档。清单不被运行入口消费，不等于依赖安装或锁定通过。
@@ -119,3 +174,9 @@ guest 根文件系统的 ≥ 1 GiB 可用与 macOS 上承载 VM 的物理文件�
 - 首次沙盒内 curl 退出 7，原因是无法连接本机代理 `127.0.0.1:10808`；获准后同 URL/目标在沙盒外读取成功。InRelease 随后只读取得；网页工具的 containerd 下载页及原始 Packages 页面曾报 Internal Error，不将网页读取失败当成软件包不存在。
 - 验签工具查找未找到，未执行密码学验证；这是尚未关闭的证据缺口，不用摘要匹配替代。
 - 未运行 Go/Python 实现测试、构建或 VM：本轮没有改实现、依赖、系统或设备。本文只完成设计/来源细化，不代表新的环境验收。
+
+## 本次复核验证与限制（2026-10-09）
+
+- 四个 deb 的固定版本/架构/大小/hash/Depends/Recommends 与本地原始索引逐项对照通过，补查 Pre-Depends、Conflicts、Breaks、Replaces、Provides 和 Installed-Size；没有更新索引或下载归档。
+- 重新计算 Packages、InRelease 和旧 guest 返回摘要，并只读检查目标 VM 配置；旧盘点不代表当前 guest 状态，配置文件不代表实际 QEMU 运行参数。验签、完整依赖解析及容量实测仍未完成。
+- `./scripts/check-repo.sh` 通过（189 文件），`git diff --check` 通过；仅更新本准备包与当前状态，没有运行实现测试、构建、VM 或新增后台进程，没有修改系统、设备或远程状态。

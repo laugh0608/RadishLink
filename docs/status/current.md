@@ -55,7 +55,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 1. 按已确认的场景和整套最高 3000 元范围，完成无可复用设备条件下的同型号三节点全新增 BOM 与候选比较，补齐使用频率、断连时长及上海合规路径；不承诺预算可行性或日期。
 2. 按已接受的分渠道评审方向，先补齐内部 Linux ARM64 受限实验的精确产物输入，分别处置 `debug_tree` 的固定源码正文/归属与 `r-efi` 的 MIT alternative；专业评审和执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 在已选择的 Node 身份与手机界面职责下收敛首次信任、撤销、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)在结果回收与环境盘点已通过的基础上，完成专用 Linux 环境操作包、受限构建运行接入与 daemon/store 计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
+4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；2026-10-09 [工具输入与容量复核](../testing/sw-g4-synthetic-i5-environment-preparation.md#工具输入与容量复核2026-10-09)确认现有 UTM 配置不具备运行条件，先补全依赖基线、验签与 swap/挂载/宿主写入边界，不直接创建满额四盘后安装。按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)在结果回收与环境盘点已通过的基础上，完成专用 Linux 环境操作包、受限构建运行接入与 daemon/store 计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
 5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成全新增硬件及能量/体积/成本预算；I4 本轮未修改 CI。
 
 ## 关键风险
@@ -65,7 +65,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 - **安全与交互机制未冻结**：Node/手机职责已选定，首次信任、撤销和事务仍待证明；覆盖层 hop 不自动等于物理 hop，未来手机独立端点也不自动继承 Node 会话。
 - **工程样机预算缺少实测**：Linux、双无线、常开中继和媒体共同影响电池、温度、体积与成本；开发板和 PHY 峰值不能替代产品数据。
 - **验证和维护成本偏重**：`SW-EXP-001` 不能继承为产品协议；已有脚本重复和长文件需要在后续相关实施中收敛，当前 CI 仍只检查仓库卫生。
-- **I5-R 运行前资源边界未关闭**：Go cache/temp、bootstrap 和 Docker builder/daemon 写入不能靠 artifact 采样约束；证据/诊断已有写前计费，容量探测与构建持续检查仅完成 helper 离线验证；实际接入、daemon/store 阶段预留及控制请求阻塞期间检查仍待实施。入口保持停止；五部分合计 768 MiB 已无域外开销余量，实际 guest 设备须在各域完整额度内为有硬上限的 backing/环境写入留空间；容量可行性和真实拒绝证据仍待验证。
+- **I5-R 运行前资源边界未关闭**：Go cache/temp、bootstrap 和 Docker builder/daemon 写入不能靠 artifact 采样约束；证据/诊断已有写前计费，容量探测与构建持续检查仅完成 helper 离线验证；实际接入、daemon/store 阶段预留及控制请求阻塞期间检查仍待实施。入口保持停止；五部分合计 768 MiB 已无域外开销余量，实际 guest 设备须在各域完整额度内为有硬上限的 backing/环境写入留空间。旧盘点另显示约 2.584 GiB swap，宿主配置仍为可写 QCOW2 系统盘；二者没有完整归属，不代表已发生超额写入，但容量可行性和真实拒绝证据仍待验证。
 
 ## 当前停止线
 
