@@ -418,6 +418,7 @@ class PreparationDetailsTests(unittest.TestCase):
         argv = command.call_args.args[0]
         self.assertEqual(argv[:3], ["/usr/bin/dpkg-query", "--no-pager", "-W"])
         self.assertIn("${Pre-Depends}", argv[3])
+        self.assertEqual(command.call_args.kwargs["operation"], "package-table")
         for output in ("", "pkg\t1\n", output + output):
             with patch.object(guest, "details_command", return_value=(output, 0)), self.assertRaises(ValueError):
                 guest.package_details()
@@ -425,18 +426,117 @@ class PreparationDetailsTests(unittest.TestCase):
     def test_commands_fail_closed_and_do_not_use_shell_or_inherit_environment(self):
         argv = ["/usr/bin/dpkg-query", "-W"]
         with patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess(argv, 0, b"ok", b"")) as run:
-            self.assertEqual(guest.details_command(argv), ("ok", 0))
+            self.assertEqual(guest.details_command(argv, operation="package-table"), ("ok", 0))
             self.assertEqual(run.call_args.kwargs["timeout"], 8)
             self.assertNotIn("shell", run.call_args.kwargs)
             self.assertNotIn("HOME", run.call_args.kwargs["env"])
         for code, out, err in ((1, b"", b"fixture failure"), (0, b"partial", b"unexpected"),
-                               (0, b"a" * (256 * 1024 + 1), b""), (0, b"", b"a" * 8193)):
+                               (0, b"a" * (512 * 1024 + 1), b""), (0, b"", b"a" * 8193)):
             with patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess(argv, code, out, err)), \
                     self.assertRaises(RuntimeError):
-                guest.details_command(argv)
+                guest.details_command(argv, operation="package-table")
         with patch.object(guest.subprocess, "run", side_effect=subprocess.TimeoutExpired(argv, 8)), \
                 self.assertRaises(subprocess.TimeoutExpired):
-            guest.details_command(argv)
+            guest.details_command(argv, operation="package-table")
+
+    def test_details_overflow_identifies_operation_stream_sizes_and_exit(self):
+        marker = b"synthetic-output-must-not-be-echoed"
+        for operation in ("package-table", "tool-ownership"):
+            limit = 524288 if operation == "package-table" else 262144
+            cases = ((marker + b"x" * limit, b"", "stdout"),
+                     (b"", marker + b"x" * 8192, "stderr"),
+                     (b"\xff" * (limit + 1), b"\xff" * 8193, "stdout,stderr"))
+            for out, err, exceeded in cases:
+                for code in (0, 2):
+                    with self.subTest(operation=operation, exceeded=exceeded, code=code), \
+                            patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], code, out, err)), \
+                            self.assertRaises(RuntimeError) as caught:
+                        guest.details_command(["/usr/bin/dpkg-query", "synthetic-private-argument"], operation=operation)
+                    message = str(caught.exception)
+                    self.assertIn(f"operation={operation}; exceeded={exceeded};", message)
+                    self.assertIn(f"stdout_bytes={len(out)}; stdout_limit={limit};", message)
+                    self.assertIn(f"stderr_bytes={len(err)}; stderr_limit=8192;", message)
+                    self.assertTrue(message.endswith(f"exit_code={code}"))
+                    self.assertNotIn(marker.decode(), message)
+                    self.assertNotIn("synthetic-private-argument", message)
+                    self.assertLess(len(message.encode()), 512)
+
+    def test_details_byte_boundary_does_not_raise_limits(self):
+        # Two bytes per character: the acceptance bound is bytes, not text length.
+        out = ("é" * 131072).encode()
+        with patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, out, b"")):
+            self.assertEqual(guest.details_command(["/usr/bin/dpkg-query"], operation="tool-ownership"),
+                             (out.decode(), 0))
+        for out, err, fragment in ((out + b"x", b"", "stdout_bytes=262145"),
+                                   (b"", b"x" * 8192, "failed: exit=0")):
+            with patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, out, err)), \
+                    self.assertRaisesRegex(RuntimeError, fragment):
+                guest.details_command(["/usr/bin/dpkg-query"], operation="tool-ownership")
+        with patch.object(guest.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "unknown details operation"):
+            guest.details_command(["/usr/bin/dpkg-query"], operation="untrusted-label")
+        run.assert_not_called()
+
+    def test_only_package_table_stdout_has_the_reviewed_larger_bound(self):
+        for size in (385968, 524288):
+            with self.subTest(size=size), patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"x" * size, b"")):
+                output, code = guest.details_command(["/usr/bin/dpkg-query", "-W"], operation="package-table")
+                self.assertEqual(len(output), size)
+                self.assertEqual(code, 0)
+        for operation, program, size, limit in (("package-table", "dpkg-query", 524289, 524288),
+                                              ("tool-ownership", "dpkg-query", 262145, 262144),
+                                              ("service-state", "systemctl", 262145, 262144)):
+            with self.subTest(operation=operation), patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"x" * size, b"")), \
+                    self.assertRaisesRegex(RuntimeError, f"stdout_bytes={size}; stdout_limit={limit}"):
+                guest.details_command(["/usr/bin/" + program], operation=operation)
+        self.assertEqual(guest.return_limits("details"), (512 * 1024, 2 * 1024 * 1024))
+
+    def test_real_package_and_ownership_call_sites_label_overflow(self):
+        overflow = subprocess.CompletedProcess([], 0, b"x" * 524289, b"")
+        with patch.object(guest.subprocess, "run", return_value=overflow) as run, \
+                self.assertRaisesRegex(RuntimeError, "operation=package-table"):
+            guest.package_details()
+        self.assertIn("-W", run.call_args.args[0])
+        self.assertEqual(run.call_count, 1)
+        with patch.object(guest, "inventory", return_value={}), \
+                patch.object(guest, "package_details", return_value=self.packages()), \
+                patch.object(guest, "TOOL_DIRS", ("/usr/bin",)), \
+                patch.object(Path, "is_file", return_value=True), \
+                patch.object(Path, "resolve", return_value=Path("/synthetic/tools/dpkg-query")), \
+                patch.object(guest.os, "access", return_value=True), \
+                patch.object(guest.subprocess, "run", return_value=overflow) as run, \
+                patch.object(guest, "read_details") as read, \
+                self.assertRaisesRegex(RuntimeError, "operation=tool-ownership"):
+            guest.preparation_details(NONCE)
+        self.assertIn("-S", run.call_args.args[0])
+        self.assertEqual(run.call_count, 1)
+        read.assert_not_called()
+
+    def test_overflow_diagnostic_reaches_failed_cli_and_saved_transport(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch.object(guest.sys, "argv", ["probe", "--nonce", NONCE, "--details"]), \
+                patch.object(guest, "preparation_details", side_effect=lambda nonce: guest.package_details()), \
+                patch.object(guest.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"x" * 524289, b"")), \
+                redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(guest.main(), 2)
+        self.assertEqual(stdout.getvalue(), "")
+        error = stderr.getvalue().encode()
+        self.assertTrue(error.startswith(b"I5_GUEST_INVENTORY_FAILED: "))
+        self.assertIn(b"operation=package-table; exceeded=stdout", error)
+        fixture = UTMResultTests()
+        envelope = fixture.envelope("details", stdout=b"", stderr=error)
+        envelope["exit_code"] = 2
+        with tempfile.TemporaryDirectory(prefix="radishlink-i5-overflow.") as directory:
+            source, evidence = fixture.collector_fixture(directory, "details")
+            response = subprocess.CompletedProcess([], 0, json.dumps(envelope).encode(), b"")
+            with patch.object(guest, "__file__", str(source)), \
+                    patch.object(guest, "check_utm_config"), \
+                    patch.object(guest.subprocess, "run", return_value=response) as run, \
+                    self.assertRaisesRegex(ValueError, "guest exit 2"):
+                guest.collect_utm(NONCE, "details")
+            run.assert_called_once()
+            self.assertEqual((evidence / "guest.stdout").read_bytes(), b"")
+            self.assertEqual((evidence / "guest.stderr").read_bytes(), error)
+            self.assertEqual(json.loads((evidence / "execution.json").read_text())["exit_code"], 2)
 
     def test_mounts_omit_arbitrary_source_and_options(self):
         text = "7 1 0:5 / /run ro,nosuid shared:2 - tmpfs tmpfs rw,size=16M,nr_inodes=10,noswap\n"
@@ -468,6 +568,7 @@ class PreparationDetailsTests(unittest.TestCase):
             self.assertEqual(guest.service_details(), expected)
         argv = command.call_args.args[0]
         self.assertEqual(argv[:2], ["/usr/bin/systemctl", "show"])
+        self.assertEqual(command.call_args.kwargs["operation"], "service-state")
         self.assertFalse(any("ExecStart" in arg or "Environment" in arg for arg in argv))
         for invalid, code in (("", 0), (text.split("\n\n")[0], 0), (text + text, 0),
                               (text.replace("not-found", "loaded"), 1), (text + "Environment=fixture\n", 0)):

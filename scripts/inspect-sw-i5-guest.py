@@ -35,6 +35,9 @@ MAX_RESULT_BYTES = 128 * 1024
 MAX_TRANSPORT_BYTES = 512 * 1024
 DETAILS_RESULT_BYTES = 512 * 1024
 DETAILS_TRANSPORT_BYTES = 2 * 1024 * 1024
+DETAILS_COMMAND_STDOUT_BYTES = 256 * 1024
+DETAILS_PACKAGE_TABLE_STDOUT_BYTES = 512 * 1024
+DETAILS_COMMAND_STDERR_BYTES = 8192
 DETAILS_SCOPE = "guest-preparation-details"
 PACKAGE_FIELDS = (
     "binary:Package", "Version", "Architecture", "Status", "Essential", "Protected",
@@ -135,13 +138,27 @@ def inventory(nonce):
     return result
 
 
-def details_command(argv, allowed=(0,)):
+def details_command(argv, *, operation, allowed=(0,)):
     # Output acceptance limits, not a claim of subprocess memory isolation.
+    if operation not in {"package-table", "tool-ownership", "service-state"}:
+        raise ValueError("unknown details operation")
     result = subprocess.run(argv, capture_output=True, timeout=8, check=False,
                             env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C",
                                  "SYSTEMD_PAGER": "", "SYSTEMD_COLORS": "0"})
-    if len(result.stdout) > 256 * 1024 or len(result.stderr) > 8192:
-        raise RuntimeError(Path(argv[0]).name + " output exceeds details limit")
+    stdout_bytes, stderr_bytes = len(result.stdout), len(result.stderr)
+    stdout_limit = DETAILS_PACKAGE_TABLE_STDOUT_BYTES if operation == "package-table" else DETAILS_COMMAND_STDOUT_BYTES
+    exceeded = [name for name, size, limit in (
+        ("stdout", stdout_bytes, stdout_limit),
+        ("stderr", stderr_bytes, DETAILS_COMMAND_STDERR_BYTES),
+    ) if size > limit]
+    if exceeded:
+        # Report counts before decoding, without echoing oversized contents or
+        # dynamic command arguments. A failed command remains a failed command.
+        raise RuntimeError(Path(argv[0]).name + " output exceeds details limit; " +
+                           f"operation={operation}; exceeded={','.join(exceeded)}; " +
+                           f"stdout_bytes={stdout_bytes}; stdout_limit={stdout_limit}; " +
+                           f"stderr_bytes={stderr_bytes}; stderr_limit={DETAILS_COMMAND_STDERR_BYTES}; " +
+                           f"exit_code={result.returncode}")
     if result.returncode not in allowed or result.stderr:
         raise RuntimeError(Path(argv[0]).name + " failed: exit=" + str(result.returncode) +
                            "; " + result.stderr.decode("utf-8", errors="replace"))
@@ -158,7 +175,8 @@ def read_details(path):
 
 def package_details():
     output, _ = details_command(["/usr/bin/dpkg-query", "--no-pager", "-W",
-                                "-f=" + "\\t".join("${" + f + "}" for f in PACKAGE_FIELDS) + "\\n"])
+                                "-f=" + "\\t".join("${" + f + "}" for f in PACKAGE_FIELDS) + "\\n"],
+                               operation="package-table")
     rows = [line.split("\t") for line in output.splitlines()]
     result = {"fields": list(PACKAGE_FIELDS), "rows": rows}
     validate_packages(result)
@@ -224,7 +242,8 @@ def swap_details(text):
 
 def service_details():
     text, code = details_command(["/usr/bin/systemctl", "show", "--all", "--no-pager",
-                                  "--property=" + ",".join(SERVICE_FIELDS), *SERVICE_UNITS], allowed=(0, 1))
+                                  "--property=" + ",".join(SERVICE_FIELDS), *SERVICE_UNITS],
+                                 operation="service-state", allowed=(0, 1))
     units = {}
     for block in text.strip().split("\n\n"):
         fields = {}
@@ -254,7 +273,8 @@ def preparation_details(nonce):
     paths = sorted({p for found in tools.values() for p in found})
     ownership = ""
     if paths:
-        ownership, _ = details_command(["/usr/bin/dpkg-query", "--no-pager", "-S", *paths])
+        ownership, _ = details_command(["/usr/bin/dpkg-query", "--no-pager", "-S", *paths],
+                                       operation="tool-ownership")
     mounts = mount_details(read_details("/proc/self/mountinfo"))
     swaps = swap_details(read_details("/proc/swaps"))
     filesystems = {}

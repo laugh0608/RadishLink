@@ -12,7 +12,7 @@ I1–I5-I 已提交并通过有限离线验证；容量核验和受限双构建 
 
 [环境准备评审包](../testing/sw-g4-synthetic-i5-environment-preparation.md)已细化官方工具候选、身份交接与完整容量关系；Docker 索引摘要一致但签名未验证，依赖闭包及宿主 backing/日志硬上限仍缺。启动事件、宿主输入源诊断和前置失败报告修复的历史证据保留在该专题。
 
-2026-10-09 最新获准的[单次补充盘点](../testing/sw-g4-synthetic-i5-environment-preparation.md#无-hide-启动及正常回收通过details-超限失败2026-10-09)中，无 `--hide` 启动与正常关机通过，未强制停止，前后配置和全部 VM 状态一致；但 guest 的 dpkg-query 触发流限额，控制器退出 2、失败阶段 details，未取得完整新盘点。错误尚未区分具体查询、stdout/stderr 和实际体积，下一步先补齐有界失败诊断与离线回归，不盲目提高限额或重跑。五个 VM 相关单次包及一次宿主观察均已消费；依赖、验签、swap/容量缺口仍在，I5-R 继续禁止。
+2026-10-09 包表 stdout 专属 512 KiB 调整获准应用，随后[完整补充盘点和正常回收通过](../testing/sw-g4-synthetic-i5-environment-preparation.md#完整补充盘点与正常回收通过2026-10-09)：取得 1565 个包记录，确认 guest 已有 APT/dpkg/gpgv/sqv；swap 位于 `/dev/vda4`、约 2.584 GiB，采样未用，根/EFI 仍可写，Docker/containerd unit 及 policy-rc.d 不存在。最终结果 474110 bytes，仍低于原 512 KiB 上限；VM 正常停止、未强制关机，配置和全部 VM 状态一致。下一步基于完整基线收敛验签、安装差量与系统盘/swap/宿主写入硬边界；本次不代表这些门已通过。七个 VM 相关单次包及一次宿主观察均已消费，I5-R 继续禁止。
 
 ## 已确定的产品与工程基线
 
@@ -67,11 +67,11 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 - **安全与交互机制未冻结**：Node/手机职责已选定，首次信任、撤销和事务仍待证明；覆盖层 hop 不自动等于物理 hop，未来手机独立端点也不自动继承 Node 会话。
 - **工程样机预算缺少实测**：Linux、双无线、常开中继和媒体共同影响电池、温度、体积与成本；开发板和 PHY 峰值不能替代产品数据。
 - **验证和维护成本偏重**：`SW-EXP-001` 不能继承为产品协议；已有脚本重复和长文件需要在后续相关实施中收敛，当前 CI 仍只检查仓库卫生。
-- **I5-R 运行前资源边界未关闭**：Go cache/temp、bootstrap 和 Docker builder/daemon 写入不能靠 artifact 采样约束；证据/诊断已有写前计费，容量探测与构建持续检查仅完成 helper 离线验证；实际接入、daemon/store 阶段预留及控制请求阻塞期间检查仍待实施。入口保持停止；五部分合计 768 MiB 已无域外开销余量，实际 guest 设备须在各域完整额度内为有硬上限的 backing/环境写入留空间。旧盘点另显示约 2.584 GiB swap，宿主配置仍为可写 QCOW2 系统盘；二者没有完整归属，不代表已发生超额写入，但容量可行性和真实拒绝证据仍待验证。
+- **I5-R 运行前资源边界未关闭**：Go cache/temp、bootstrap 和 Docker builder/daemon 写入不能靠 artifact 采样约束；证据/诊断已有写前计费，容量探测与构建持续检查仅完成 helper 离线验证；实际接入、daemon/store 阶段预留及控制请求阻塞期间检查仍待实施。入口保持停止；五部分合计 768 MiB 已无域外开销余量，实际 guest 设备须在各域完整额度内为有硬上限的 backing/环境写入留空间。补充盘点确认系统盘 `/dev/vda4` 有约 2.584 GiB swap（采样 used=0），宿主配置仍为可写 QCOW2 系统盘；二者没有完整额度归属，不代表已发生超额写入，但容量可行性和真实拒绝证据仍待验证。
 
 ## 当前停止线
 
-- 既有五个 VM 相关单次操作包及一次宿主观察均已结束并消费，不能继承为再次启动/重跑授权。最新一次正常关机，不消除此前强制停止后的系统盘完整性未检查这一缺口。I5 shell preflight/run 与直接 Go synthetic-run 均因缺少整批资源隔离而停止；不绕过停止检查、先在域外构建或自动调整共享 daemon。环境准备需另行精确授权，离线拒绝回归不构成资源修复完成或 I5-R 放行。
+- 既有七个 VM 相关单次操作包及一次宿主观察均已结束并消费，不能继承为再次启动/重跑授权。最新一次正常关机，不消除此前强制停止后的系统盘完整性未检查这一缺口。I5 shell preflight/run 与直接 Go synthetic-run 均因缺少整批资源隔离而停止；不绕过停止检查、先在域外构建或自动调整共享 daemon。环境准备需另行精确授权，离线拒绝回归不构成资源修复完成或 I5-R 放行。
 - 不采购 HaLow、不射频发射、不做量产 PCB、不冻结生产技术栈；`HW-G2` 前不采购，`HW-G3` 前不刷写或启动实体台架，无线操作另受 `RF-R*` 约束。
 - OpenMLS 两个固定图的 Phase B 禁止；mls-rs D2 的 `PASS` 不授权 Phase B。许可证证据轨和 R2 未完成，`SW-G2` 未通过。
 - 不自动第四次运行 R1、不扩展 selector、不补写或重判 R1c evidence、不改 gate/allowlist/advisory ignore、版本、provider、source 或 lockfile；新证据与策略变更须另行明确范围。

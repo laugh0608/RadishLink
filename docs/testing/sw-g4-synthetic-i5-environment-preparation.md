@@ -1,10 +1,10 @@
 # I5 专用环境准备评审包
 
 - 更新日期：2026-10-09
-- 状态：补充盘点工具已提交；单次操作在启动错误后停止并强制关机，未取得新 guest 事实，I5-R 继续停止
+- 状态：专属包表限额调整已获准应用，完整补充盘点及正常回收通过；依赖验签、安装差量和容量边界仍待关闭，I5-R 继续停止
 - 目标读者：环境准备、I5 后端实现与证据复核者
 - 范围：承接有效 guest 盘点，收敛工具输入、身份分工、写入归属和下一离线实施顺序
-- 非目标：启动 VM、安装或更新依赖、改变身份/系统配置、创建磁盘、运行构建/daemon/I5-R
+- 非目标：安装或更新依赖、改变身份/系统配置、创建磁盘、运行构建/daemon/I5-R；文内盘点操作只按各自明确授权的单次合同执行
 
 ## 初次准备结果（2026-10-06）
 
@@ -315,6 +315,103 @@ python3 -B scripts/sw_i5_utm_control.py --authorized-once --nonce d2296e284bb28e
 本次只证明上述一次启动、失败结果传输和正常回收，不证明 guest 文件系统完整性、完整包表、依赖闭包、验签或 768 MiB 容量条件满足。五个 VM 相关单次操作包和一次宿主观察均已消费；后续真实操作仍需新的精确范围。UTM 应用本身未查询或关闭，目标以本次最后状态确认 stopped 为准。
 
 文档更新后 `./scripts/check-repo.sh` 通过（191 文件），`git diff --check` 通过；执行代码本轮未改动，四个文件仍未提交，未 push。
+
+## dpkg 超限诊断细化与下一取证包（2026-10-09）
+
+上述启动控制、回归及实际结果已按所有者要求提交为 `a0b77b0`（`fix(i5): 完善盘点启动回收与失败证据`），未 push。本轮随后仅修改采集器的超限诊断及离线测试，不启动 VM，不改变既有额度、完整字段、scope/schema、采集顺序或失败拒绝。
+
+`details_command()` 的调用者现在显式指定固定操作标签：包表为 `package-table`、工具路径归属为 `tool-ownership`、服务为 `service-state`。超限错误保留原前缀，追加 `operation`、`exceeded`（stdout、stderr 或两者）、两条流的实际字节数及各自限额、子进程退出码。计数在解码前完成，不回显超限内容或动态参数；未知操作标签在执行命令前拒绝。stdout 仍为 262144 bytes，stderr 仍为 8192 bytes，8 秒超时、512 KiB guest 结果及 2 MiB 传输限额均未变。正常查询失败、非空 stderr 和超时继续按原规则拒绝，不用字节诊断替代错误。
+
+历史失败仍不能反推具体查询或真实大小；没有重写 `d2296e...` 的错误文本或执行清单。新诊断只影响下一次按新源码执行时的错误信息，不能证明当前限额足够，也不是对子进程内存的硬限制。
+
+离线验证：
+
+- `python3 -B scripts/test_sw_i5_guest.py`：44 项通过。新增四项测试覆盖两个 dpkg 操作 × 单/双流超限 × 成功/失败退出码，UTF-8 字节边界、恰好等于限额、非空 stderr 继续拒绝、未知标签执行前拒绝，以及两个真实调用点的标签传递；合成 CLI 到宿主保存链确认新诊断完整保留且仍以 exit 2 失败，超限内容/动态参数不进入消息。
+- `python3 -B scripts/test_sw_i5_utm_control.py`：4 个测试方法通过，原 37 场景及 4 个非法 nonce 不变；本轮控制层未修改。
+- `./scripts/check-repo.sh` 通过（191 文件），`git diff --check` 通过。上述均为宿主离线验证，不涉及实际 UTM/JXA/guest 调用；新四文件改动尚未提交，未 push，无新增后台进程。
+
+### 一次真实限额取证：已授权执行并消费
+
+新清单 `.tmp/i5-guest-return-e13f44e7384cb91280f193aff569ec15/operation.json` 绑定基准 `a0b77b02b00e46b9306f8d84d3e4666b5a6cbce4`、其后的五份源码/测试、固定 utmctl 和隔离配置摘要；准备时 `authorized=false`、无 attempt，随后所有者明确确认并执行一次，现已消费。采集器摘要为 `53f8e0258ab728d6d32c46e0f08be7bd5c89eba1634ad988f1a1f2ed4388eb43`。本次目的为取得可区分的真实超限证据；如果仍超限，完整盘点仍必须失败，不能为了获得成功扩大额度。
+
+本次唯一执行入口：
+
+```text
+python3 -B scripts/sw_i5_utm_control.py --authorized-once --nonce e13f44e7384cb91280f193aff569ec15
+```
+
+精确目标仍为 `RadishLink-I5-Debian13-ARM64` / `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`。严格校验源码/工具/配置、无网卡/共享、list/status stopped 后，仅一次固定绝对路径 `/Applications/UTM.app/Contents/MacOS/utmctl start <UUID>`（无 hide，60 秒）；确认 started，保留 30 秒缓冲并复核配置后，只运行一次 `--collect-utm details --nonce e13f44e7384cb91280f193aff569ec15`（外层 65 秒）。任意诊断仍停止，不重试或追加命令。
+
+启动尝试后成功或失败均正常关机，等待至多 120 秒，仍未停止则强制停止一次并复查；回收使用同一路径的 `stop <UUID> --request` / 必要时 `stop <UUID> --force`，普通命令限时 15 秒。未进入 start 的失败不关机。最后保存真实结果并比较全部 VM 状态和配置，强制停止、错误或不一致均失败。预计 5–10 分钟；可能显示 UTM 窗口并产生系统盘/宿主日志和本地证据写入，强制停止有未完成写回风险；结束后保留专用 VM 与全部证据，不退出用户应用、不删除磁盘或缓存。除增强错误信息外，范围与上次完全一致，不安装、联网、开共享、改身份/输入源、swapoff、挂载/格式化、修复文件系统、构建或执行 daemon/I5-R。
+
+## 包表 stdout 真实超限结果与有界调整提案（2026-10-09）
+
+所有者确认后执行 `e13f44e7384cb91280f193aff569ec15` 单次取证包。无 hide 启动正常，guest details 仍以 exit 2 失败；正常关机于约 62.658 秒确认 stopped，未强制停止，前后全部 VM 状态及目标配置一致。增强诊断给出的本次事实为：
+
+| 字段 | 真实返回 |
+| --- | --- |
+| `operation` | `package-table`，对应完整包表 `dpkg-query -W` |
+| `exceeded` | `stdout` |
+| `stdout_bytes` / `stdout_limit` | 385968 / 262144 bytes，约 377 KiB 超过 256 KiB |
+| `stderr_bytes` / `stderr_limit` | 0 / 8192 bytes |
+| 子查询 `exit_code` | 0；查询执行成功，返回体积被当前采集策略拒绝 |
+
+宿主传输退出 0、无诊断/超时，guest stdout 为空、stderr 199 bytes，保留完整数值；没有取得完整包表 JSON，也未进入后续工具归属/挂载/swap/service 补充采集。旧次没有细节的失败不能据此改写，本次新证据单独成立。
+
+本地根目录为 `.tmp/i5-guest-return-e13f44e7384cb91280f193aff569ec15/`。`result.json` SHA-256 为 `4183c74957f69563eabf0c95c16c52d4e9375e58bc0c7b04e8f493c0fab56543`，guest stderr 为 `98a470075546f4e997e127f481b94b5bf0939d6e62bf6f07478d6264e02c7a57`。五份执行源码已按原清单摘要归档到 `source-snapshot/scripts/`，授权消费另记 review；原始证据未重写。控制进程已结束，未追加 UTM 查询或关闭用户应用；六个 VM 相关单次包和一次宿主观察均已消费。
+
+### 调整提案及证据边界：已获准应用
+
+真实字节数表明当前完整包表无法通过 256 KiB 门。建议仅把 `package-table` 这一个查询的 stdout 验收上限改为 **512 KiB（524288 bytes）**；本次观察值低于提案上限 138320 bytes。此余量不是未来包表大小保证，也不能由原始表长度推定完整 JSON 一定低于最终限额。
+
+工具归属和服务 stdout 继续为 256 KiB，所有查询 stderr 继续为 8 KiB；8 秒查询超时、最终 details 512 KiB、宿主传输 2 MiB、旧 inventory 限额及 I5 整批 768 MiB 均保持不变。保留所有包、关系字段和严格 schema 校验；不截断、删字段或压掉错误。若后续完整 JSON 或其他阶段仍超限，继续失败并保留证据，不自动扩容。这个提案调整的是环境准备子查询的返回验收上限，不提供对子进程内存或宿主磁盘的硬限制证明。
+
+可审阅候选保留在 `.tmp/i5-package-table-limit-review-20261009/`：`proposal.diff` 为两文件补丁，另有拟应用源码/测试及前后摘要，准备时 `review.json` 的 `applied=false`；随后所有者明确确认，按前后摘要复核后已应用。候选及应用后的 45 项离线回归均通过，覆盖观察体积 385968、提案边界 524288 接受和 524289 拒绝，并明确验证归属/服务仍在 262145 拒绝、最终结果与传输限额不变。所有子进程为 mock，测试不代表真实完整盘点会通过。
+
+### 实施与实测包：已授权执行并消费
+
+可批准的完整范围为：复核上述候选和当前源码摘要，应用这两个文件的精确补丁，运行 45 项采集回归、控制回归及仓库检查，然后仅执行以下新单次包。该范围不包含 Git 提交或 push。新目录 `.tmp/i5-guest-return-bc35d1722b5534637cf3e5fc06adae40/` 准备时只有未授权的 operation.json、无 attempt；清单绑定拟应用源码摘要，获准应用并通过检查后才执行，现已消费，旧授权不能复用。
+
+```text
+python3 -B scripts/sw_i5_utm_control.py --authorized-once --nonce bc35d1722b5534637cf3e5fc06adae40
+```
+
+目标仍为 `RadishLink-I5-Debian13-ARM64` / `B86E1A47-9A67-4ECF-A51F-2B2F29CDB726`。校验固定源码/工具/配置、无网卡/共享及 stopped 基线后，按同一控制层执行一次绝对路径 `/Applications/UTM.app/Contents/MacOS/utmctl start <UUID>`（无 hide，60 秒），确认 started、保留 30 秒缓冲、复核配置，再采集一次 `details`（该 nonce，外层 65 秒）。启动尝试后正常关机，等待至多 120 秒，仍未停止才强制停止一次并复查；普通控制命令 15 秒，前置失败不关机，任意 stderr/错误仍拒绝。
+
+预计 5–10 分钟，包含可能显示 UTM、启动/关机产生的系统盘/宿主日志和本地证据写入；强制停止有未完成写回风险。保留 VM 和全部证据，不删除磁盘/缓存或退出用户应用；不联网、开共享、安装更新、改身份/输入源、swapoff、挂载/格式化、修复文件系统、构建、启动 daemon 或运行 I5-R。实测完成后仅在宿主离线复核数据；失败不追加运行或调整其他限额。
+
+当时只执行已获准的增强诊断包并离线准备提案；后续获准应用和实际结果单独记录如下。文档更新后仓库检查（191 文件）及 `git diff --check` 通过。当前四文件改动仍未提交、未 push。
+
+## 完整补充盘点与正常回收通过（2026-10-09）
+
+所有者明确确认后，按候选前后 SHA-256 应用包表专属 512 KiB 上限；45 项采集测试、控制回归和仓库检查通过，再执行 `bc35d1722b5534637cf3e5fc06adae40` 一次。**本次控制入口退出 0，guest details 完整通过，VM 正常关机，无强制停止；前后全部 VM 状态和目标配置一致。** 约 33.046 秒完成采集，63.414 秒确认 stopped。该授权已消费，没有追加运行、安装或改变其他限额。
+
+- guest stdout 为 474110 bytes，小于最终 524288 bytes 上限，余量 50178 bytes；stderr 为空。该余量只是本次结果，不保证未来包表增长后仍满足。
+- 宿主传输 stdout 为 632402 bytes，stderr 为空；独立离线 `--validate-details` 再次通过，结果始终 `i5_ready=false`。
+- 本地证据根为 `.tmp/i5-guest-return-bc35d1722b5534637cf3e5fc06adae40/`；result SHA-256 为 `f3905f10eb65d36ff14c90240bf75efaa41935ffe4ab3351f9931825e492efa4`，guest stdout 为 `0eea97df8ad7c11b61e7cf5da3b4774d32e3fcb2b7d90c23066f35f66a92c300`，传输 stdout 为 `339d94f52c879ba21c0a2b5703a20695bf8f6ab8998448ead6bdbb2de348ed15`。五份执行源码按清单摘要保存在 `source-snapshot/scripts/`，review 记录授权消费与实际成功结果。
+
+### 新事实及其工程含义
+
+| 范围 | 本次 guest 事实 | 后续含义 |
+| --- | --- | --- |
+| 完整包表 | 1565 行，1282 个 arm64、283 个 all；状态均为 `install ok installed`，未见 hold。按表字段回算原始 TSV 为 385968 bytes | 补齐已安装包基线；不是完整安装差量解析或包数据库健康审计 |
+| 验签/包工具 | 路径归属确认 `/usr/bin/apt-get` 属 apt 3.0.3，dpkg/dpkg-query 属 dpkg 1.22.22，gpgv 属 2.4.7-21+deb13u1+b4，sqv 属 1.3.0-3+b2 | guest 已有成熟验签器，不需要为了后续验签先安装工具；本次未执行验签、导入 key 或读取 apt 源/凭据 |
+| 已有候选基础依赖 | libc6 2.41-12+deb13u3、libseccomp2 2.6.0-2、libsystemd0 257.13-1~deb13u1、init-system-helpers 1.69~deb13u1、nftables 1.1.3-1；apparmor、ca-certificates、procps、xz-utils 也已安装 | 可用于固定版本依赖解析，不能代替 Debian 版本/替代依赖/冲突和安装顺序求解 |
+| 明确未安装的包 | 包表未见 docker-ce/CLI/Buildx、containerd.io、docker.io/containerd/runc、golang-go、iptables、git、git-man、pigz；原工具路径检查也未见 Go/Docker/containerd/runc | 安装差量至少还要处理固定工具候选、iptables 和项目实际所需 Git；pigz/其他推荐包需显式取舍，不据此自动安装 |
+| swap | `/dev/vda4` 分区，2709500 KiB，优先级 -2，采样 used=0 | 明确落在系统盘；used=0 不能证明整个运行期间没有换出，也不能作为 I5 额度归属证明 |
+| 根与 EFI | `/` 与 `/var` 同为设备 254:3，对应 `/dev/vda3` ext4，可写且根传播为 shared；`/boot/efi` 为 `/dev/vda2` 可写 vfat，efivarfs 也可写 | 系统盘及固件变量写入面仍需明确归属和硬限制；构建私有 namespace 尚未建立 |
+| 临时挂载 | `/tmp`、`/run`、`/dev/shm` 为可写 tmpfs，所采 flags 未见 noswap；特定 systemd credentials tmpfs 则明确带 noswap | 不能把普通 tmpfs 推定为不换出；没有创建 I5 三个 16 MiB 节点 tmpfs 或四个容量域 |
+| 服务与安装抑制 | 四个 Docker/containerd service/socket 均 not-found、inactive/dead；选定属性查询 exit 0；policy-rc.d 不存在 | 没有现有 daemon 服务可复用；后续安装必须先设计显式启动抑制，不能让维护脚本先启动服务 |
+
+本次仍为 Debian 13 ARM64、内核 6.12.101+deb13-arm64、Landlock ABI 6；这些事实不改变“当前 UTM 后端不能进入 I5-R”的结论。来源签名、归档、包内维护脚本/许可材料、完整依赖闭包、build 身份交接、系统盘/swap/宿主 backing 的硬上限均未验证或实施。
+
+### 下一步收敛顺序
+
+1. 用本次完整包表作为精确基线，固定 Recommends 策略及必需 Git/iptables 的安装差量；复核 Pre-Depends、替代依赖、Provides、Conflicts/Breaks/Replaces，不自行写简化解析器冒充 APT 求解。
+2. 将发布密钥独立可信依据、现有 Packages/InRelease 和 guest 现有验签器收敛成有界验签/离线解析操作包；本次只确认工具存在和归属，尚无签名验证结果。候选来源 JSON 的 `signature_verified=false`、`install_authorized=false` 继续保留。
+3. 基于已确认的 `/dev/vda4` swap、可写根/EFI 和共享传播挂载，明确系统新增写入与宿主 backing 的额度归属；不先创建满额四盘或安装 Docker，再尝试补计费。768 MiB、公开运行 STOP 与 I5-R 条件不变。
+
+当前没有下一份已授权 VM 操作包；七个 VM 相关单次包和一次宿主观察均已消费。本次控制进程已结束、目标最后为 stopped，UTM 应用本身未查询或关闭。文档更新后仓库检查（191 文件）和 `git diff --check` 通过；四文件改动尚未提交，未 push。
 
 ## 工具来源与固定输入
 
