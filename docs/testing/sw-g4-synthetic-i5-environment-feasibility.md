@@ -316,7 +316,7 @@ APT 方案固定四个本地仓库树：`IN/debian/dists/trixie`、`IN/debian/di
 
 ## 离线实施与回归（2026-10-13）
 
-上述三份文档已按所有者要求提交为 `0b589cc`，未 push。随后获准实施验签/APT 准备入口、有界输出和取消回收及离线测试；该授权明确排除启动 VM、安装依赖和 I5-R。以下实现尚未提交，不改变历史合同、候选包版本或 768 MiB 运行预算。
+上述三份文档已按所有者要求提交为 `0b589cc`，未 push。随后获准实施验签/APT 准备入口、有界输出和取消回收及离线测试；该授权明确排除启动 VM、安装依赖和 I5-R。以下八文件实现随后提交为 `7fdecbf`，不改变历史合同、候选包版本或 768 MiB 运行预算。
 
 ### 实现范围与入口
 
@@ -342,6 +342,44 @@ APT 方案固定四个本地仓库树：`IN/debian/dists/trixie`、`IN/debian/di
 - `python3 -B scripts/test_sw_i5_apt.py`：20 个测试方法通过，包含四源完整合成编排、阶段失败矩阵、签名失败后不消费认证文件、不调用 APT、基线前后变化、旧 nonce/源摘要/介质变化、错指纹与额外证书、配置 hooks/额外索引、原包变更/删除/缺根包拒绝，以及输入路径/压缩/日期拒绝。
 - 同一测试集实际启动短寿命合成 Python 子进程，验证双流恰好限额、持续输出溢出、非零退出、超时、回调取消、SIGTERM 包装器回收、关闭管道后残留后代及回收错误。没有执行 GPG、sqv、APT、网络、VM 或真实设备操作。
 - 原 `test_sw_i5_guest.py` 45 项、`test_sw_i5_utm_control.py` 4 个测试方法通过；纯 Node vm context 执行适配层自测 29 项通过，无 Application/ObjC/UTM 调用。新适配层测试覆盖独立截止、错绑定、超限、未知返回状态和丢结果只执行一次。
-- `./scripts/check-repo.sh` 通过（195 文件），`git diff --check` 通过；本轮测试无失败。最终 `dev` 相对本地 `origin/dev` 为 ahead 2，新增实现和配套记录共 8 个文件未提交；没有 push 或其他远程写入，没有遗留本轮后台进程。
+- `./scripts/check-repo.sh` 通过（195 文件），`git diff --check` 通过；该轮测试无失败。当时 `dev` 相对本地 `origin/dev` 为 ahead 2，新增实现和配套记录共 8 个文件未提交；随后按所有者要求提交为 `7fdecbf`。没有 push 或其他远程写入，没有遗留该轮后台进程。
 - 真实密钥/策略核对与密码学验签、APT 3.0.3 实际配置展开/arm64 与 all pin 行为/求解输出、完整原始包库与工具二进制基线、介质制作及挂载、硬容量/内存与全局写入隔离、外部取消和真实回收均未执行或未闭合。已有 metadata review 输入保持原样，没有制造可执行 manifest 或再次使用历史授权。
 - 当前改动会使依赖这些脚本摘要的旧操作合同不再匹配当前源码；历史记录和旧操作目录不改写。未来真实包必须重新绑定全部源与输入、证明上述硬边界，并取得当次授权。I5 shell preflight/run 和 Go synthetic-run 停止代码未修改。
+
+## 准备期隔离与独立监督离线续接（2026-10-13）
+
+所有者要求先提交前轮八文件，再继续准备期硬隔离、独立监督与失联回收的离线实现；仍禁止启动 VM、安装依赖和运行 I5-R。`7fdecbf` 已提交且未 push；本节所述续接实现未提交。这里记录内部准备机制及离线证据，不声明目标 VM 已具备这些条件。
+
+### 硬边界实现
+
+[准备隔离模块](../../scripts/sw_i5_preparation_isolation.py)沿用已有 mountinfo 解析，新增独立 `i5-preparation-isolation` v1 合同，绑定 nonce、UUID、输入 manifest 摘要、固定准备路径及无特权 uid/gid。Linux 内核后端与观测代码均已实现，但本轮没有调用真实 syscall、修改 cgroup 或配置系统。
+
+| 边界 | 实现及拒绝条件 |
+| --- | --- |
+| 存储 | 只读 iso9660/squashfs 输入 ≤256 MiB；WORK 为 128 MiB/32768 inode、RESULT 为 8 MiB/4096 inode 的独立 `noswap` tmpfs。核对实际 fstatvfs 总容量、设备、根 inode、挂载选项与 superblock；拒绝嵌套、别名、叠挂和 shared/slave propagation |
+| 域外写入 | 在准备子进程内创建私有 mount/network/IPC namespace，以递归 `mount_setattr` 将现有挂载只读，再建立两个固定 tmpfs；其他任何可写挂载均拒绝。需要事先准备好、root 所有且无 symlink 的精确空挂载点，不自动创建系统目录 |
+| 权限与 IPC | 清空 supplementary groups、capability bounding/ambient/effective/permitted/inheritable，固定 real/effective/saved/filesystem uid/gid，设置 `no_new_privs`。seccomp 检查 ABI，拒绝 socket/Unix socket 建立、ptrace/process_vm、额外 namespace、clone3、io_uring 等路径；允许普通 fork/线程，拒绝 clone namespace flags。没有失败后的降级策略 |
+| 进程与输出 | 启动时只保留 stdio 和受控 admission 管道，工作代码拿不到租约写端或 cgroup FD。stdin 指向 `/dev/null`，wrapper stdout/stderr 写到 RESULT 的独占文件，不能无限写入 guest-agent capture；文件限额只是补充，目录总量由 tmpfs 限制 |
+| cgroup v2 | 独占父域 512 MiB/48 tasks，worker 子域 384 MiB/32 tasks，supervisor 子域 64 MiB/8 tasks；三者 `memory.swap.max=0`。CPU 配额分别为每 100000 μs 最多 200000/100000/25000 μs；这是准备期候选限额，不改 I5 运行额度。父域无进程，两个子域分离且禁止再 delegation；拒绝其他子域、计数器异常和任何 max/OOM/pids 拒绝事件 |
+| 绑定与回收 | cgroup2 类型、目录 owner/mode、设备/inode 和 nonce 路径均核对；读写经固定目录 FD，替换/短写直接失败。回收使用绑定域的 `cgroup.kill`，不枚举进程名，不用 leader 退出或空 `cgroup.procs` 冒充完整回收；population 与 subreaper 回收分别验证 |
+
+依据为 [cgroup v2 内核接口](https://docs.kernel.org/admin-guide/cgroup-v2.html)、[tmpfs](https://docs.kernel.org/filesystems/tmpfs.html)、[mount_setattr](https://man7.org/linux/man-pages/man2/mount_setattr.2.html) 和 [seccomp 过滤接口](https://docs.kernel.org/userspace-api/seccomp_filter.html)。syscall 数值按 Linux v6.12 的 [x86-64 表](https://github.com/torvalds/linux/blob/v6.12/arch/x86/entry/syscalls/syscall_64.tbl)和 [asm-generic 表](https://github.com/torvalds/linux/blob/v6.12/include/uapi/asm-generic/unistd.h)绑定；未引入第三方实现或依赖。seccomp 不是完整 sandbox，不能脱离挂载、身份、FD 与 cgroup 边界单独放行。
+
+### 独立监督与失联回收
+
+[独立监督模块](../../scripts/sw_i5_preparation_supervisor.py)将 supervisor fork 为独立 session，纳入单独 cgroup，Linux 上启用 subreaper。worker 先阻塞在启动管道：确认 cgroup admission 后才允许隔离设置；隔离设置返回且有效状态核对通过后，才通过第二次屏障执行工具。设置阶段卡住也受监督，失败不能运行工具。内核观测从受控 child 的 procfs 读取真实 uid/capabilities/namespace/FD/cgroup，检查该 uid 没有域外进程；不接受输入 JSON 自称隔离成功。
+
+租约帧固定 v1、UUID、nonce、manifest SHA256、严格递增 sequence 和 renew/cancel；单帧最多 512 bytes。guest 与 host 使用不同 scope，不能串用；重复字段、重放、跳号、错绑定、拼接帧、超限及半帧停滞都失败。只有独立控制端可以续约，工作进程不能自续；租约最长静默 15 秒，持续续约也不能延长 540 秒 guest / 620 秒 host 绝对截止。guest 回收另限 20 秒，仍低于 600 秒适配层截止。超时、管道 EOF、SIGINT/SIGTERM、wrapper 被杀及结果消费者失联都不会触发重新执行。
+
+宿主 watchdog 单独轮询租约和结果管道，流式接受最多 6 MiB；不等待阻塞的采集调用返回才判断失联。缺失、超限、错误结果或取消进入[宿主回收函数](../../scripts/sw_i5_utm_control.py)：仅当本包记录启动前 stopped、已尝试 start，且 nonce/UUID/config/media 身份仍一致时，才允许对固定 VM 发一次正常关机，必要时至多一次 force。所有观测/命令带子期限，整体回收不超过 120 秒；身份变化或未知状态拒绝扩大操作。即使最终确认 stopped，原失联失败仍保留，`passed` 永远不会因回收成功变为 true。
+
+准备操作合同新增 v2，额外绑定隔离合同摘要、15/20 秒时限及全部十个相关源文件；v1 原字段和原七文件集合保持独立，不能混入新字段。公开 `--preparation-apt`、`--collect-utm preparation-apt` 和生命周期新 scope 仍在第一次外部调用之前 STOP；v2 是离线校验合同，不是授权开关。
+
+### 验证与仍关闭的门
+
+- `python3 -B scripts/test_sw_i5_preparation.py`：20 个测试方法通过，包含挂载/容量/权限/cgroup 拒绝矩阵、真实观测代码的合成 procfs 输入、BPF 分支解释、每一隔离设置步骤失败、双屏障、短写/身份替换、租约重放/失效与 guest/host scope 隔离、残留后代及回收错误、宿主正常/强制/失败回收。
+- 其中使用真实短寿命 Python fork/pipe/session 测试独立监督：worker 睡眠阻塞、worker 被 SIGKILL、隔离设置异常、控制管道关闭、结果消费者消失均回收已知合成 child；内核 cgroup、namespace、seccomp、subreaper 和 UTM 动作注入替身，不将 macOS 合成 PID 回收等同于 Linux `cgroup.kill` 或逃逸后代实测。
+- 原准备 20 项、guest 45 项、control 4 个方法、资源/build helper 20 项、纯 JavaScript 29 项回归通过。资源套件首次误用 `--self-test` 参数，退出 2 并报告缺少 action；改用该入口已有的 `self-test` 子命令后通过，未修改脚本掩盖错误。其余本轮测试无失败。
+- `./scripts/check-repo.sh` 通过（198 文件），`git diff --check` 通过；续接改动共 7 个文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 3。没有 push，没有遗留本轮后台进程；I5 shell 和 Go synthetic-run 停止代码未修改。
+- 仍须完成：精确 cgroup/挂载点/独占身份的受授权初始化、guest-agent 到租约通道的真实接线、worker RESULT 在 namespace 销毁前的有界导出与失败证据持久化、宿主独立 watchdog 的实际启动/收尾接线，以及 Linux quota/OOM/域外写入/setsid 后代/监督器自身被强杀或 guest 停摆的真实拒绝与回收测试。supervisor 被 SIGKILL 或 guest 冻结时依靠独立宿主路径；没有声称进程内 finally 能处理这些情况。
+- 上述实现只覆盖准备 worker/supervisor 候选边界；guest 启动日志、系统盘、全局 swap、宿主 backing 和 UTM 日志的完整物理硬额度仍未证明。现有原生 APT、密码学验签、真实介质及 768 MiB I5 批次条件均未通过；没有执行 VM、安装、配置变更、I5-R 或远程写入。

@@ -19,6 +19,92 @@ SOURCES = (
     "scripts/sw_i5_utm_result.js",
 )
 APT_SOURCES = SOURCES + ("scripts/sw_i5_apt.py", "scripts/test_sw_i5_apt.py")
+ISOLATION_SOURCES = APT_SOURCES + (
+    "scripts/sw_i5_preparation_isolation.py", "scripts/sw_i5_preparation_supervisor.py",
+    "scripts/test_sw_i5_preparation.py",
+)
+
+
+def recover_preparation(ticket, *, observe, command, clock=time.monotonic, pause=time.sleep):
+    """Bounded host-side recovery after a started preparation loses contact.
+
+    Internal only. observe() supplies independently checked UUID/config/media
+    identity and state. command() must enforce its supplied timeout/output
+    budget in a separate process (e.g. sw_i5_apt.run_bounded). Neither function
+    is connected to real UTM by the new public scope. No start or broad kill.
+    """
+    from sw_i5_apt import fields, require, digest
+    fields(ticket, "schema_version scope nonce uuid config_sha256 media_sha256 start_attempted status_before")
+    require(type(ticket["schema_version"]) is int and ticket["schema_version"] == 1 and
+            ticket["scope"] == "i5-preparation-recovery" and ticket["uuid"] == UUID and
+            type(ticket["nonce"]) is str and re.fullmatch(r"[0-9a-f]{32}", ticket["nonce"]) and
+            digest(ticket["config_sha256"]) and digest(ticket["media_sha256"]) and
+            type(ticket["start_attempted"]) is bool and ticket["status_before"] == "stopped",
+            "recovery ticket binding")
+    result = {"schema_version": 1, "scope": "i5-preparation-recovery-result", "nonce": ticket["nonce"],
+              "uuid": UUID, "i5_ready": False, "passed": False, "stopped": False,
+              "forced_stop": False, "failure": "preparation contact lost", "cleanup_errors": [], "events": []}
+    # Recovery can establish stopped=true; it can never turn lost evidence into
+    # a successful preparation or claim the guest cgroup was independently reaped.
+    if not ticket["start_attempted"]:
+        result["cleanup_errors"].append("no start attempt; no VM action permitted")
+        return result
+    deadline = clock() + 120
+    def identity():
+        remaining = deadline - clock()
+        require(remaining > 0, "host recovery deadline")
+        snapshot = observe(min(5, remaining))
+        fields(snapshot, "uuid nonce config_sha256 media_sha256 status")
+        require(all(snapshot[k] == ticket[k] for k in ("uuid", "nonce", "config_sha256", "media_sha256")),
+                "VM/config/media recovery identity changed")
+        require(snapshot["status"] in {"started", "stopped"}, "unknown VM state")
+        require(clock() < deadline, "late recovery observation")
+        return snapshot["status"]
+    def stop(force):
+        remaining = deadline - clock()
+        require(remaining > 0, "host recovery deadline")
+        operation = "--force" if force else "--request"
+        result["events"].append(operation)
+        output = command([str(UTMCTL), "stop", UUID, operation], timeout=min(10, remaining), limit=65536)
+        require(clock() < deadline, "late stop response")
+        fields(output, "exit_code stdout stderr failure cleanup_errors")
+        require(type(output["stdout"]) is bytes and type(output["stderr"]) is bytes and
+                len(output["stdout"]) <= 65536 and len(output["stderr"]) <= 65536 and
+                type(output["exit_code"]) is int and output["exit_code"] == 0 and not output["stderr"] and
+                output["failure"] is None and output["cleanup_errors"] == [], "stop failed; outcome unconfirmed")
+    try:
+        if identity() == "stopped":
+            result["stopped"] = True
+            return result
+        # Retain graceful-stop errors but continue bounded status/force recovery.
+        try:
+            stop(False)
+        except (OSError, ValueError, RuntimeError) as exc:
+            result["cleanup_errors"].append(str(exc))
+        graceful_until = min(clock() + 80, deadline - 20)
+        while clock() < graceful_until:
+            if identity() == "stopped":
+                result["stopped"] = True
+                return result
+            pause(min(5, max(0, graceful_until - clock())))
+        # Recheck exact identity immediately before the one allowed force call.
+        if identity() == "stopped":
+            result["stopped"] = True
+            return result
+        result["forced_stop"] = True
+        try:
+            stop(True)
+        except (OSError, ValueError, RuntimeError) as exc:
+            result["cleanup_errors"].append(str(exc))
+        while clock() < deadline:
+            if identity() == "stopped":
+                result["stopped"] = True
+                return result
+            pause(min(2, max(0, deadline - clock())))
+        raise ValueError("VM stop unconfirmed at recovery deadline")
+    except (OSError, ValueError, RuntimeError) as exc:
+        result["cleanup_errors"].append(str(exc))
+    return result
 
 
 def validate_apt_operation(record, nonce, observed):
@@ -29,15 +115,20 @@ def validate_apt_operation(record, nonce, observed):
     is wired to the CLI in v1.
     """
     from sw_i5_apt import fields, require, digest, GUEST_SECONDS, HOST_SECONDS
+    require(type(record) is dict and type(record.get("schema_version")) is int and record["schema_version"] in {1, 2},
+            "unsupported preparation operation schema")
+    version = record["schema_version"]
+    extras = " isolation_sha256 lease_seconds cleanup_seconds" if version == 2 else ""
     fields(record, "schema_version scope authorized nonce uuid base_revision hashes config_sha256 "
-           "utmctl_sha256 manifest_sha256 media guest_seconds host_seconds total_seconds")
-    require(type(record["schema_version"]) is int and record["schema_version"] == 1 and
+           "utmctl_sha256 manifest_sha256 media guest_seconds host_seconds total_seconds" + extras)
+    require(
             record["scope"] == "i5-preparation-apt-operation" and record["authorized"] is True and
             record["nonce"] == nonce and re.fullmatch(r"[0-9a-f]{32}", nonce) and record["uuid"] == UUID,
             "preparation operation binding mismatch")
     require(type(record["base_revision"]) is str and re.fullmatch(r"[0-9a-f]{40}", record["base_revision"]),
             "invalid base revision")
-    require(type(record["hashes"]) is dict and set(record["hashes"]) == set(APT_SOURCES) and
+    expected_sources = ISOLATION_SOURCES if version == 2 else APT_SOURCES
+    require(type(record["hashes"]) is dict and set(record["hashes"]) == set(expected_sources) and
             all(digest(v) for v in record["hashes"].values()), "complete preparation source manifest required")
     for key in ("config_sha256", "utmctl_sha256", "manifest_sha256"):
         require(digest(record[key]), "invalid " + key)
@@ -49,6 +140,10 @@ def validate_apt_operation(record, nonce, observed):
     for key, seconds in (("guest_seconds", GUEST_SECONDS), ("host_seconds", HOST_SECONDS), ("total_seconds", 900)):
         require(type(record[key]) is int and record[key] == seconds, "fixed preparation deadline required")
     keys = {"base_revision", "hashes", "config_sha256", "utmctl_sha256", "manifest_sha256", "media"}
+    if version == 2:
+        require(digest(record["isolation_sha256"]) and type(record["lease_seconds"]) is int and record["lease_seconds"] == 15 and
+                type(record["cleanup_seconds"]) is int and record["cleanup_seconds"] == 20, "fixed isolation/supervision binding")
+        keys.add("isolation_sha256")
     require(type(observed) is dict and set(observed) == keys and
             all(record[k] == observed[k] for k in keys), "preparation source/media/baseline changed")
     return record
