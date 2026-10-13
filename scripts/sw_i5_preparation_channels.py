@@ -414,7 +414,14 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
                     signal.signal(signal.SIGINT, signal.SIG_DFL)
                     code = transport(guest_read, stream_write, guest_ack_write)
                     os._exit(code if type(code) is int and 0 <= code <= 255 else 2)
-                except BaseException:
+                except BaseException as exc:
+                    try:
+                        write_bounded(stream_write, encode({"schema_version": 1, "scope": "i5-preparation-transport-error",
+                            "uuid": apt.UUID, "nonce": nonce, "manifest_sha256": manifest_sha256,
+                            "failure": (type(exc).__name__ + ": " + str(exc))[:2048], "i5_ready": False}),
+                            deadline=time.monotonic() + 1)
+                    except BaseException:
+                        pass  # Closed result pipe remains a transport failure.
                     os._exit(2)
             os.close(guest_read)
             os.close(stream_write)
@@ -454,6 +461,14 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
                     "uuid": apt.UUID, "nonce": nonce, "manifest_sha256": manifest_sha256, "sequence": lease.sequence}))
             relay()
             def validate(raw):
+                value = apt.decode(raw, 6 * apt.MIB)
+                if type(value) is dict and value.get("scope") == "i5-preparation-transport-error":
+                    apt.fields(value, "schema_version scope uuid nonce manifest_sha256 failure i5_ready")
+                    apt.require(type(value["schema_version"]) is int and value["schema_version"] == 1 and
+                                value["uuid"] == apt.UUID and value["nonce"] == nonce and value["manifest_sha256"] == manifest_sha256 and
+                                value["i5_ready"] is False and type(value["failure"]) is str and 0 < len(value["failure"]) <= 2048,
+                                "transport failure binding")
+                    raise ValueError(value["failure"])
                 packet["export"] = validate_export(raw, nonce, manifest_sha256)
                 apt.require(packet["export"]["passed"], "guest preparation/export failed")
             packet["watchdog"] = supervision.watch_transport(control_read, stream_read, lease,

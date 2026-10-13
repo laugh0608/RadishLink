@@ -386,7 +386,7 @@ APT 方案固定四个本地仓库树：`IN/debian/dists/trixie`、`IN/debian/di
 
 ## 租约通道与有界导出离线接线（2026-10-13）
 
-所有者要求先提交前轮七文件，再推进租约通道、结果有界导出和宿主 watchdog 的离线接线与测试。前轮提交为 `63f98d4`，没有 push；本节的新实现尚未提交。未启动 VM、安装依赖或运行 I5-R；没有修改任何公开入口的 STOP，也没有系统配置或远程写入。
+所有者要求先提交前轮七文件，再推进租约通道、结果有界导出和宿主 watchdog 的离线接线与测试。前轮提交为 `63f98d4`，没有 push；本节的新实现随后按所有者要求提交为 `acb654d`，亦未 push。未启动 VM、安装依赖或运行 I5-R；没有修改任何公开入口的 STOP，也没有系统配置或远程写入。
 
 ### 接线与结果归属
 
@@ -424,6 +424,43 @@ host/guest 租约仍为最长静默 15 秒，绝对截止分别 620/540 秒。gu
 - 新套件首次引用了不存在的 fixture 测试方法，退出 1；修正为已有 fixture 并避免导入测试类导致重复发现。随后真实管道暴露 host 确认早于 guest 接收而堆积续约帧的问题，退出 1；增加 guest 到控制端的逐帧 ACK 后完成相应用例。增加启动时间余量时，静默用例曾在到期前正常完成却仍预期失败，退出 1；改为明确阻塞 worker 后验证到期回收，没有放宽产品截止。
 - 曾在新套件的 200 ms 窗口及并行回归的旧监督器 200 ms 窗口观察到启动调度超时，均保留为失败记录。真实 fork 测试给予调度余量，严格时间边界仍由既有假时钟负例覆盖；不把单次重跑成功解释为没有出现过不稳定性。
 - 原监督隔离 20 个方法、guest 45 项、control 4 个方法、准备编排 20 项、资源/build helper 20 项和纯 JavaScript 29 项回归通过；JavaScript 使用纯 vm context，无 Application/ObjC/UTM 调用。
-- `./scripts/check-repo.sh` 通过（200 文件），`git diff --check` 通过；六个相关 Python 文件经 AST 语法检查通过，未生成 bytecode。本轮九文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 4；前轮七文件提交 `63f98d4` 后没有 push。
+- `./scripts/check-repo.sh` 通过（200 文件），`git diff --check` 通过；六个相关 Python 文件经 AST 语法检查通过，未生成 bytecode。该轮检查时九文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 4；随后提交为 `acb654d`，没有 push。
 - 本次只闭合离线内部接线。真实 UTM guest-agent 如何承载两个独立方向的通道、启动/收尾适配、受硬额度约束的宿主证据持久化、Linux tmpfs/cgroup/namespace 实测，以及监督器或 watchdog 自身被 SIGKILL 后的外部恢复机制仍未验收。现有公开 UTM 执行入口未接入这些 API。
 - guest 启动日志、系统盘、全局 swap、宿主 backing/UTM 日志的完整硬额度仍缺；没有真实验签、原生 APT 求解或 768 MiB I5 条件通过的证据。没有遗留本轮测试后台进程；临时合成目录随测试清理。
+
+## UTM 传输与证据持久化离线续接（2026-10-13）
+
+所有者要求先提交前轮九文件，再推进 UTM 传输适配和证据持久化的离线实现与测试。九文件已提交为 `acb654d`，未 push；本节实现尚未提交。以下是候选内部接线和本机合成证据，不是新的单次 UTM 操作包或真实运行授权。
+
+### UTM 适配与控制文件
+
+本轮只读核对已安装 UTM 的 `UTM.sdef`，没有查询 VM 或调用 Application/Apple event。该接口提供 `execute` 的一次性 stdin、同一 process handle 的 `get result`，以及 guest file 的 open/read/write/close；没有将一次性 stdin 当成运行期间可追加的管道。
+
+[传输模块](../../scripts/sw_i5_preparation_transport.py)将现有 watchdog 的控制/ACK/结果管道映射到有界 RPC；[UTM 原生映射](../../scripts/sw_i5_utm_result.js)仅作为内部函数存在。控制路径固定为 `/run/radishlink-i5-preparation/<nonce>/control/lease.slot` 和 `ack.slot`，各 1024 bytes；文件必须提前准备且保持 owner、0600、单链接、设备/inode 和长度绑定，不由 transport 创建。宿主以 `reading + updating` 打开已有 lease 文件，ACK 只读；读写均明确 offset 0、固定长度和 `closing=false`，最终关闭已取得的两个 handle，不使用 append、truncate、整文件 pull/push 或默认读至 EOF。
+
+控制槽 v1 用固定头、长度、标准 SHA256 和零填充封装已有 ≤512 bytes 的租约/ACK。摘要只检测撕裂写入，不是密码身份认证。撕裂/未完成更新不会续约，也不会重置静默或绝对截止；重复看到同一槽不产生新租约。有效内容仍由原 Lease 严格检查 UUID、nonce、manifest、scope 和 sequence。supervisor 直接轮询固定 FD，并写 ACK，不增加可自行续约的 worker FD 或额外 bridge 进程；worker 继续关闭这些 FD。
+
+RPC v1 绑定 UUID、nonce、manifest、递增调用 sequence 和 action；guest program 原始 bytes 与摘要由宿主验证。每个调用只允许 identify/open/read/write/execute/result/close，原生映射的 Apple event timeout 为 2 秒，调用者还须施加整个 RPC 的外部进程截止。准备 guest 只 execute 一次，之后仅轮询同一个 PID/handle；执行结果丢失、错误字段、错 ACK、readback 不符、stderr/退出码/信号不符、超限或 close 失败均保留上下文并失败，不重新 execute。一次 open/execute 已生效但返回丢失时，未知 handle 不猜测，不通过重新操作制造成功，交给既有租约和精确 VM 回收路径。
+
+结果到达后仍验证完整导出，`exit_code=0/2` 必须与通过/失败一致。transport 异常可通过独立失败 envelope 到达 watchdog，原失败文字和后续回收结果一起进入宿主报告。RPC 总截止候选 600 秒，close 总预算另限 4 秒，仍受外层 host 620 秒阶段及其独立回收约束。
+
+### 持久化与重开
+
+[证据模块](../../scripts/sw_i5_preparation_evidence.py)要求调用者提供明确、规范化且私有的宿主目录；没有默认写入位置或扫描发现。启动候选工作前先排他创建 nonce 子目录并写 `attempt.json`，已存在的失败、中断或完成目录都不覆盖、不续跑。单次逻辑写入总量 ≤4 MiB，原始 `host-report.bin` ≤3 MiB，attempt/receipt 各 ≤8 KiB；这不是宿主物理 quota 已生效的证据。
+
+固定文件按排他创建 `.partial`、有界写入、文件 fsync、非覆盖 hardlink 发布、目录 fsync、移除临时链接及再次目录 fsync 的顺序保存；hardlink 发布不复制第二份 payload。`receipt.json` 最后写入，绑定 nonce/manifest、原始报告 bytes/SHA256、宿主退出码、`accepted`、`passed` 与错误。write/fsync/link 的异常直接返回失败，部分文件保留在已消费目录，不静默回滚或重试。
+
+落盘可在独立子进程执行，最多 6 秒；fsync 或写入卡住时由调用者终止该次子进程，另限 2 秒确认 reap。失败/超时始终报告结果未确认，保留已消费目录，不以可见的部分文件推断成功；生命周期调用方须据此保持失败并回收，真实总包时间仍须在接入时复核。
+
+`accepted=true` 只表示有效宿主报告已保存并与退出码一致；报告本身失败时仍是 `passed=false`。坏 JSON、进程/报告退出码矛盾等保留原始有界 bytes，回执为拒绝；不伪造准备结果。重开独立验证目录和文件身份、权限、单链接、固定文件集合、大小/摘要、schema、停止标志及宿主/guest 结果一致性，缺回执、额外/部分文件或篡改均拒绝。读回通过只证明当次可读状态；本轮没有实际断电、存储故障或物理介质持久性验收，I/O 报错后的发布结果仍需按失败/结果未确认处理。
+
+### 版本、验证与停止线
+
+内部 operation v4 绑定全部十六个源文件、guest program SHA256、1024-byte slot 及 4 MiB evidence 逻辑额度；v1/v2/v3 的字段和源文件集合保持独立严格验证。未修改既有运行 evidence schema、I5 shell/Go 停止代码或历史已消费操作包。新的 RPC、控制槽、attempt/receipt 均独立版本化；内部成功仍为 synthetic，不能开启 `i5_ready`、验签、APT 求解或安装授权。
+
+- `python3 -B scripts/test_sw_i5_transport.py`：15 个测试方法通过。覆盖 UTM RPC 正负例、同一进程句柄且最多一次 execute、全部已知 handle 关闭、槽撕裂/重复/权限/替换/短写、真实 mailbox → 独立 guest supervisor、watchdog → RPC 替身 → 报告持久化、错误传播、重开、磁盘写满/同步失败及真实子进程中卡住的 fsync、短写/零写、报告篡改/退出码不符、hardlink 与中断拒绝。
+- `node scripts/test_sw_i5_utm_rpc.js`：21 个纯 JavaScript 用例通过，直接检查原生映射的路径、模式、offset、length、base64、超时、handle 和执行参数；Application/ObjC 未调用。既有适配层 29 项纯 JavaScript 自测通过。
+- 既有通道 14、监督隔离 20、准备编排 20、guest 45、control 4 个方法与资源/build helper 20 项回归通过。一次新增测试编辑把 hardlink 测试的尾部误放入相邻方法，`test_sw_i5_transport.py` 退出 1，报告 `NameError: store is not defined`；移回对应方法后通过，未删除断言或改变实现来掩盖失败。
+- `./scripts/check-repo.sh` 通过（204 文件），`git diff --check` 和六个相关 Python 文件的 AST 语法检查通过；本轮十一文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 5。前轮九文件提交 `acb654d` 后没有 push；本轮短寿命测试进程已回收，无遗留后台进程。
+- 没有启动 VM、安装依赖、运行真实 APT/验签或 I5-R，没有系统/设备/远程修改；UTM CLI、guest `--preparation-apt` 和 JXA `--collect` 的 preparation scope 仍在首次外部调用前 STOP。没有开启 RPC 的公开命令行入口。
+- 未覆盖：控制文件所在 guest 文件系统及 QEMU agent 写入的完整硬额度、独占身份/隔离初始化、实际 source/介质/program 的受授权交付、Python 与原生 JXA RPC 的受监督进程启动/I/O 桥、UTM 同句柄/写入/readback 行为实测及宿主证据 backing 的硬容量和掉电行为。guest-agent 接口只按本机声明做映射，不宣称跨 UTM 版本兼容；物理 768 MiB 和真实 Linux 回收门仍未通过。

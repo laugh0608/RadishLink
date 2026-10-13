@@ -498,7 +498,7 @@ guest 根文件系统的 ≥ 1 GiB 可用与 macOS 上承载 VM 的物理文件�
 
 ## 下一实施顺序与完成条件
 
-2026-10-13 续接：信任输入、准备编排与[硬隔离/独立监督实现](sw-g4-synthetic-i5-environment-feasibility.md#准备期隔离与独立监督离线续接2026-10-13)分别提交为 `0b589cc`、`7fdecbf`、`63f98d4`。[租约通道、RESULT 有界导出与宿主 watchdog 的离线接线](sw-g4-synthetic-i5-environment-feasibility.md#租约通道与有界导出离线接线2026-10-13)随后通过合成测试，尚未提交；真实 preparation-apt 生命周期在首次外部调用前仍为 STOP。当前重点转为精确环境初始化、UTM guest-agent 真实适配/证据持久化及 Linux/宿主真实拒绝和回收证明；不能把合成测试转成验签/APT 或容量证据，不能直接启动 VM 或执行 I5-R。
+2026-10-13 续接：信任输入、准备编排、硬隔离及[租约/有界导出离线接线](sw-g4-synthetic-i5-environment-feasibility.md#租约通道与有界导出离线接线2026-10-13)已提交，最新为 `acb654d`。随后[UTM 传输与证据持久化的内部实现](sw-g4-synthetic-i5-environment-feasibility.md#utm-传输与证据持久化离线续接2026-10-13)通过离线测试，尚未提交；真实 preparation-apt 生命周期仍在首次外部调用前 STOP。后续须先闭合控制文件/环境初始化、全部承载硬额度和原生 RPC 进程接线，再另行授权 Linux/UTM 实测；不能把合成结果变成验签/APT、持久介质掉电保证或 I5-R 放行。
 
 | 顺序 | 在现有结构中交付 | 完成条件 |
 | --- | --- | --- |

@@ -296,3 +296,78 @@ function run(argv) {
         function () { return $.NSProcessInfo.processInfo.systemUptime; },
         function (seconds) { delay(seconds); })));
 }
+
+// Internal single-operation RPC mapping. No run()/Application path enables it.
+// The controller binds RPC source, program digest and this nonce before calls.
+function preparationRPC(request, api) {
+    var keys = "action,args,manifest_sha256,nonce,schema_version,scope,sequence,uuid";
+    requireFact(request && Object.keys(request).sort().join(",") === keys && request.schema_version === 1 &&
+        request.scope === "i5-preparation-utm-rpc" && request.uuid === TARGET_UUID &&
+        typeof request.nonce === "string" && /^[0-9a-f]{32}$/.test(request.nonce) &&
+        typeof request.manifest_sha256 === "string" && /^[0-9a-f]{64}$/.test(request.manifest_sha256) &&
+        integer(request.sequence) && request.sequence >= 0, "preparation RPC binding");
+    var a = request.args, value;
+    function fields(names) { requireFact(a && typeof a === "object" && !Array.isArray(a) &&
+        Object.keys(a).sort().join(",") === names, "RPC fields"); }
+    function handle(id) { requireFact(integer(id) && id > 0, "RPC handle"); return id; }
+    switch (request.action) {
+    case "identify": fields(""); value = api.identify(2); break;
+    case "open":
+        fields("role"); requireFact(a.role === "lease" || a.role === "ack", "mailbox role");
+        value = api.open("/run/radishlink-i5-preparation/" + request.nonce + "/control/" + a.role + ".slot",
+                         a.role === "lease", 2); handle(value); break;
+    case "read": fields("handle"); value = api.read(handle(a.handle), 1024, 2);
+        requireFact(typeof value === "string" && value.length <= 1368, "mailbox read limit"); break;
+    case "write":
+        fields("data,handle"); requireFact(typeof a.data === "string" && a.data.length === 1368 &&
+            /^(?:[A-Za-z0-9+/]{4}){341}[A-Za-z0-9+/]{2}==$/.test(a.data), "mailbox write size");
+        api.write(handle(a.handle), a.data, 2); value = null; break;
+    case "execute":
+        fields("program_base64,program_sha256");
+        requireFact(typeof a.program_sha256 === "string" && /^[0-9a-f]{64}$/.test(a.program_sha256), "program digest");
+        var execution = {schema_version: 1, uuid: TARGET_UUID, nonce: request.nonce, case_name: "preparation-apt",
+            manifest_sha256: request.manifest_sha256, program_base64: a.program_base64};
+        validateRequest(execution);
+        value = api.execute(execution, 2); handle(value); break;
+    case "result":
+        fields("process"); value = api.result(handle(a.process), 2);
+        requireFact(value && typeof value.exited === "boolean", "RPC exited field");
+        if (value.exited) {
+            requireFact(integer(value.exitCode) && value.exitCode >= 0 && value.exitCode <= 255 &&
+                integer(value.signalCode) && value.signalCode >= 0 && typeof value.outputData === "string" &&
+                value.outputData.length <= 4 * Math.ceil(2 * 1024 * 1024 / 3) && typeof value.errorData === "string" &&
+                value.errorData.length <= 4 * Math.ceil(65536 / 3), "RPC result fields/limit");
+            value = {exited: true, exit_code: value.exitCode, signal_code: value.signalCode,
+                     stdout_base64: value.outputData, stderr_base64: value.errorData};
+        } else { value = {exited: false}; }
+        break;
+    case "close": fields("handle"); api.close(handle(a.handle), 2); value = null; break;
+    default: throw new Error("unknown preparation RPC action");
+    }
+    return {schema_version: 1, scope: "i5-preparation-utm-rpc-result", uuid: TARGET_UUID, nonce: request.nonce,
+            manifest_sha256: request.manifest_sha256, sequence: request.sequence, action: request.action, value: value};
+}
+
+function preparationNativeAPI(app) {
+    // Documented installed UTM.sdef: reading+updating requires an existing file,
+    // explicit offsets/lengths avoid append/truncate or read-until-EOF behavior.
+    var vm = app.virtualMachines.byId(TARGET_UUID);
+    var execution = nativeAPI(app, function () { throw new Error("clock not used by RPC"); }, function () {});
+    return {
+        identify: execution.identify,
+        open: function (path, writable, timeout) {
+            return app.openFile(vm, {at: path, for: "reading", updating: writable}, {timeout: timeout}).id({timeout: timeout});
+        },
+        read: function (id, length, timeout) {
+            return app.read(vm.guestFiles.byId(id), {atOffset: 0, from: "start position", forLength: length,
+                base64Encoding: true, closing: false}, {timeout: timeout});
+        },
+        write: function (id, data, timeout) {
+            app.write(vm.guestFiles.byId(id), {withData: data, atOffset: 0, from: "start position",
+                base64Encoding: true, closing: false}, {timeout: timeout});
+        },
+        execute: function (request, timeout) { return execution.execute(request, timeout).id({timeout: timeout}); },
+        result: function (id, timeout) { return app.getResult(vm.guestProcesses.byId(id), {timeout: timeout}); },
+        close: function (id, timeout) { app.close(vm.guestFiles.byId(id), {timeout: timeout}); }
+    };
+}

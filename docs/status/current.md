@@ -52,7 +52,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
-2026-10-13 I5 可行性、信任输入、准备编排及[硬隔离/独立监督](../testing/sw-g4-synthetic-i5-environment-feasibility.md#准备期隔离与独立监督离线续接2026-10-13)已提交，最新为 `63f98d4`。随后[租约通道、结果有界导出和宿主 watchdog 离线接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#租约通道与有界导出离线接线2026-10-13)完成实现与合成回归，尚未提交；新 preparation-apt 真实入口继续硬停止。仍缺受授权的环境初始化、UTM guest-agent 真实传输/证据持久化接线、Linux 硬拒绝/失联回收实测及 guest/宿主完整物理额度；没有密码学验签或原生 APT 求解结果。未启动 VM、安装依赖或运行 I5-R，当前 UTM 和 I5-R 不可放行；10 月 9 日[开发回顾](2026-10-09-progress.md)保留历史证据和已消费授权。
+2026-10-13 I5 可行性、信任输入、准备编排、硬隔离及[租约/有界导出接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#租约通道与有界导出离线接线2026-10-13)已提交，最新为 `acb654d`。随后[UTM 传输适配与证据持久化](../testing/sw-g4-synthetic-i5-environment-feasibility.md#utm-传输与证据持久化离线续接2026-10-13)完成内部实现及离线回归，尚未提交；真实 preparation-apt 入口继续硬停止。仍缺受授权的控制文件/环境初始化和硬容量证明、原生 RPC 进程接线、Linux/UTM 实测及宿主完整物理额度；没有密码学验签或原生 APT 求解结果。未启动 VM、安装依赖或运行 I5-R，当前 UTM 和 I5-R 不可放行；10 月 9 日[开发回顾](2026-10-09-progress.md)保留历史证据和已消费授权。
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 

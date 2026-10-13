@@ -74,14 +74,17 @@ class Lease:
                 "sequence": sequence, "action": action}, separators=(",", ":")) + "\n").encode()
 
 
-def drain_lease(fd, lease, now):
+def drain_lease(fd, lease, now, require_started=True):
     sequence = lease.sequence
-    readable, _, _ = select.select([fd], [], [], 0)
-    if readable:
-        raw = os.read(fd, MAX_FRAME)
-        require(raw, "lease channel closed")
+    if type(fd) is int:
+        readable, _, _ = select.select([fd], [], [], 0)
+        raw = os.read(fd, MAX_FRAME) if readable else None
+        require(raw != b"", "lease channel closed")
+    else:
+        raw = fd.read_pending()
+    if raw is not None:
         lease.feed(raw, now)
-    lease.check(now)
+    lease.check(now, require_started=require_started)
     return lease.sequence != sequence
 
 
@@ -298,7 +301,7 @@ def reap_descendants(worker):
 
 def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUEST_SECONDS,
                     silence=LEASE_SECONDS, subreaper=enable_subreaper, prepare=lambda: None,
-                    control_fd=None, exporter=None, keep_fds=(), ack_fd=None):
+                    control_fd=None, exporter=None, keep_fds=(), ack_fd=None, mailbox=None):
     """Internal process wiring, not a preparation authorization API.
 
     Return the supervisor PID, caller's lease write FD and bounded report read
@@ -306,13 +309,15 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
     No FD permitting renewal is inherited by worker or supervisor. The future
     host adapter must provide a separate recovery route if this process dies.
     """
-    lease_read, lease_write = os.pipe() if control_fd is None else (os.dup(control_fd), None)
+    require(mailbox is None or (control_fd is None and ack_fd is None), "one control transport required")
+    lease_read, lease_write = ((mailbox, None) if mailbox is not None else
+                               (os.pipe() if control_fd is None else (os.dup(control_fd), None)))
     report_read, report_write = os.pipe()
     try:
         pid = os.fork()
     except BaseException:
         for fd in (lease_read, lease_write, report_read, report_write):
-            if fd is not None:
+            if type(fd) is int:
                 os.close(fd)
         raise
     if pid == 0:
@@ -329,7 +334,8 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
                 descriptor = vars(candidate).get("fd")
                 if type(descriptor) is int and descriptor >= 3:
                     kernel_fds.append(descriptor)
-            keep = sorted({lease_read, report_write, *keep_fds, *kernel_fds, *([] if ack_fd is None else [ack_fd])})
+            lease_fds = [lease_read] if mailbox is None else mailbox.fds
+            keep = sorted({*lease_fds, report_write, *keep_fds, *kernel_fds, *([] if ack_fd is None else [ack_fd])})
             first = 3
             for fd in keep:
                 os.closerange(first, fd)
@@ -339,21 +345,18 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
             guard.admit_supervisor()
             subreaper()
             lease = Lease(nonce, manifest_sha256, started=time.monotonic(), total=total, silence=silence)
+            if mailbox is not None:
+                lease.acknowledge = mailbox.acknowledge
             if ack_fd is not None:
                 from sw_i5_preparation_channels import encode, write_frame
                 lease.acknowledge = lambda sequence: write_frame(ack_fd, encode({"schema_version": 1,
                     "scope": "i5-preparation-guest-ack", "uuid": UUID, "nonce": nonce,
                     "manifest_sha256": manifest_sha256, "sequence": sequence}))
             # Wait for the first complete lease without launching any child.
-            until = time.monotonic() + silence
             while lease.sequence < 0:
-                remaining = until - time.monotonic()
-                require(remaining > 0, "initial lease timeout")
-                ready, _, _ = select.select([lease_read], [], [], remaining)
-                require(ready, "initial lease timeout")
-                raw = os.read(lease_read, MAX_FRAME)
-                require(raw, "initial lease channel closed")
-                lease.feed(raw, time.monotonic())
+                drain_lease(lease_read, lease, time.monotonic(), require_started=False)
+                if lease.sequence < 0:
+                    time.sleep(0.01)
             result = supervise(ForkWorker(work, prepare), boundary, guard, lease_read, lease,
                                reap=reap_descendants if subreaper is enable_subreaper else None, exporter=exporter)
             if exporter is not None:
@@ -388,7 +391,8 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
                 except BaseException:
                     pass  # Broken/full report channel still produces nonzero exit.
             os._exit(2)
-    os.close(lease_read)
+    if type(lease_read) is int:
+        os.close(lease_read)
     os.close(report_write)
     return pid, lease_write, report_read
 
