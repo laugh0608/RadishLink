@@ -52,7 +52,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
-2026-10-13 按所有者指定先完成 I5 环境可行性文档收敛：[安装差量、完整容量核算与下一操作包](../testing/sw-g4-synthetic-i5-environment-feasibility.md)已形成。明确需求为一个 Go 归档与六个 deb，原生依赖闭包仍待解析；四盘满额时宿主额外开销余量为零，当前 UTM 不可放行。下一包限定验签/离线模拟候选，可信输入、隔离配置与取消/回收实施未齐备，尚不可执行。本轮无 VM/安装/构建或 I5-R；10 月 9 日[开发回顾](2026-10-09-progress.md)保留历史证据和已消费授权。
+2026-10-13 I5 [可行性文档](../testing/sw-g4-synthetic-i5-environment-feasibility.md)已提交为 `e16ee48`。随后[信任输入与离线实施方案](../testing/sw-g4-synthetic-i5-environment-feasibility.md#续接可信输入与离线实施方案2026-10-13)固定三组 Debian main/arm64 完整索引、公钥材料及官方指纹依据；压缩/展开摘要一致，Git/iptables 版本候选及四个静态新增依赖已取得，但未验签或原生求解。下一包限定验签/离线模拟，仍缺实际 key 核对、隔离配置、取消/回收与准备期硬边界；当前 UTM 和 I5-R 不可放行。无 VM/安装/构建或 I5-R；10 月 9 日[开发回顾](2026-10-09-progress.md)保留历史证据和已消费授权。
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
