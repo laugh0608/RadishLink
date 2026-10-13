@@ -18,6 +18,40 @@ SOURCES = (
     "scripts/inspect-sw-i5-guest.py", "scripts/test_sw_i5_guest.py",
     "scripts/sw_i5_utm_result.js",
 )
+APT_SOURCES = SOURCES + ("scripts/sw_i5_apt.py", "scripts/test_sw_i5_apt.py")
+
+
+def validate_apt_operation(record, nonce, observed):
+    """Pure contract comparison, never authorizes or starts a VM.
+
+    observed must be independently collected by a future isolation adapter;
+    trusting operation.json as its own evidence is forbidden. No such adapter
+    is wired to the CLI in v1.
+    """
+    from sw_i5_apt import fields, require, digest, GUEST_SECONDS, HOST_SECONDS
+    fields(record, "schema_version scope authorized nonce uuid base_revision hashes config_sha256 "
+           "utmctl_sha256 manifest_sha256 media guest_seconds host_seconds total_seconds")
+    require(type(record["schema_version"]) is int and record["schema_version"] == 1 and
+            record["scope"] == "i5-preparation-apt-operation" and record["authorized"] is True and
+            record["nonce"] == nonce and re.fullmatch(r"[0-9a-f]{32}", nonce) and record["uuid"] == UUID,
+            "preparation operation binding mismatch")
+    require(type(record["base_revision"]) is str and re.fullmatch(r"[0-9a-f]{40}", record["base_revision"]),
+            "invalid base revision")
+    require(type(record["hashes"]) is dict and set(record["hashes"]) == set(APT_SOURCES) and
+            all(digest(v) for v in record["hashes"].values()), "complete preparation source manifest required")
+    for key in ("config_sha256", "utmctl_sha256", "manifest_sha256"):
+        require(digest(record[key]), "invalid " + key)
+    fields(record["media"], "path sha256 bytes read_only")
+    media = record["media"]
+    require(type(media["path"]) is str and re.fullmatch(r"/[A-Za-z0-9_./-]+", media["path"]) and
+            ".." not in Path(media["path"]).parts and digest(media["sha256"]) and media["read_only"] is True and
+            type(media["bytes"]) is int and 0 < media["bytes"] <= 256 * 1024 * 1024, "invalid read-only media")
+    for key, seconds in (("guest_seconds", GUEST_SECONDS), ("host_seconds", HOST_SECONDS), ("total_seconds", 900)):
+        require(type(record[key]) is int and record[key] == seconds, "fixed preparation deadline required")
+    keys = {"base_revision", "hashes", "config_sha256", "utmctl_sha256", "manifest_sha256", "media"}
+    require(type(observed) is dict and set(observed) == keys and
+            all(record[k] == observed[k] for k in keys), "preparation source/media/baseline changed")
+    return record
 
 
 def read_operation(nonce):
@@ -49,7 +83,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--authorized-once", action="store_true", required=True)
     parser.add_argument("--nonce", required=True)
+    parser.add_argument("--scope", choices=("details", "preparation-apt"), default="details")
     args = parser.parse_args()
+    if args.scope == "preparation-apt":
+        print("I5_PREPARATION_ISOLATION_REQUIRED: preparation lifecycle is not enabled", file=sys.stderr)
+        return 2
     root, record = read_operation(args.nonce)
     spec = importlib.util.spec_from_file_location("i5_inventory", SCRIPT)
     collector = importlib.util.module_from_spec(spec)

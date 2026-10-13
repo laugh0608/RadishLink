@@ -271,7 +271,7 @@ iptables 新揭示的 `netbase=6.5`、`libnetfilter-conntrack3=1.1.0-1`、`libnf
 
 ### 离线实施清单与精准验证方案
 
-本轮交付方案，未写入或执行以下实现。仅扩展已有准备采集职责，不新增 I5 运行入口：
+以下为 `0b589cc` 提交时的实施方案；随后获准的离线实现与实际覆盖范围见[离线实施与回归](#离线实施与回归2026-10-13)。仅扩展已有准备采集职责，不新增 I5 运行入口：
 
 | 文件/职责 | 拟实施内容 | 必须覆盖的离线验证 |
 | --- | --- | --- |
@@ -313,3 +313,35 @@ APT 方案固定四个本地仓库树：`IN/debian/dists/trixie`、`IN/debian/di
 - 网页工具无法直接读取 PGP MIME、部分原始文档与 Debian 公告（403），未将它们当作 key/文档不存在；原始公钥与 Docker 固定提交原文通过受限 curl 保存。搜索中的第三方转载和用户 Issue 没有用作信任根。
 - 剩余执行前缺口：公钥工具核对与验签、原生 APT 差量、原 status/架构绑定、离线采集/取消实施、介质/暂存/系统写入硬边界与精确回收。不能靠输入齐备跳过这些条件，也未改变 768 MiB 或 I5-R STOP。
 - 续接文档的 `./scripts/check-repo.sh` 通过（193 文件），`git diff --check` 通过；13 份输入及 manifest 摘要/字节总数再次核对通过。仅提交了续接前的 `e16ee48`；本节及当前状态/准备入口更新保留为未提交改动。未 push、未新增后台进程，未下载软件归档、导入系统 key、安装依赖或启动 VM/I5-R。
+
+## 离线实施与回归（2026-10-13）
+
+上述三份文档已按所有者要求提交为 `0b589cc`，未 push。随后获准实施验签/APT 准备入口、有界输出和取消回收及离线测试；该授权明确排除启动 VM、安装依赖和 I5-R。以下实现尚未提交，不改变历史合同、候选包版本或 768 MiB 运行预算。
+
+### 实现范围与入口
+
+- [内部准备模块](../../scripts/sw_i5_apt.py)承载独立 v1 输入/结果合同、介质文件白名单、原包库/工具基线、完整指纹列表检查、固定 GPG/sqv 调用、认证 Release 日期和 SHA256 检查、有界解压摘要、独立 APT 配置/pin 生成及原生模拟结果的只新增检查；不实现 OpenPGP 或 Debian 依赖求解。Docker 按 `Suite`、Debian 按 `Codename` 绑定源身份。只有 sqv 退出成功且回收无错，才读取它的认证输出；非零退出留下的文件不会被消费。
+- [现有采集器](../../scripts/inspect-sw-i5-guest.py)新增宿主离线 `--validate-preparation-input` 和 `--validate-preparation-apt`，从 stdin 读取合同，绑定 `--nonce`，结果校验还要求 `--manifest-sha256`。它们不读取 guest、不调用工具、不生成授权包。`--preparation-apt`、`--collect-utm preparation-apt` 和[生命周期入口](../../scripts/sw_i5_utm_control.py)的 `--scope preparation-apt` 均在任何 UTM/guest 操作之前返回 exit 2、`I5_PREPARATION_ISOLATION_REQUIRED`。
+- 输入 `scope=i5-preparation-apt-input`、结果 `scope=guest-preparation-apt`、操作 `scope=i5-preparation-apt-operation` 均为 `schema_version=1`，不扩张旧 inventory/details。旧结果限额、55 秒适配层截止及旧生命周期行为保持不变。旧 review-only manifest 不兼容新执行输入，不会自动补成授权或真实基线。
+- 新输入固定 `nonce`/UUID、11 个原始源/公钥文件的 bytes/SHA256，以及原生 `status`、可缺失的 `extended_states`/默认 crypto policy、arm64/空 foreign architectures、六个工具的包归属/版本/二进制摘要。介质另外必须有四个逐字相同的 by-hash 索引；拒绝未知文件、重复 JSON 字段、非规范路径、symlink、摘要变化与压缩尾随/截断。日期只从认证 Release 读取；不回拨策略时间或关闭有效期。
+- 阶段执行函数要求显式注入 runner 和合成基线路径，本版本仅供离线编排验证，产出 `evidence_kind=synthetic`；`signature_verified`、`apt_resolved`、`install_authorized`、`i5_ready` 均保持 false。`passed=true` 仅表示全部合成阶段及后置校验通过，结果校验器拒绝把它升级为真实证明。真实生命周期尚未接通，不存在通过一个 JSON 布尔值启用执行的开关。
+- 新操作合同的纯校验函数绑定全部七个源文件、base revision、manifest、UTM 配置/二进制及只读介质路径/bytes/SHA256，并与独立观测值逐项比较。当前没有真实介质观测/挂载或新生命周期执行适配器；测试中的前后观测变化拒绝不能替代实际挂载、恢复或 VM 回收证明。
+
+### 输出、时间与取消
+
+[内部执行器](../../scripts/sw_i5_apt.py)使用空 stdin、关闭继承 FD、全新进程组、非阻塞双流读取和单调时钟。每步 stdout 最多 2 MiB、stderr 最多 64 KiB，读取最多剩余额度加 1 byte，超限标记失败且保留量不越界；工具流累计最多 7 MiB，另留结果 framing 空间。stderr 对 APT/dpkg 操作严格拒绝，GPG/sqv 的诊断单独留存，退出码仍必须为 0。
+
+超时、取消回调、SIGINT/SIGTERM、流超限及启动失败都保留首个原因；回收针对该次 PID 对应的独占进程组，SIGKILL、wait 后再验证组消失。leader 已退出但后代仍在也失败；无法查询、wait 超时、仍可见的僵尸/后代都是 `cleanup_errors`，不能 PASS。保存退出码及有界原始流，不把非零退出解释为成功。
+
+新 scope 的 guest 本地总截止固定 540 秒，适配层 600 秒，宿主候选阶段 620 秒；启动 60 + readiness 候选 60 + 宿主阶段 620 + 关机 120 共 860 秒，留在 900 秒包预算内。工具单步最多 30 秒，APT 建索引/模拟各最多 150 秒，且都受剩余 guest 总时间约束。超时不重发 execute，只轮询同一个 process handle；适配层不把宿主取消/丢结果视为 guest 已结束。新 guest 流/transport 限额分别为 2/6 MiB。
+
+这只实现本地截止检查、子进程计时及普通信号取消。输入读取/文件系统阻塞、包装器被 SIGKILL、后代 `setsid` 逃逸、guest/宿主失联、存储/内存总量和挂载全局写入范围，仍需要独立 supervisor/cgroup/只读挂载及精确设备回收证明；进程组和 `RLIMIT_FSIZE` 都不是其替代品。新 scope 继续 STOP，因此不存在用这些离线测试放行真实包的路径。
+
+### 本轮验证与未覆盖项
+
+- `python3 -B scripts/test_sw_i5_apt.py`：20 个测试方法通过，包含四源完整合成编排、阶段失败矩阵、签名失败后不消费认证文件、不调用 APT、基线前后变化、旧 nonce/源摘要/介质变化、错指纹与额外证书、配置 hooks/额外索引、原包变更/删除/缺根包拒绝，以及输入路径/压缩/日期拒绝。
+- 同一测试集实际启动短寿命合成 Python 子进程，验证双流恰好限额、持续输出溢出、非零退出、超时、回调取消、SIGTERM 包装器回收、关闭管道后残留后代及回收错误。没有执行 GPG、sqv、APT、网络、VM 或真实设备操作。
+- 原 `test_sw_i5_guest.py` 45 项、`test_sw_i5_utm_control.py` 4 个测试方法通过；纯 Node vm context 执行适配层自测 29 项通过，无 Application/ObjC/UTM 调用。新适配层测试覆盖独立截止、错绑定、超限、未知返回状态和丢结果只执行一次。
+- `./scripts/check-repo.sh` 通过（195 文件），`git diff --check` 通过；本轮测试无失败。最终 `dev` 相对本地 `origin/dev` 为 ahead 2，新增实现和配套记录共 8 个文件未提交；没有 push 或其他远程写入，没有遗留本轮后台进程。
+- 真实密钥/策略核对与密码学验签、APT 3.0.3 实际配置展开/arm64 与 all pin 行为/求解输出、完整原始包库与工具二进制基线、介质制作及挂载、硬容量/内存与全局写入隔离、外部取消和真实回收均未执行或未闭合。已有 metadata review 输入保持原样，没有制造可执行 manifest 或再次使用历史授权。
+- 当前改动会使依赖这些脚本摘要的旧操作合同不再匹配当前源码；历史记录和旧操作目录不改写。未来真实包必须重新绑定全部源与输入、证明上述硬边界，并取得当次授权。I5 shell preflight/run 和 Go synthetic-run 停止代码未修改。

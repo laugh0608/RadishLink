@@ -22,7 +22,13 @@ function validateRequest(request) {
     requireFact(request && typeof request === "object" && !Array.isArray(request), "invalid request");
     requireFact(request.schema_version === 1 && request.uuid === TARGET_UUID, "request target/schema mismatch");
     requireFact(typeof request.nonce === "string" && /^[0-9a-f]{32}$/.test(request.nonce), "invalid nonce");
-    requireFact(["success", "failure", "inventory", "details"].indexOf(request.case_name) >= 0, "unknown case");
+    requireFact(["success", "failure", "inventory", "details", "preparation-apt"].indexOf(request.case_name) >= 0, "unknown case");
+    if (request.case_name === "preparation-apt") {
+        requireFact(typeof request.manifest_sha256 === "string" && /^[0-9a-f]{64}$/.test(request.manifest_sha256),
+            "missing manifest binding");
+        requireFact(Object.keys(request).sort().join(",") ===
+            "case_name,manifest_sha256,nonce,program_base64,schema_version,uuid", "unknown preparation request field");
+    }
     requireFact(typeof request.program_base64 === "string" && request.program_base64.length > 0 &&
         request.program_base64.length <= 64 * 1024 &&
         /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(request.program_base64),
@@ -34,7 +40,7 @@ function collect(request, api) {
     var started = api.now();
     // The Python caller enforces 60 seconds including JXA startup and blocked
     // Apple events; leave five seconds for returning/handling diagnostics.
-    var deadline = started + 55;
+    var deadline = started + (request.case_name === "preparation-apt" ? 600 : 55);
     var polls = 0;
     function remaining() {
         var seconds = deadline - api.now();
@@ -62,16 +68,19 @@ function collect(request, api) {
         requireFact(integer(result.signalCode) && result.signalCode >= 0, "missing or invalid signalCode");
         ["outputData", "errorData"].forEach(function (key) {
             var limit = request.case_name === "details" ? 4 * Math.ceil(512 * 1024 / 3) : MAX_DATA_CHARS;
+            if (request.case_name === "preparation-apt") { limit = 4 * Math.ceil(2 * 1024 * 1024 / 3); }
             requireFact(typeof result[key] === "string" && result[key].length <= limit,
                 "missing or oversized " + key);
         });
-        return {
+        var envelope = {
             schema_version: 1, scope: "utm-guest-execution", uuid: TARGET_UUID,
             nonce: request.nonce, case_name: request.case_name, exited: true,
             exit_code: result.exitCode, signal_code: result.signalCode,
             stdout_base64: result.outputData, stderr_base64: result.errorData,
             polls: polls
         };
+        if (request.case_name === "preparation-apt") { envelope.manifest_sha256 = request.manifest_sha256; }
+        return envelope;
     }
 }
 
@@ -86,6 +95,11 @@ function nativeAPI(app, clock, sleeper) {
         execute: function (request, timeout) {
             var args = ["-I", "-B", "-", "--nonce", request.nonce];
             if (request.case_name === "details") { args.push("--details"); }
+            if (request.case_name === "preparation-apt") {
+                // Public collection is blocked before Application access. Keep
+                // the future transport arguments testable without executing.
+                args.push("--preparation-apt", "--manifest-sha256", request.manifest_sha256);
+            }
             return app.execute(vm, {
                 at: "/usr/bin/python3", withArguments: args,
                 usingInput: request.program_base64, base64Encoding: true, outputCapturing: true
@@ -233,6 +247,36 @@ function selfTest() {
         r.case_name = "other";
         rejects(function () { collect(r, {}); }, "unknown case");
     });
+    test("preparation deadline is separate and never resubmits", function () {
+        var r = request(); r.case_name = "preparation-apt"; r.manifest_sha256 = "a".repeat(64);
+        var f = fixture([{exited: false}]);
+        rejects(function () { collect(r, f.api); }, "timeout");
+        equal([f.calls, f.clock], [1, 600], "preparation deadline changed");
+        f = fixture([done()]);
+        f.api.result = function () { f.clock = 56; return done(); };
+        equal(collect(r, f.api).exit_code, 0, "old deadline applied to preparation");
+    });
+    test("preparation binding and streams remain bounded", function () {
+        var r = request(); r.case_name = "preparation-apt";
+        rejects(function () { collect(r, {}); }, "manifest binding");
+        r.manifest_sha256 = "a".repeat(64); r.extra = true;
+        rejects(function () { collect(r, {}); }, "unknown preparation request");
+        delete r.extra;
+        var record = done(); record.outputData = "A".repeat(4 * Math.ceil(2 * 1024 * 1024 / 3));
+        equal(collect(r, fixture([record]).api).case_name, "preparation-apt", "scope lost");
+        record.outputData += "AAAA";
+        rejects(function () { collect(r, fixture([record]).api); }, "oversized");
+    });
+    test("preparation failure cannot produce default success", function () {
+        var r = request(); r.case_name = "preparation-apt"; r.manifest_sha256 = "a".repeat(64);
+        [null, {exited: null}, {exited: true}, {exited: true, exitCode: 0, signalCode: null}].forEach(function (record) {
+            rejects(function () { collect(r, fixture([record]).api); }, "missing");
+        });
+        var f = fixture([done()]);
+        f.api.result = function () { throw new Error("lost preparation result"); };
+        rejects(function () { collect(r, f.api); }, "lost preparation result");
+        equal(f.calls, 1, "repeated execution after result loss");
+    });
     return "I5_UTM_RESULT_SELF_TEST_PASS: " + count + " synthetic cases; no application calls";
 }
 
@@ -247,6 +291,7 @@ function run(argv) {
     var text = $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
     var request = JSON.parse(text);
     validateRequest(request);
+    requireFact(request.case_name !== "preparation-apt", "I5_PREPARATION_ISOLATION_REQUIRED");
     return JSON.stringify(collect(request, nativeAPI(Application("com.utmapp.UTM"),
         function () { return $.NSProcessInfo.processInfo.systemUptime; },
         function (seconds) { delay(seconds); })));

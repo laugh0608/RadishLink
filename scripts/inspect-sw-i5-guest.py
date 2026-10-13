@@ -456,7 +456,7 @@ def probe_program(case_name):
             f"raise SystemExit({17 if case_name == 'failure' else 0})\n").encode()
 
 
-def parse_execution(raw, nonce, case_name):
+def parse_execution(raw, nonce, case_name, manifest_sha256=None):
     result_limit, transport_limit = return_limits(case_name)
     if len(raw) > transport_limit:
         raise ValueError("oversized UTM transport result")
@@ -470,6 +470,12 @@ def parse_execution(raw, nonce, case_name):
         raise ValueError("invalid UTM transport envelope")
     if result.get("uuid") != UTM_UUID or result.get("nonce") != nonce or result.get("case_name") != case_name:
         raise ValueError("UTM transport binding mismatch")
+    if case_name == "preparation-apt":
+        expected_fields = {"schema_version", "scope", "uuid", "nonce", "case_name", "exited", "exit_code",
+                           "signal_code", "stdout_base64", "stderr_base64", "polls", "manifest_sha256"}
+        if set(result) != expected_fields or not isinstance(manifest_sha256, str) or \
+                re.fullmatch(r"[0-9a-f]{64}", manifest_sha256) is None or result["manifest_sha256"] != manifest_sha256:
+            raise ValueError("preparation transport manifest binding mismatch")
     if result.get("exited") is not True:
         raise ValueError("guest exit unconfirmed")
     for field, maximum in (("exit_code", 255), ("signal_code", 255), ("polls", 10000)):
@@ -507,6 +513,8 @@ def collect_utm(nonce, case_name):
     """No VM lifecycle control; caller must shut down after success or failure."""
     if re.fullmatch(r"[0-9a-f]{32}", nonce) is None:
         raise ValueError("invalid nonce")
+    if case_name == "preparation-apt":
+        raise RuntimeError("I5_PREPARATION_ISOLATION_REQUIRED: no guest execution authorized by this entry")
     _, transport_limit = return_limits(case_name)
     check_utm_config()
     source = Path(__file__).resolve()
@@ -562,6 +570,8 @@ def collect_utm(nonce, case_name):
 
 
 def return_limits(case_name):
+    if case_name == "preparation-apt":
+        return 2 * 1024 * 1024, 6 * 1024 * 1024
     if case_name == "details":
         return DETAILS_RESULT_BYTES, DETAILS_TRANSPORT_BYTES
     if case_name in {"inventory", "success", "failure"}:
@@ -572,18 +582,38 @@ def return_limits(case_name):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nonce", required=True)
+    parser.add_argument("--manifest-sha256", help="exact preparation input binding for local result validation")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--validate-result", action="store_true",
                       help="validate guest JSON from stdin locally; does not inspect this host")
     mode.add_argument("--details", action="store_true", help="collect separate preparation details in Linux guest")
     mode.add_argument("--validate-details", action="store_true", help="validate preparation details from stdin locally")
-    mode.add_argument("--collect-utm", choices=("success", "failure", "inventory", "details"),
+    mode.add_argument("--preparation-apt", action="store_true", help="reserved preparation entry; isolation STOP remains")
+    mode.add_argument("--validate-preparation-input", action="store_true", help="validate a v1 input contract from stdin; no tools")
+    mode.add_argument("--validate-preparation-apt", action="store_true", help="validate a preparation result locally; no tools")
+    mode.add_argument("--collect-utm", choices=("success", "failure", "inventory", "details", "preparation-apt"),
                       help="authorized macOS collection from the already-running isolated VM; never starts/stops it")
     args = parser.parse_args()
     if re.fullmatch(r"[0-9a-f]{32}", args.nonce) is None:
         parser.error("nonce must be 32 lowercase hex characters")
     try:
-        if args.collect_utm:
+        if args.preparation_apt:
+            raise RuntimeError("I5_PREPARATION_ISOLATION_REQUIRED: media/work/memory/write/cancellation boundaries not accepted")
+        elif args.validate_preparation_input or args.validate_preparation_apt:
+            # Local-only loading; original stdin-delivered guest cases remain
+            # self-contained and never import preparation code.
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("i5_apt", Path(__file__).with_name("sw_i5_apt.py"))
+            apt = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(apt)
+            if args.validate_preparation_input:
+                raw = sys.stdin.buffer.read(64 * 1024 + 1)
+                apt.validate_manifest(raw, args.nonce)
+                print(json.dumps(apt.blocked_result(args.nonce, hashlib.sha256(raw).hexdigest()), sort_keys=True))
+            else:
+                apt.validate_result(sys.stdin.buffer.read(apt.RESULT_LIMIT + 1), args.nonce, args.manifest_sha256)
+                print("I5_PREPARATION_APT_FRAME_VALID: framing only; no real verification; I5 remains stopped")
+        elif args.collect_utm:
             result = collect_utm(args.nonce, args.collect_utm)
             print(json.dumps(result, sort_keys=True))
             return result["exit_code"]
