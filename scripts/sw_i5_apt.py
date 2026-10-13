@@ -524,7 +524,7 @@ def validate_result(raw, nonce, manifest_sha256):
 
 
 def exercise_preparation(raw, nonce, input_root, work, *, runner, baseline_paths,
-                         tool_paths, now, cancelled=lambda: False):
+                         tool_paths, now, cancelled=lambda: False, evidence_root=None):
     """Execute staged orchestration against injected synthetic tools only.
 
     No production runner is wired here. v1 never reports cryptographic or APT
@@ -552,6 +552,18 @@ def exercise_preparation(raw, nonce, input_root, work, *, runner, baseline_paths
     require(work.is_absolute() and work.resolve() == work and not work.exists() and
             not work.is_relative_to(input_root) and not input_root.is_relative_to(work), "fresh disjoint workspace required")
     work.mkdir(mode=0o700)
+    evidence = work if evidence_root is None else Path(evidence_root)
+    require(evidence.is_absolute() and evidence.resolve(strict=True) == evidence and evidence.is_dir() and
+            not evidence.is_relative_to(input_root) and not input_root.is_relative_to(evidence),
+            "canonical disjoint evidence directory required")
+    def save_evidence(name, data):
+        # Fresh files only; no replacement of earlier evidence or symlink follow.
+        fd = os.open(evidence / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        try:
+            with os.fdopen(fd, "wb", closefd=False) as stream:
+                require(stream.write(data) == len(data), "evidence short write")
+        finally:
+            os.close(fd)
     env = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "HOME": str(work / "home"),
            "TMPDIR": str(work / "tmp"), "APT_CONFIG": str(work / "apt.conf")}
     retained = 0
@@ -568,7 +580,7 @@ def exercise_preparation(raw, nonce, input_root, work, *, runner, baseline_paths
         for name in ("stdout", "stderr"):
             require(type(output[name]) is bytes and len(output[name]) <= (out_limit if name == "stdout" else 65536),
                     "runner stream contract violated")
-            (work / (label + "." + name)).write_bytes(output[name])
+            save_evidence(label + "." + name, output[name])
             retained += len(output[name])
         event = {k: output[k] for k in ("exit_code", "failure", "cleanup_errors")}
         event["label"] = label
@@ -633,5 +645,5 @@ def exercise_preparation(raw, nonce, input_root, work, *, runner, baseline_paths
         if result["failure"]:
             result["passed"] = False
     validate_result(json.dumps(result).encode(), nonce, result["manifest_sha256"])
-    (work / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+    save_evidence("result.json", (json.dumps(result, indent=2) + "\n").encode())
     return result

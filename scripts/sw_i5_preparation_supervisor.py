@@ -35,6 +35,7 @@ class Lease:
         self.nonce, self.manifest_sha256 = nonce, manifest_sha256
         self.deadline, self.last, self.silence = started + total, started, silence
         self.sequence, self.buffer, self.cancelled = -1, b"", False
+        self.acknowledge = lambda sequence: None
 
     def feed(self, raw, now):
         self.check(now, require_started=False)
@@ -58,6 +59,7 @@ class Lease:
         self.sequence, self.last = value["sequence"], now
         self.cancelled = value["action"] == "cancel"
         self.check(now)
+        self.acknowledge(self.sequence)
 
     def check(self, now, require_started=True):
         require(type(now) in (int, float) and math.isfinite(now) and now >= self.last, "monotonic clock moved backwards")
@@ -73,12 +75,14 @@ class Lease:
 
 
 def drain_lease(fd, lease, now):
+    sequence = lease.sequence
     readable, _, _ = select.select([fd], [], [], 0)
     if readable:
         raw = os.read(fd, MAX_FRAME)
         require(raw, "lease channel closed")
         lease.feed(raw, now)
     lease.check(now)
+    return lease.sequence != sequence
 
 
 def enable_subreaper():
@@ -180,7 +184,7 @@ class ForkWorker:
 
 
 def supervise(worker, boundary, guard, lease_fd, lease, *, clock=time.monotonic,
-              pause=time.sleep, cleanup_seconds=CLEANUP_SECONDS, reap=None):
+              pause=time.sleep, cleanup_seconds=CLEANUP_SECONDS, reap=None, exporter=None):
     """Run in the independent supervisor, outside the worker cgroup.
 
     The injected boundary owns cgroup.kill/populated; the injected guard checks
@@ -215,6 +219,8 @@ def supervise(worker, boundary, guard, lease_fd, lease, *, clock=time.monotonic,
             guard.check_cgroups()
             pause(0.01)
         guard.check()
+        if exporter is not None:
+            exporter.pin(pid, guard)
         drain_lease(lease_fd, lease, clock())
         require(not interrupted, "supervisor cancelled before release")
         worker.release()
@@ -291,7 +297,8 @@ def reap_descendants(worker):
 
 
 def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUEST_SECONDS,
-                    silence=LEASE_SECONDS, subreaper=enable_subreaper, prepare=lambda: None):
+                    silence=LEASE_SECONDS, subreaper=enable_subreaper, prepare=lambda: None,
+                    control_fd=None, exporter=None, keep_fds=(), ack_fd=None):
     """Internal process wiring, not a preparation authorization API.
 
     Return the supervisor PID, caller's lease write FD and bounded report read
@@ -299,22 +306,44 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
     No FD permitting renewal is inherited by worker or supervisor. The future
     host adapter must provide a separate recovery route if this process dies.
     """
-    lease_read, lease_write = os.pipe()
+    lease_read, lease_write = os.pipe() if control_fd is None else (os.dup(control_fd), None)
     report_read, report_write = os.pipe()
     try:
         pid = os.fork()
     except BaseException:
         for fd in (lease_read, lease_write, report_read, report_write):
-            os.close(fd)
+            if fd is not None:
+                os.close(fd)
         raise
     if pid == 0:
         try:
-            os.close(lease_write)
-            os.close(report_read)
+            # No inherited renewal writer or unrelated pipe may keep a lost
+            # controller alive. Kernel directory FDs are explicitly retained.
+            kernel_fds = []
+            candidates = [boundary]
+            probe = vars(guard).get("probe")
+            groups = vars(probe).get("groups", {}) if probe is not None else {}
+            if isinstance(groups, dict):
+                candidates.extend(groups.values())
+            for candidate in candidates:
+                descriptor = vars(candidate).get("fd")
+                if type(descriptor) is int and descriptor >= 3:
+                    kernel_fds.append(descriptor)
+            keep = sorted({lease_read, report_write, *keep_fds, *kernel_fds, *([] if ack_fd is None else [ack_fd])})
+            first = 3
+            for fd in keep:
+                os.closerange(first, fd)
+                first = fd + 1
+            os.closerange(first, os.sysconf("SC_OPEN_MAX"))
             os.setsid()
             guard.admit_supervisor()
             subreaper()
             lease = Lease(nonce, manifest_sha256, started=time.monotonic(), total=total, silence=silence)
+            if ack_fd is not None:
+                from sw_i5_preparation_channels import encode, write_frame
+                lease.acknowledge = lambda sequence: write_frame(ack_fd, encode({"schema_version": 1,
+                    "scope": "i5-preparation-guest-ack", "uuid": UUID, "nonce": nonce,
+                    "manifest_sha256": manifest_sha256, "sequence": sequence}))
             # Wait for the first complete lease without launching any child.
             until = time.monotonic() + silence
             while lease.sequence < 0:
@@ -326,7 +355,17 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
                 require(raw, "initial lease channel closed")
                 lease.feed(raw, time.monotonic())
             result = supervise(ForkWorker(work, prepare), boundary, guard, lease_read, lease,
-                               reap=reap_descendants if subreaper is enable_subreaper else None)
+                               reap=reap_descendants if subreaper is enable_subreaper else None, exporter=exporter)
+            if exporter is not None:
+                from sw_i5_preparation_channels import encode, write_bounded
+                def checkpoint():
+                    drain_lease(lease_read, lease, time.monotonic())
+                try:
+                    packet = exporter.collect(result, checkpoint)
+                    write_bounded(report_write, encode(packet), deadline=min(lease.deadline, time.monotonic() + 2))
+                finally:
+                    exporter.close()
+                os._exit(0 if packet["passed"] else 2)
             raw = (json.dumps(result, separators=(",", ":")) + "\n").encode()
             require(len(raw) <= MAX_REPORT, "supervisor report limit")
             # Nonblocking: a dead or stalled result consumer cannot hold the
@@ -334,7 +373,20 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
             os.set_blocking(report_write, False)
             require(os.write(report_write, raw) == len(raw), "supervisor report short write")
             os._exit(0 if result["passed"] else 2)
-        except BaseException:
+        except BaseException as exc:
+            if exporter is not None:
+                try:
+                    from sw_i5_preparation_channels import encode, write_bounded
+                    failure = (type(exc).__name__ + ": " + str(exc))[:2048]
+                    report = {"schema_version": 1, "scope": "i5-preparation-supervision", "uuid": UUID,
+                              "nonce": nonce, "manifest_sha256": manifest_sha256, "i5_ready": False,
+                              "passed": False, "failure": failure, "cleanup_errors": [], "admitted": False,
+                              "worker_exit": None, "population_empty": False, "reaped": False}
+                    packet = exporter.collect(report, lambda: None)
+                    write_bounded(report_write, encode(packet), deadline=time.monotonic() + 2)
+                    exporter.close()
+                except BaseException:
+                    pass  # Broken/full report channel still produces nonzero exit.
             os._exit(2)
     os.close(lease_read)
     os.close(report_write)
@@ -342,7 +394,8 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
 
 
 def watch_transport(lease_fd, result_fd, lease, *, validate, recover, clock=time.monotonic,
-                    transport_limit=6 * 1024 * 1024):
+                    transport_limit=6 * 1024 * 1024, renewed=lambda: None,
+                    cancelled=lambda: False, manage_signals=True):
     """Host watchdog loop, in a process independent of a blocking transport.
 
     Caller owns/reaps this process and the transport. recover() uses the fixed
@@ -358,11 +411,12 @@ def watch_transport(lease_fd, result_fd, lease, *, validate, recover, clock=time
         if not interrupted:
             interrupted.append(number)
     try:
-        for number in (signal.SIGTERM, signal.SIGINT):
+        for number in ((signal.SIGTERM, signal.SIGINT) if manage_signals else ()):
             previous[number] = signal.signal(number, interrupt)
         while True:
-            require(not interrupted, "host watchdog cancelled")
-            drain_lease(lease_fd, lease, clock())
+            require(not interrupted and not cancelled(), "host watchdog cancelled")
+            if drain_lease(lease_fd, lease, clock()):
+                renewed()
             ready, _, _ = select.select([lease_fd, result_fd], [], [], min(0.05, max(0, lease.deadline - clock())))
             if result_fd not in ready:
                 continue
@@ -373,8 +427,9 @@ def watch_transport(lease_fd, result_fd, lease, *, validate, recover, clock=time
                 continue
             require(data, "transport closed without result")
             validate(bytes(data))
-            require(not interrupted, "host watchdog cancelled")
-            drain_lease(lease_fd, lease, clock())
+            require(not interrupted and not cancelled(), "host watchdog cancelled")
+            if drain_lease(lease_fd, lease, clock()):
+                renewed()
             result["transport_complete"] = True
             return result
     except (OSError, ValueError, RuntimeError) as exc:

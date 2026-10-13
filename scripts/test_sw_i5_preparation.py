@@ -427,18 +427,20 @@ class SupervisorTests(unittest.TestCase):
                     marker.write_text(str(os.getpid()))
                     if mode == "worker-killed":
                         os.kill(os.getpid(), signal.SIGKILL)
-                    time.sleep(2)
+                    time.sleep(3)
                     return 0
                 def prepare():
                     if mode == "setup-error":
                         raise OSError("synthetic namespace setup rejected")
                 pid, writer, reader = supervision.fork_supervisor(work, RealSyntheticBoundary(), Mock(), NONCE, DIGEST,
-                                    total=1, silence=0.2, subreaper=lambda: None, prepare=prepare)
+                                    total=3, silence=1, subreaper=lambda: None, prepare=prepare)
                 try:
-                    frame = supervision.Lease(NONCE, DIGEST, started=0, total=1, silence=0.2).frame(0)
+                    frame = supervision.Lease(NONCE, DIGEST, started=0, total=3, silence=1).frame(0)
                     os.write(writer, frame)
                     if mode != "setup-error":
-                        until = time.monotonic() + 0.5
+                        # Real fork startup includes FD closure. Give the OS
+                        # scheduling room; fake-clock tests cover tight expiry.
+                        until = time.monotonic() + 1.5
                         while not marker.exists() and time.monotonic() < until:
                             time.sleep(0.005)
                         self.assertTrue(marker.exists(), "worker not admitted")
@@ -449,7 +451,7 @@ class SupervisorTests(unittest.TestCase):
                         os.close(reader)
                         reader = None
                     if reader is not None:
-                        ready, _, _ = select.select([reader], [], [], 2)
+                        ready, _, _ = select.select([reader], [], [], 3)
                         self.assertTrue(ready)
                         result = json.loads(os.read(reader, supervision.MAX_REPORT + 1))
                         self.assertFalse(result["passed"])

@@ -23,6 +23,9 @@ ISOLATION_SOURCES = APT_SOURCES + (
     "scripts/sw_i5_preparation_isolation.py", "scripts/sw_i5_preparation_supervisor.py",
     "scripts/test_sw_i5_preparation.py",
 )
+CHANNEL_SOURCES = ISOLATION_SOURCES + (
+    "scripts/sw_i5_preparation_channels.py", "scripts/test_sw_i5_channels.py",
+)
 
 
 def recover_preparation(ticket, *, observe, command, clock=time.monotonic, pause=time.sleep):
@@ -115,10 +118,12 @@ def validate_apt_operation(record, nonce, observed):
     is wired to the CLI in v1.
     """
     from sw_i5_apt import fields, require, digest, GUEST_SECONDS, HOST_SECONDS
-    require(type(record) is dict and type(record.get("schema_version")) is int and record["schema_version"] in {1, 2},
+    require(type(record) is dict and type(record.get("schema_version")) is int and record["schema_version"] in {1, 2, 3},
             "unsupported preparation operation schema")
     version = record["schema_version"]
-    extras = " isolation_sha256 lease_seconds cleanup_seconds" if version == 2 else ""
+    extras = " isolation_sha256 lease_seconds cleanup_seconds" if version >= 2 else ""
+    if version == 3:
+        extras += " export_bytes export_data_bytes export_file_bytes"
     fields(record, "schema_version scope authorized nonce uuid base_revision hashes config_sha256 "
            "utmctl_sha256 manifest_sha256 media guest_seconds host_seconds total_seconds" + extras)
     require(
@@ -127,7 +132,7 @@ def validate_apt_operation(record, nonce, observed):
             "preparation operation binding mismatch")
     require(type(record["base_revision"]) is str and re.fullmatch(r"[0-9a-f]{40}", record["base_revision"]),
             "invalid base revision")
-    expected_sources = ISOLATION_SOURCES if version == 2 else APT_SOURCES
+    expected_sources = {1: APT_SOURCES, 2: ISOLATION_SOURCES, 3: CHANNEL_SOURCES}[version]
     require(type(record["hashes"]) is dict and set(record["hashes"]) == set(expected_sources) and
             all(digest(v) for v in record["hashes"].values()), "complete preparation source manifest required")
     for key in ("config_sha256", "utmctl_sha256", "manifest_sha256"):
@@ -140,10 +145,14 @@ def validate_apt_operation(record, nonce, observed):
     for key, seconds in (("guest_seconds", GUEST_SECONDS), ("host_seconds", HOST_SECONDS), ("total_seconds", 900)):
         require(type(record[key]) is int and record[key] == seconds, "fixed preparation deadline required")
     keys = {"base_revision", "hashes", "config_sha256", "utmctl_sha256", "manifest_sha256", "media"}
-    if version == 2:
+    if version >= 2:
         require(digest(record["isolation_sha256"]) and type(record["lease_seconds"]) is int and record["lease_seconds"] == 15 and
                 type(record["cleanup_seconds"]) is int and record["cleanup_seconds"] == 20, "fixed isolation/supervision binding")
         keys.add("isolation_sha256")
+    if version == 3:
+        from sw_i5_preparation_channels import EXPORT_LIMIT, DATA_LIMIT, FILE_LIMIT
+        for name, limit in (("export_bytes", EXPORT_LIMIT), ("export_data_bytes", DATA_LIMIT), ("export_file_bytes", FILE_LIMIT)):
+            require(type(record[name]) is int and record[name] == limit, "fixed export quota required")
     require(type(observed) is dict and set(observed) == keys and
             all(record[k] == observed[k] for k in keys), "preparation source/media/baseline changed")
     return record

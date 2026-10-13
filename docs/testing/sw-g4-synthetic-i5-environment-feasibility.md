@@ -348,7 +348,7 @@ APT 方案固定四个本地仓库树：`IN/debian/dists/trixie`、`IN/debian/di
 
 ## 准备期隔离与独立监督离线续接（2026-10-13）
 
-所有者要求先提交前轮八文件，再继续准备期硬隔离、独立监督与失联回收的离线实现；仍禁止启动 VM、安装依赖和运行 I5-R。`7fdecbf` 已提交且未 push；本节所述续接实现未提交。这里记录内部准备机制及离线证据，不声明目标 VM 已具备这些条件。
+所有者要求先提交前轮八文件，再继续准备期硬隔离、独立监督与失联回收的离线实现；仍禁止启动 VM、安装依赖和运行 I5-R。`7fdecbf` 已提交且未 push；本节所述续接实现随后按所有者要求提交为 `63f98d4`，亦未 push。这里记录内部准备机制及离线证据，不声明目标 VM 已具备这些条件。
 
 ### 硬边界实现
 
@@ -380,6 +380,50 @@ APT 方案固定四个本地仓库树：`IN/debian/dists/trixie`、`IN/debian/di
 - `python3 -B scripts/test_sw_i5_preparation.py`：20 个测试方法通过，包含挂载/容量/权限/cgroup 拒绝矩阵、真实观测代码的合成 procfs 输入、BPF 分支解释、每一隔离设置步骤失败、双屏障、短写/身份替换、租约重放/失效与 guest/host scope 隔离、残留后代及回收错误、宿主正常/强制/失败回收。
 - 其中使用真实短寿命 Python fork/pipe/session 测试独立监督：worker 睡眠阻塞、worker 被 SIGKILL、隔离设置异常、控制管道关闭、结果消费者消失均回收已知合成 child；内核 cgroup、namespace、seccomp、subreaper 和 UTM 动作注入替身，不将 macOS 合成 PID 回收等同于 Linux `cgroup.kill` 或逃逸后代实测。
 - 原准备 20 项、guest 45 项、control 4 个方法、资源/build helper 20 项、纯 JavaScript 29 项回归通过。资源套件首次误用 `--self-test` 参数，退出 2 并报告缺少 action；改用该入口已有的 `self-test` 子命令后通过，未修改脚本掩盖错误。其余本轮测试无失败。
-- `./scripts/check-repo.sh` 通过（198 文件），`git diff --check` 通过；续接改动共 7 个文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 3。没有 push，没有遗留本轮后台进程；I5 shell 和 Go synthetic-run 停止代码未修改。
-- 仍须完成：精确 cgroup/挂载点/独占身份的受授权初始化、guest-agent 到租约通道的真实接线、worker RESULT 在 namespace 销毁前的有界导出与失败证据持久化、宿主独立 watchdog 的实际启动/收尾接线，以及 Linux quota/OOM/域外写入/setsid 后代/监督器自身被强杀或 guest 停摆的真实拒绝与回收测试。supervisor 被 SIGKILL 或 guest 冻结时依靠独立宿主路径；没有声称进程内 finally 能处理这些情况。
+- `./scripts/check-repo.sh` 通过（198 文件），`git diff --check` 通过；该轮检查时续接改动共 7 个文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 3；随后提交为 `63f98d4`。没有 push，没有遗留本轮后台进程；I5 shell 和 Go synthetic-run 停止代码未修改。
+- 截至该轮仍须完成（后续离线接线见下节）：精确 cgroup/挂载点/独占身份的受授权初始化、guest-agent 到租约通道的真实接线、worker RESULT 在 namespace 销毁前的有界导出与失败证据持久化、宿主独立 watchdog 的实际启动/收尾接线，以及 Linux quota/OOM/域外写入/setsid 后代/监督器自身被强杀或 guest 停摆的真实拒绝与回收测试。supervisor 被 SIGKILL 或 guest 冻结时依靠独立宿主路径；没有声称进程内 finally 能处理这些情况。
 - 上述实现只覆盖准备 worker/supervisor 候选边界；guest 启动日志、系统盘、全局 swap、宿主 backing 和 UTM 日志的完整物理硬额度仍未证明。现有原生 APT、密码学验签、真实介质及 768 MiB I5 批次条件均未通过；没有执行 VM、安装、配置变更、I5-R 或远程写入。
+
+## 租约通道与有界导出离线接线（2026-10-13）
+
+所有者要求先提交前轮七文件，再推进租约通道、结果有界导出和宿主 watchdog 的离线接线与测试。前轮提交为 `63f98d4`，没有 push；本节的新实现尚未提交。未启动 VM、安装依赖或运行 I5-R；没有修改任何公开入口的 STOP，也没有系统配置或远程写入。
+
+### 接线与结果归属
+
+新增[准备通道模块](../../scripts/sw_i5_preparation_channels.py)，连接已有准备编排和监督器。控制端持有唯一 host 租约写端；独立 watchdog 校验帧后转换 guest scope，guest supervisor 确认接收后才返回绑定 UUID/nonce/manifest/sequence 的 ACK。控制端收到 ACK 才发送下一帧，不能预存未来续约。取消、断流、重放、错 ACK、半帧停滞与绝对截止仍失败；worker、transport 和回收子进程都关闭无关 FD，不能自行续约。
+
+watchdog、transport、guest supervisor、worker 和回收适配器为分离的短寿命进程，离线测试使用真实 fork/pipe/session。guest 继续按两个 admission 屏障执行：有效隔离核对后，监督器在放行 worker 之前打开 RESULT 目录 FD，并把设备/inode 与隔离观测绑定。worker 完整回收、population 为空且 reaping 通过后，才能读取证据；目录 FD 保持挂载引用，不依赖退出后的 `/proc/<pid>/root` 再打开路径。没有声称 macOS 临时目录测试证明了 Linux mount namespace 的实际生命周期。
+
+准备编排新增显式 `evidence_root`，可将阶段 stdout/stderr 和 `result.json` 写入已准备的 RESULT；APT 工作目录使用 WORK 内的新子目录。原未传此参数的调用仍写入 WORK。证据文件使用排他创建，不覆盖旧证据或跟随 symlink；没有将 WORK 的 cache、原始包表或其他任意文件导出。
+
+导出 v1 只接受固定文件清单，通过目录 FD 相对打开，拒绝 symlink、hardlink、FIFO、设备、跨设备与读前后变化；域外目录和尚存活的 worker 均不能导出。原始大小、保留大小、保留内容 SHA256、base64 与截断标志一起返回。限额为：
+
+| 对象 | 固定上限及结果 |
+| --- | --- |
+| 单个阶段或 wrapper 输出 | 64 KiB；超限保留前缀并标记失败 |
+| 准备 JSON 摘要 | 256 KiB；超限不接受为有效摘要 |
+| 全部导出原始内容 | 1 MiB；超限明确记录截断，不能 PASS |
+| 序列化 guest 导出 | 2 MiB，沿用既有 guest 结果上限 |
+| 宿主采集流 / 最终报告 | 分别为 6 MiB / 3 MiB；最终报告包含有效导出、监督与回收结果 |
+
+这些是传输限额，不提高已有 RESULT 8 MiB、WORK 128 MiB 或准备期内存限额。现有工具流最多 7 MiB，因此可能在工具成功后因导出额度不足判失败；没有丢弃内容后继续声称完整通过。缺失已完成阶段的诊断、损坏摘要、摘要与工件不一致及未知字段均不能 PASS。坏摘要的有界原始 bytes 仍可作为失败工件保留，不升级为有效 APT 结果。
+
+宿主先验证导出及其绑定，再检查采集进程退出和回收状态。guest 在最后结果到达前关闭控制通道时，不再续约或发 ACK，仅在现有宿主截止内收完结果；只有有效完整导出与正常采集退出共同满足时才允许成功。消费者关闭、写入阻塞或结果超限均失败，不重启工作。失败结果保留原监督失败与回收结果，回收成功不能改成准备成功。
+
+### 截止、回收与兼容
+
+host/guest 租约仍为最长静默 15 秒，绝对截止分别 620/540 秒。guest 清理最多 20 秒，报告写入最多 2 秒；宿主采集进程收尾最多 25 秒，必要时针对该次新建 session 发 SIGKILL，另以 2 秒确认 reap。宿主最终写入最多 2 秒。回收适配器本身也放入独立进程，最多 120 秒、报告最多 64 KiB；卡住、非零退出、非法结果及遗留后代都失败，至多启动一次回收。真实 VM 回收仍必须使用既有精确身份 ticket 和独立观测，不能由此内部 API 推导启动或强制关机授权。
+
+包括候选启动/readiness 各 60 秒、host 阶段 620 秒、恢复 120 秒及以上收尾，最坏候选时间为 891 秒，仍在 900 秒包预算内；实际环境尚未验证。内核阻塞、不可杀进程或回收身份无法确认时只能报告未闭合，不能强称回收完成。
+
+内部 operation v3 绑定全部十二个源文件和固定导出额度；v1 原七文件、v2 原十文件及其字段继续各自严格校验，旧版本不能接受新字段。新的 guest export/ACK/host report 使用独立 v1 scope；I5 运行 evidence schema、profile、shell/Go 停止代码均未修改。新代码仍只产生 `evidence_kind=synthetic`，`i5_ready`、`install_authorized`、`signature_verified`、`apt_resolved` 不会被离线成功开启。
+
+### 验证、失败记录与未覆盖项
+
+- `python3 -B scripts/test_sw_i5_channels.py`：14 个测试方法通过，包含完整四源合成准备编排 → RESULT → 监督回收 → 有界导出 → 独立 watchdog 的真实管道链；另覆盖目录替换、文件类型/身份变化、缺失/损坏证据、单文件/累计额度、摘要篡改、租约断开/静默/取消/重放、错 ACK、采集或 worker 阻塞、监督设置失败、SIGTERM、结果超限/消费者消失、正常收尾竞态和回收适配器阻塞/错误。内核隔离、密码工具、APT、UTM 全部未实际执行。
+- 新套件首次引用了不存在的 fixture 测试方法，退出 1；修正为已有 fixture 并避免导入测试类导致重复发现。随后真实管道暴露 host 确认早于 guest 接收而堆积续约帧的问题，退出 1；增加 guest 到控制端的逐帧 ACK 后完成相应用例。增加启动时间余量时，静默用例曾在到期前正常完成却仍预期失败，退出 1；改为明确阻塞 worker 后验证到期回收，没有放宽产品截止。
+- 曾在新套件的 200 ms 窗口及并行回归的旧监督器 200 ms 窗口观察到启动调度超时，均保留为失败记录。真实 fork 测试给予调度余量，严格时间边界仍由既有假时钟负例覆盖；不把单次重跑成功解释为没有出现过不稳定性。
+- 原监督隔离 20 个方法、guest 45 项、control 4 个方法、准备编排 20 项、资源/build helper 20 项和纯 JavaScript 29 项回归通过；JavaScript 使用纯 vm context，无 Application/ObjC/UTM 调用。
+- `./scripts/check-repo.sh` 通过（200 文件），`git diff --check` 通过；六个相关 Python 文件经 AST 语法检查通过，未生成 bytecode。本轮九文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 4；前轮七文件提交 `63f98d4` 后没有 push。
+- 本次只闭合离线内部接线。真实 UTM guest-agent 如何承载两个独立方向的通道、启动/收尾适配、受硬额度约束的宿主证据持久化、Linux tmpfs/cgroup/namespace 实测，以及监督器或 watchdog 自身被 SIGKILL 后的外部恢复机制仍未验收。现有公开 UTM 执行入口未接入这些 API。
+- guest 启动日志、系统盘、全局 swap、宿主 backing/UTM 日志的完整硬额度仍缺；没有真实验签、原生 APT 求解或 768 MiB I5 条件通过的证据。没有遗留本轮测试后台进程；临时合成目录随测试清理。
