@@ -52,14 +52,14 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
-2026-10-13 I5 可行性、信任输入、准备编排、硬隔离及[租约/有界导出接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#租约通道与有界导出离线接线2026-10-13)已提交，最新为 `acb654d`。随后[UTM 传输适配与证据持久化](../testing/sw-g4-synthetic-i5-environment-feasibility.md#utm-传输与证据持久化离线续接2026-10-13)完成内部实现及离线回归，尚未提交；真实 preparation-apt 入口继续硬停止。仍缺受授权的控制文件/环境初始化和硬容量证明、原生 RPC 进程接线、Linux/UTM 实测及宿主完整物理额度；没有密码学验签或原生 APT 求解结果。未启动 VM、安装依赖或运行 I5-R，当前 UTM 和 I5-R 不可放行；10 月 9 日[开发回顾](2026-10-09-progress.md)保留历史证据和已消费授权。
+2026-10-13 I5 信任输入、准备编排、隔离/监督、租约/有界导出及 [UTM 传输与证据持久化](../testing/sw-g4-synthetic-i5-environment-feasibility.md#utm-传输与证据持久化离线续接2026-10-13)均已提交，最新实现为 `b0ca919`，仅通过离线合成验证。真实 preparation-apt 入口继续硬停止；仍缺原生 RPC 进程接线、控制文件/环境初始化、完整物理额度和 Linux/UTM 实测，没有密码学验签或原生 APT 求解结果。当日提交核对与[接下来的事项](2026-10-13-progress.md#接下来的事项)已记录，下一次先闭合受监督的 RPC 进程与生命周期离线接线及总截止核算；环境操作另行精确授权。当天未启动 VM、安装依赖或运行 I5-R，当前 UTM 和 I5-R 不可放行。
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
 1. 按已确认的场景和整套最高 3000 元范围，完成无可复用设备条件下的同型号三节点全新增 BOM 与候选比较，补齐使用频率、断连时长及上海合规路径；不承诺预算可行性或日期。
 2. 按已接受的分渠道评审方向，先补齐内部 Linux ARM64 受限实验的精确产物输入，分别处置 `debug_tree` 的固定源码正文/归属与 `r-efi` 的 MIT alternative；专业评审和执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 在已选择的 Node 身份与手机界面职责下收敛首次信任、撤销、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；[10 月 13 日可行性包](../testing/sw-g4-synthetic-i5-environment-feasibility.md)已将完整包表转成差量草案和写入归属表，后续先固定可信索引/密钥、原生解析输入及有界传输/取消，再准备零占位符的单次操作清单；不直接创建满额四盘后安装。按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)继续证明完整承载硬上限、受限构建运行接入与 daemon/store 计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
+4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；[10 月 13 日可行性包](../testing/sw-g4-synthetic-i5-environment-feasibility.md)已将完整包表转成差量草案和写入归属表，固定索引/公钥字节及内部准备链已完成离线核对，后续按[接续清单](2026-10-13-progress.md#接下来的事项)补齐原生 RPC 进程接线、真实基线/输入和完整硬额度，再准备零占位符的单次操作清单；不直接创建满额四盘后安装。按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)继续证明完整承载硬上限、受限构建运行接入与 daemon/store 计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
 5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成全新增硬件及能量/体积/成本预算；I4 本轮未修改 CI。
 
 ## 关键风险
