@@ -48,6 +48,7 @@
 - [I5 整批资源隔离设计](testing/sw-g4-synthetic-i5-resource-isolation.md)：保留 768 MiB、构建与写入隔离要求、入口停止检查及重新开放条件。
 - [I5 专用环境准备评审包](testing/sw-g4-synthetic-i5-environment-preparation.md)：工具来源候选、身份交接与宿主容量缺口，非安装授权。
 - [I5 环境可行性与下一次操作包](testing/sw-g4-synthetic-i5-environment-feasibility.md)：安装差量草案、768 MiB 完整核算及验签/离线解析候选，非执行授权。
+- [I5 准备执行合同与原生证据候选](testing/sw-g4-synthetic-i5-execution-contract.md)：执行源闭包、纯一致性校验、物理前置条件与真实证据模型，非执行授权。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 
