@@ -52,22 +52,16 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
-2026-10-18 的 [RPC/生命周期内部接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#受监督-rpc-与单次生命周期离线接线2026-10-18)、[初始化/容量声明评审](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化合同与容量账本离线评审2026-10-18)和[合成初始化/受控暂存/收尾接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化受控暂存与收尾内部接线2026-10-18)已分别提交为 `17a142e`、`e6d50ff`、`4281fb0`，均未 push。默认保守时间账本为 897 秒，绝对截止至多 900 秒；合成证据不证明真实环境能力。
+2026-10-18 已完成 RPC/宿主生命周期、初始化与容量评审、合成暂存收尾、执行合同纯校验、原生初始化和 P/N/S/W 生命周期的离线实现，最新实现提交为 `fa48743`。完整提交清单、代码/文档核对与[接下来的事项](2026-10-18-progress.md#接下来的事项)见当天回顾。宿主保守 897 秒/绝对 900 秒、guest 540 秒不变；真实 FD loader、来源/物理边界及运行授权仍缺，离线结果不证明 Linux/UTM 实测通过。
 
-第三包已完成[准备执行合同与原生证据候选](../testing/sw-g4-synthetic-i5-execution-contract.md)：独立 scope 绑定完整本地执行源、初始化/容量/输入和候选证据，已通过纯校验、32 个新增测试及独立变异验收，仅证明声明/证据一致性。物理额度必须在启动前配置，本次 init 只独立核验；该包已提交为 `c232d9e`，未 push。原生来源、真实输入/介质及完整写入硬边界仍未证明。真实 preparation-apt、UTM 和 I5-R 入口继续 STOP；尚无密码学验签或原生 APT 求解结果。
-
-第四包已完成[原生初始化与 bootstrap 离线实施](../testing/sw-g4-synthetic-i5-native-initialization.md)：固定 guest 承载候选与后端职责，新增真实 Linux syscall 后端代码、同进程 FD owner、确定性库包组装和独立证据绑定；26 个后端测试、33 个组装/绑定测试及独立变异验收通过；验收后所有者另行明确授权将十三个文件提交到 dev，提交为 `b8fb2d5`，未 push。
-
-第五包的[宿主写入边界与原生生命周期](../testing/sw-g4-synthetic-i5-host-delivery.md)已固定完整组件、物理域与副本计费、独立六文件 library 交付和父监督责任，并接入持久 FD owner、既有任务 supervisor/worker 与宿主证据链的离线适配。当前 Mac/UTM 明确为 `blocked-host-system-writes`：系统 swap、崩溃/日志及域外状态硬上限仍未证明。真实 FD loader、Linux/UTM 验收和运行授权继续缺失；全部真实入口 STOP；验收后所有者另行明确授权将 28 个文件提交到 dev，提交为 `fa48743`，未 push，没有启动 VM 或安装依赖。
-
-第六包形成[宿主可行性与真实 FD loader 合同草案](../testing/sw-g4-synthetic-i5-host-loader-decision.md)，当前 Mac/UTM 按完整写入合同为 NO-GO。所有者随后选择 A：保留原合同、优先评估已有 Linux 资源、暂不新增采购，并确认目前只有已记录的 Mac/UTM。[路线 A 评估](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)已列最低条件、完整准备预算候选和差距：现有资源没有合格宿主；3608 MiB（424 + 3184）仅适用于复用既有 Linux 基线、不重装/整盘迁移的设计，尚未证明够用或获执行批准。正式 I5 768 MiB 不变；loader 的加载前监督、同一 FD/bytes 消费、新 scope 与实际资源仍待冻结。两包仅修改文档，所有者在收尾时另行授权提交到 dev、不 push；资源事实变化前不进入实施或真实环境操作，全部真实入口继续 STOP。
+宿主决策与预算设计已提交为 `40520ae`。所有者选择 A：保留完整写入合同、优先已有 Linux 资源、暂不新增采购，并确认目前只有已记录的 Mac/UTM；[路线 A 评估](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)判定暂无合格宿主。完整准备候选为 3608 MiB（424 + 3184），只适用于复用既有 Linux 基线、不重装/整盘迁移，尚未证明够用或获执行批准；正式 I5 768 MiB 不变。资源事实不变时不重复盘点或扩大实现，全部真实入口继续 STOP。
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
 1. 按已确认的场景和整套最高 3000 元范围，完成无可复用设备条件下的同型号三节点全新增 BOM 与候选比较，补齐使用频率、断连时长及上海合规路径；不承诺预算可行性或日期。
 2. 按已接受的分渠道评审方向，先补齐内部 Linux ARM64 受限实验的精确产物输入，分别处置 `debug_tree` 的固定源码正文/归属与 `r-efi` 的 MIT alternative；专业评审和执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 在已选择的 Node 身份与手机界面职责下收敛首次信任、撤销、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
-4. I1–I5-I 已提交；[I5 三进程文字闭环包](../testing/sw-g4-synthetic-i5-plan.md)已实现消息进程、TCP 适配器、监督时钟/屏障及 schema 3 证据，离线验收通过。批次资源计费仍不满足合同；[10 月 13 日可行性包](../testing/sw-g4-synthetic-i5-environment-feasibility.md)已将完整包表转成差量草案和写入归属表，固定索引/公钥字节及内部准备链已完成离线核对，10 月 18 日已补齐[RPC 与生命周期离线接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#受监督-rpc-与单次生命周期离线接线2026-10-18)；第一包新增[初始化合同与容量账本离线评审](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化合同与容量账本离线评审2026-10-18)，第二包已完成初始化与受控暂存的内部合成接线，随后第三包转入[执行合同、源码闭包与原生证据候选](../testing/sw-g4-synthetic-i5-execution-contract.md)；第四包已完成[原生初始化与 bootstrap](../testing/sw-g4-synthetic-i5-native-initialization.md)，第五包新增[宿主阻塞裁决、库交付和原生生命周期离线接线](../testing/sw-g4-synthetic-i5-host-delivery.md)；后续仍须关闭宿主系统写入硬边界，补齐真实 FD loader、基线/输入、Linux 父监督验收并落实新版运行合同的真实绑定，再准备零占位符的单次操作清单；不直接创建满额四盘后安装。按[资源隔离补充设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)继续证明完整承载硬上限、受限构建运行接入与 daemon/store 计费，并在另行授权的环境验收后重新开放入口，再固定运行 revision/产物、执行预检并取得 I5-R 的 21 样本运行授权。当前 shell preflight/run 与 Go synthetic-run 均停止，不得用旧入口先构建。保留 V0 历史合同，安全联合提交仍待 SW-G2 证明；整体 [SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与[文字闭环](../architecture/minimal-text-slice.md)不代表 E2EE 或实体实测。
+4. I5 后续先满足[路线 A 宿主资源门](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)，不把当前 Mac/UTM 改名或增加 guest 配额当作达标。资源条件变化后复核完整准备预算、真实输入与可信基座，冻结真实 FD loader、非 UTM 控制面和新版执行合同，再另行授权实现、原生环境验收及验签/APT。安装、冷构建、daemon/store 计费和正式 21 样本 I5-R 仍各有前置；不直接创建满额四盘后安装，不在域外先构建。V0 历史合同与 SW-G2 安全门不变。
 5. 规划已有离线测试的 CI 接入与重复实验工具维护，形成全新增硬件及能量/体积/成本预算；I4 本轮未修改 CI。
 
 ## 关键风险

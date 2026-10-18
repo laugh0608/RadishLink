@@ -6,7 +6,7 @@
 - 范围：承接有效 guest 盘点，收敛工具输入、身份分工、写入归属和下一离线实施顺序
 - 非目标：安装或更新依赖、改变身份/系统配置、创建磁盘、运行构建/daemon/I5-R；文内盘点操作只按各自明确授权的单次合同执行
 
-当前接续见[2026-10-13 环境可行性与下一次操作包](sw-g4-synthetic-i5-environment-feasibility.md)：初稿已提交为 `e16ee48`，核算五域 768 MiB 及未受限写入；随后[信任输入与离线实施方案](sw-g4-synthetic-i5-environment-feasibility.md#续接可信输入与离线实施方案2026-10-13)固定三组 Debian 完整索引、公钥与官方预期指纹，并细化隔离 APT、sqv 验签和有界回收设计。文件摘要一致不等于签名通过；随后准备编排、隔离/监督、租约/导出及 UTM 传输/证据持久化内部实现已提交并通过离线测试，最新为 `b0ca919`。2026-10-18 [RPC 进程桥与生命周期离线接线](sw-g4-synthetic-i5-environment-feasibility.md#受监督-rpc-与单次生命周期离线接线2026-10-18)已完成并提交为 `17a142e`，未 push；随后第一包新增[初始化合同与容量账本离线评审](sw-g4-synthetic-i5-environment-feasibility.md#初始化合同与容量账本离线评审2026-10-18)，已提交为 `e6d50ff`，未 push；第二包已完成[合成初始化、受控暂存与收尾内部接线](sw-g4-synthetic-i5-environment-feasibility.md#初始化受控暂存与收尾内部接线2026-10-18)，已提交为 `4281fb0`，未 push。第三包已完成[候选执行合同与原生证据候选](sw-g4-synthetic-i5-execution-contract.md)，纯校验不证明原生来源或物理边界。第四包已完成[原生初始化与 bootstrap 离线实施](sw-g4-synthetic-i5-native-initialization.md)，新增后端代码不等于原生验收。实际 key 核对、原生求解、真实输入、真实父监督接入、新版运行合同的真实绑定及完整硬边界仍未完成，尚不可执行。最新实测仍以[完整补充盘点](#完整补充盘点与正常回收通过2026-10-09)为准，增强诊断及限额调整提交为 `3aab466`。下文按执行阶段保留历史额度、失败、源摘要与当时提交状态，不代表旧操作包仍可执行。
+当前接续见[10 月 18 日回顾](../status/2026-10-18-progress.md#接下来的事项)：准备链已完成至 `fa48743` 的原生生命周期离线接线，宿主/loader/路线 A 设计已提交为 `40520ae`。当前只有 Mac/UTM、暂无符合完整写入合同的 Linux 宿主，暂不新增采购；先满足[资源与预算前置](sw-g4-synthetic-i5-linux-host-assessment.md)，不能直接沿用旧 VM 操作包。真实来源验签、原生 APT、FD loader、物理硬边界与 I5-R 均未通过，全部真实入口 STOP。各历史阶段仍保留当时额度、失败、源摘要与提交状态，详见[可行性专题](sw-g4-synthetic-i5-environment-feasibility.md)。
 
 ## 初次准备结果（2026-10-06）
 
