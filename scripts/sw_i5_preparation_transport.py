@@ -20,6 +20,7 @@ import sw_i5_preparation_supervisor as supervision
 SLOT_BYTES = 1024
 SLOT_MAGIC = b"I5M1"
 RPC_LIMIT = 6 * apt.MIB
+NATIVE_SCOPE = "i5-preparation-native-lifecycle-transport"
 
 
 def pack_slot(frame):
@@ -115,6 +116,36 @@ def transport_request(nonce, manifest_sha256, program):
             "program_base64": base64.b64encode(program).decode()}
 
 
+def native_transport_request(descriptor):
+    apt.require(type(descriptor) is dict, "native invocation descriptor")
+    descriptor = process_rpc.validate_invocation_descriptor(descriptor, descriptor.get("nonce"), descriptor.get("manifest_sha256"))
+    return {"schema_version": 1, "scope": NATIVE_SCOPE, "uuid": apt.UUID, "nonce": descriptor["nonce"],
+            "manifest_sha256": descriptor["manifest_sha256"], "descriptor": descriptor}
+
+
+def validate_transport_request(request):
+    apt.require(type(request) is dict, "transport request type")
+    native = request.get("scope") == NATIVE_SCOPE
+    if native:
+        apt.fields(request, "schema_version scope uuid nonce manifest_sha256 descriptor")
+        expected = native_transport_request(request["descriptor"])
+    else:
+        apt.fields(request, "schema_version scope uuid nonce manifest_sha256 program_sha256 program_base64")
+        program = unbase64(request["program_base64"], 48 * 1024)
+        expected = transport_request(request["nonce"], request["manifest_sha256"], program)
+    apt.require(type(request["schema_version"]) is int and request == expected, "transport request binding")
+    return native
+
+
+def validate_native_ready(value, nonce, digest, delivery_sha256):
+    """Only an explicit, bound initialization readback grants mailbox access."""
+    expected = {"schema_version": 1, "scope": "i5-preparation-native-lifecycle-ready", "uuid": apt.UUID,
+                "nonce": nonce, "manifest_sha256": digest, "ready": True, "delivery_sha256": delivery_sha256}
+    apt.require(type(value) is dict and value == expected and type(value["schema_version"]) is int and
+                value["ready"] is True, "native initialization ready binding")
+    return value
+
+
 def run_transport(control_fd, output_fd, ack_fd, request, *, rpc, clock=time.monotonic, total=600):
     """Adapt watchdog pipes to bounded UTM RPCs; execute is never retried.
 
@@ -124,10 +155,8 @@ def run_transport(control_fd, output_fd, ack_fd, request, *, rpc, clock=time.mon
     Handles never escape this one transport attempt. No native adapter is
     selected implicitly, and a lost execute response is never retried.
     """
-    apt.fields(request, "schema_version scope uuid nonce manifest_sha256 program_sha256 program_base64")
-    program = unbase64(request["program_base64"], 48 * 1024)
-    apt.require(request == transport_request(request["nonce"], request["manifest_sha256"], program) and
-                type(request["schema_version"]) is int and 0 < total <= 600, "transport request binding")
+    native = validate_transport_request(request)
+    apt.require(type(total) in (int, float) and 0 < total <= 600, "transport work budget")
     nonce, digest = request["nonce"], request["manifest_sha256"]
     deadline, call_id, handles = clock() + total, 0, {}
     lease = supervision.Lease(nonce, digest, started=clock())
@@ -147,25 +176,51 @@ def run_transport(control_fd, output_fd, ack_fd, request, *, rpc, clock=time.mon
         return value["value"]
     def read_slot(role):
         return unbase64(call("read", {"handle": handles[role]}), SLOT_BYTES)
+    def native_control():
+        lease.check(clock())
+        readable, _, _ = select.select([control_fd], [], [], 0)
+        if readable:
+            raw = os.read(control_fd, supervision.MAX_FRAME)
+            apt.require(raw, "UTM control channel closed while native initialization pending")
+            lease.feed(raw, clock())  # An explicit cancel retains its cause.
+            raise ValueError("UTM renewal before native initialization acknowledgement")
     try:
         identity = call("identify", {})
         apt.require(identity == {"uuid": apt.UUID, "status": "started"}, "UTM target not started")
+        if native:
+            # Host control admits one execute; guest task admission still waits
+            # for native initialization and zero-mailbox independent readback.
+            channels.initial_lease(control_fd, lease)
+            executed = True  # Includes lost response; never execute again.
+            process = call("execute-native", {"descriptor": request["descriptor"]})
+            apt.require(type(process) is int and process > 0, "missing UTM process handle")
+            while True:
+                native_control()
+                ready = call("native-ready", {"process": process})
+                native_control()
+                if ready is not None:
+                    validate_native_ready(ready, nonce, digest, request["descriptor"]["delivery_sha256"])
+                    break
+                apt.require(clock() < deadline, "native initialization ready deadline")
+                select.select([], [], [], 0.02)
         for role in ("lease", "ack"):
             handle = call("open", {"role": role})
             apt.require(type(handle) is int and handle > 0 and handle not in handles.values(), "invalid mailbox handle")
             handles[role] = handle
             apt.require(read_slot(role) == b"\0" * SLOT_BYTES, "UTM mailbox not fresh")
         # Initial control grants exactly one execute, not an automatic lease.
-        channels.initial_lease(control_fd, lease)
+        if not native: channels.initial_lease(control_fd, lease)
+        else: native_control()
         pending = lease.sequence
         frame = lease.frame(pending)
         slot = pack_slot(frame)
         apt.require(call("write", {"handle": handles["lease"], "data": base64.b64encode(slot).decode()}) is None,
                     "unexpected mailbox write response")
         apt.require(read_slot("lease") == slot, "UTM lease write readback")
-        executed = True
-        process = call("execute", {"program_base64": request["program_base64"], "program_sha256": request["program_sha256"]})
-        apt.require(type(process) is int and process > 0, "missing UTM process handle")
+        if not native:
+            executed = True
+            process = call("execute", {"program_base64": request["program_base64"], "program_sha256": request["program_sha256"]})
+            apt.require(type(process) is int and process > 0, "missing UTM process handle")
         while True:
             lease.check(clock())
             readable, _, _ = select.select([control_fd], [], [], 0)
@@ -205,6 +260,12 @@ def run_transport(control_fd, output_fd, ack_fd, request, *, rpc, clock=time.mon
                 result_raw = unbase64(result["stdout_base64"], channels.EXPORT_LIMIT)
                 apt.require(unbase64(result["stderr_base64"], 65536) == b"", "UTM guest stderr")
                 exported = channels.validate_export(result_raw, nonce, digest)
+                if native:
+                    apt.require(exported["scope"] == "i5-preparation-native-lifecycle-export" and
+                                exported["native_lifecycle"]["delivery_sha256"] == request["descriptor"]["delivery_sha256"],
+                                "native transport export scope/delivery binding")
+                else:
+                    apt.require(exported["scope"] == channels.EXPORT_SCOPE, "legacy transport export scope")
                 result_exit = 0 if exported["passed"] else 2
                 apt.require(result["exit_code"] == result_exit, "UTM guest result/exit mismatch")
                 lease.check(clock())

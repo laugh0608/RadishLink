@@ -16,6 +16,7 @@ import sw_i5_apt as apt
 import sw_i5_preparation_execution as execution
 import sw_i5_preparation_isolation as isolation
 import sw_i5_preparation_plan as plan
+from sw_i5_preparation_rpc import validate_invocation_descriptor
 
 SCOPE = "i5-preparation-native-binding-candidate"
 BUNDLE_SCOPE = "i5-preparation-native-library-artifact"
@@ -90,6 +91,14 @@ def bootstrap_owner(contract_raw, manifest_raw, *, expected, deadline,
 ENTRY = "i5_bootstrap.py"
 MANIFEST = "i5_bundle_manifest.json"
 ZIP_LIMIT = 8 * apt.MIB
+LIFECYCLE_SOURCE = "scripts/sw_i5_preparation_native_lifecycle.py"
+LIFECYCLE_RUNTIME = RUNTIME + (LIFECYCLE_SOURCE, "scripts/sw_i5_preparation_supervisor.py", "scripts/sw_i5_preparation_channels.py")
+LIFECYCLE_SCOPE = "i5-preparation-native-lifecycle-library-artifact"
+DELIVERY_SCOPE = "i5-preparation-native-library-delivery-candidate"
+INVOCATION_SCOPE = "i5-preparation-native-library-invocation"
+LIBRARY_ROOT = "/opt/radishlink/i5-native-library"
+DELIVERY_FILES = ("library.zip", "library-manifest.json", "isolation.json", "apt-manifest.json", "expected.json", "delivery.json")
+LIFECYCLE_ENTRY = dict(module="sw_i5_preparation_native_lifecycle", function="run_native_guest")
 BLOCKERS = (
     "library artifact and facts are consistency candidates, never native provenance authentication",
     "legacy core remains historical schema 1/native_backend absent; no consumer is upgraded",
@@ -105,10 +114,14 @@ def same(left, right):
 
 def checked_sources(sources):
     """Finite closure for the four native-library modules, including nested imports."""
-    execution.require(type(sources) is dict and set(sources) == set(RUNTIME), "exact native runtime source closure")
-    local = {name.removeprefix("scripts/").removesuffix(".py"): name for name in RUNTIME}
+    return _checked_sources(sources, RUNTIME, NATIVE)
+
+
+def _checked_sources(sources, runtime, entry_source):
+    execution.require(type(sources) is dict and set(sources) == set(runtime), "exact native runtime source closure")
+    local = {name.removeprefix("scripts/").removesuffix(".py"): name for name in runtime}
     graph = {}
-    for name in RUNTIME:
+    for name in runtime:
         raw = sources[name]
         execution.require(type(raw) is bytes and 0 < len(raw) <= 2 * apt.MIB, "bounded immutable runtime source")
         try:
@@ -135,13 +148,13 @@ def checked_sources(sources):
                                                     "load_module", "spec_from_file_location", "module_from_spec", "exec_module"},
                                   "unreviewed dynamic runtime loader")
         graph[name] = sorted(imports)
-    reachable, pending = set(), [NATIVE]
+    reachable, pending = set(), [entry_source]
     while pending:
         name = pending.pop()
         if name not in reachable:
             reachable.add(name)
             pending.extend(graph[name])
-    execution.require(reachable == set(RUNTIME), "unreachable/missing native runtime dependency")
+    execution.require(reachable == set(runtime), "unreachable/missing native runtime dependency")
     return graph
 
 
@@ -185,6 +198,162 @@ def validate_artifact(manifest_raw, program, bootstrap, sources):
                 program=execution.fingerprint(program), manifest=execution.fingerprint(manifest_raw),
                 bootstrap=execution.fingerprint(bootstrap), consistency_passed=True,
                 authenticity_verified=False, blockers=list(BLOCKERS), **FALSE)
+
+
+def assemble_lifecycle(sources):
+    """New finite guest closure; the historical four-source ZIP is unchanged."""
+    graph = _checked_sources(sources, LIFECYCLE_RUNTIME, LIFECYCLE_SOURCE)
+    members = {name.removeprefix("scripts/"): raw for name, raw in sources.items()}
+    manifest = dict(schema_version=1, scope=LIFECYCLE_SCOPE, format="canonical-uncompressed-lifecycle-library-zip-v1",
+        runtime_sources={name: execution.fingerprint(sources[name]) for name in LIFECYCLE_RUNTIME},
+        members={name: execution.fingerprint(raw) for name, raw in members.items()}, local_graph=graph,
+        entry=dict(LIFECYCLE_ENTRY), automatic_main=False, default_launcher=False,
+        loading="fixed-readonly-fd-loader-not-implemented-or-verified", **FALSE)
+    manifest_raw = execution.encode(manifest)
+    members[MANIFEST] = manifest_raw
+    return dict(manifest=manifest_raw, program=zip_bytes(members))
+
+
+def validate_lifecycle_artifact(manifest_raw, program, sources):
+    execution.require(type(program) is bytes and 0 < len(program) <= ZIP_LIMIT, "bounded immutable lifecycle library")
+    expected = assemble_lifecycle(sources)
+    execution.require(manifest_raw == expected["manifest"] and program == expected["program"],
+                      "lifecycle library is not the exact deterministic reviewed assembly")
+    return dict(schema_version=1, scope="i5-preparation-native-lifecycle-library-review", consistency_passed=True,
+                program=execution.fingerprint(program), manifest=execution.fingerprint(manifest_raw),
+                authenticity_verified=False, loader_verified=False, **FALSE)
+
+
+def invocation_descriptor(delivery_raw):
+    value = execution.decode(delivery_raw)
+    execution.header(value, DELIVERY_SCOPE)
+    execution.false_flags(value)
+    return validate_invocation_descriptor(dict(schema_version=1, scope=INVOCATION_SCOPE, uuid=apt.UUID,
+        nonce=value["nonce"], manifest_sha256=value["manifest_sha256"], delivery_sha256=execution.fingerprint(delivery_raw)["sha256"]),
+        value["nonce"], value["manifest_sha256"])
+
+
+def validate_delivery(raw, *, files, sources, plan_raw, capacity_raw, coverage_raw, coverage_blobs, descriptor):
+    """Check immutable supplied bytes only; never mount, pin, import or run them.
+
+    delivery.json contains references to the other five fixed members. The
+    separately derived invocation hashes delivery.json, avoiding a self-hash.
+    Real media loading and native origin remain external unverified obligations.
+    """
+    value = execution.decode(raw)
+    execution.fields(value, "schema_version scope kind uuid nonce manifest_sha256 plan capacity host_coverage library_expected library_filesystem native_expected members " + " ".join(FALSE), "delivery")
+    execution.header(value, DELIVERY_SCOPE)
+    execution.false_flags(value)
+    execution.require(value["kind"] == "offline-candidate", "offline delivery candidate required")
+    nonce, manifest_hash = value["nonce"], value["manifest_sha256"]
+    execution.require(apt.digest(manifest_hash), "delivery manifest digest")
+    execution.require(type(files) is dict and set(files) == set(DELIVERY_FILES) and all(type(v) is bytes for v in files.values()),
+                      "exact six immutable library delivery files required")
+    execution.bounded_inputs(dict(files, plan=plan_raw, capacity=capacity_raw, coverage=coverage_raw, **coverage_blobs), sources)
+    execution.require(files["delivery.json"] == raw, "delivery member must be the exact candidate bytes")
+    execution.fields(value["members"], " ".join(DELIVERY_FILES[:-1]), "delivery members")
+    for name in DELIVERY_FILES[:-1]:
+        execution.blob(value["members"][name], "delivery member " + name)
+        execution.require(value["members"][name] == execution.fingerprint(files[name]), "delivery member fingerprint mismatch: " + name)
+    for name, provided in (("plan", plan_raw), ("capacity", capacity_raw), ("host_coverage", coverage_raw)):
+        execution.blob(value[name], "delivery " + name)
+        execution.require(value[name] == execution.fingerprint(provided), "delivery raw binding: " + name)
+    validated = validate_lifecycle_artifact(files["library-manifest.json"], files["library.zip"], sources)
+    initialization = plan.decode(plan_raw, "i5-review-initialization")
+    plan.review(plan_raw, capacity_raw, nonce, manifest_hash)
+    execution.require(initialization["capacity_sha256"] == value["capacity"]["sha256"], "delivery plan/capacity mismatch")
+    coverage = plan.review_host_coverage(coverage_raw, capacity_raw, nonce, manifest_hash, blobs=coverage_blobs)
+    tree_manifest = apt.validate_manifest(files["apt-manifest.json"], nonce)
+    execution.require(execution.fingerprint(files["apt-manifest.json"])["sha256"] == manifest_hash, "delivery actual APT manifest mismatch")
+    contract = isolation.Contract.parse(files["isolation.json"], nonce, manifest_hash)
+    execution.require(str(contract.root) == initialization["objects"]["guest_root"]["path"] and
+        str(contract.input) == initialization["readonly_input"]["path"] and contract.uid == initialization["guest_uid"] and contract.gid == initialization["guest_gid"],
+        "delivery native contract differs from reviewed plan")
+    native_expected = execution.decode(files["expected.json"])
+    execution.fields(native_expected, "root_parent cgroup_root readonly_input", "delivery native expected")
+    execution.require(same(native_expected, value["native_expected"]), "delivery actual native expected mismatch")
+    execution.fields(value["library_expected"], "dev ino mount_id", "delivery library expected")
+    native_ids, devices, mounts = set(), set(), set()
+    for identity in list(native_expected.values()) + [value["library_expected"]]:
+        execution.fields(identity, "dev ino mount_id", "delivery expected identity")
+        for name in identity: execution.integer(identity[name], "delivery expected " + name, 1)
+        native_ids.add((identity["dev"], identity["ino"]))
+        devices.add(identity["dev"])
+        mounts.add(identity["mount_id"])
+    execution.require(len(native_ids) == len(devices) == len(mounts) == 4, "library and native prerequisite devices/mounts must be distinct")
+    fs = value["library_filesystem"]
+    execution.fields(fs, "path filesystem filesystem_magic mount_options super_options capacity_bytes inodes", "delivery library filesystem")
+    execution.require(fs["path"] == LIBRARY_ROOT, "fixed library root required")
+    magic = {"iso9660": 0x9660, "squashfs": 0x73717368}
+    execution.require(type(fs["filesystem"]) is str and fs["filesystem"] in magic and type(fs["filesystem_magic"]) is int and fs["filesystem_magic"] == magic[fs["filesystem"]],
+                      "library requires immutable readonly media")
+    for name in ("mount_options", "super_options"):
+        options = fs[name]
+        execution.require(type(options) is list and all(type(x) is str and 0 < len(x) <= 256 for x in options) and options == sorted(set(options)) and
+            "ro" in options and "rw" not in options, "library readonly mount/super options")
+    execution.integer(fs["capacity_bytes"], "library whole filesystem bytes", 1, 256 * apt.MIB)
+    execution.integer(fs["inodes"], "library filesystem inodes", 6)
+    file_bytes = sum(map(len, files.values()))
+    execution.require(file_bytes <= fs["capacity_bytes"], "all six library files, including delivery itself, must fit the complete media")
+    declaration = execution.decode(coverage_raw)
+    input_row = declaration["surfaces"]["readonly_input"]
+    execution.require(input_row["state"] == "bounded", "delivery requires both input media physical declarations")
+    library_part = input_row["components"]["library_media"]
+    library_domain = input_row["physical_domains"][library_part["physical_domain"]]
+    execution.require(all(same(library_domain[key], value["library_expected"][key]) for key in ("dev", "ino", "mount_id")) and
+                      library_domain["path"] == LIBRARY_ROOT and library_domain["whole_device_bytes"] >= fs["capacity_bytes"] and
+                      library_domain["hard_reserve_bytes"] >= fs["capacity_bytes"] and library_part["logical_bytes"] >= fs["capacity_bytes"],
+                      "library identity and complete media bytes must bind existing input D")
+    apt_part = input_row["components"]["apt_media"]
+    apt_domain = input_row["physical_domains"][apt_part["physical_domain"]]
+    execution.require(all(same(apt_domain[key], native_expected["readonly_input"][key]) for key in ("dev", "ino", "mount_id")) and
+                      apt_domain["path"] == str(contract.input), "APT media identity differs from native expected input")
+    input_files = dict(tree_manifest["files"])
+    for source in apt.SOURCES.values():
+        _, index, _ = apt.source_paths(source)
+        item = input_files[index]
+        input_files[index.rsplit("/", 1)[0] + "/by-hash/SHA256/" + item["sha256"]] = dict(item)
+    input_tree_bytes = sum(item["bytes"] for item in input_files.values())
+    input_image_bytes = initialization["readonly_input"]["bytes"]
+    execution.require(input_tree_bytes <= input_image_bytes <= min(apt_domain["whole_device_bytes"], apt_domain["hard_reserve_bytes"], apt_part["logical_bytes"]),
+                      "complete APT tree and by-hash copies must fit the input image and full input D allocation")
+    execution.require(apt_domain["whole_device_bytes"] <= min(apt_domain["hard_reserve_bytes"], apt_part["logical_bytes"]),
+                      "the complete APT device, not only its payload, must fit hard and logical reserves")
+    for surface, component, size in (("input_media_creation", "library_media_creation", fs["capacity_bytes"]),
+            ("input_media_staging_copy", "library_media_staging", fs["capacity_bytes"]),
+            ("input_media_creation", "apt_media_creation", apt_domain["whole_device_bytes"]),
+            ("input_media_staging_copy", "apt_media_staging", apt_domain["whole_device_bytes"])):
+        part = declaration["surfaces"][surface]["components"][component]
+        execution.require(declaration["surfaces"][surface]["state"] == "bounded" and part["logical_bytes"] >= size,
+                          "complete media creation/staging copy must be independently charged: " + component)
+    root_row = declaration["surfaces"]["guest_system_tmpfs"]
+    execution.require(root_row["state"] == "bounded", "native root requires bounded system tmpfs")
+    root_part = root_row["components"]["initialization_root"]
+    root_domain = root_row["physical_domains"][root_part["physical_domain"]]
+    execution.require(all(same(root_domain[key], native_expected["root_parent"][key]) for key in ("dev", "ino", "mount_id")) and
+        root_domain["path"] == "/run/radishlink-i5-preparation" and root_domain["hard_reserve_bytes"] == isolation.NATIVE_ROOT_BYTES and
+        root_part["logical_bytes"] >= isolation.NATIVE_ROOT_BYTES and root_domain["inode_limit"] == isolation.NATIVE_ROOT_INODES and
+        all(name == "initialization_root" or part["physical_domain"] != root_part["physical_domain"] for name, part in root_row["components"].items()),
+        "native root expected identity and complete byte/inode reserve must bind its independent system tmpfs domain")
+    assembly = declaration["surfaces"]["host_jxa_source"]["components"]["library_source_assembly"]
+    jxa = declaration["surfaces"]["host_jxa_source"]["components"]["jxa_source"]
+    source_bytes = sum(map(len, sources.values()))
+    # The immutable sources, uncompressed member bytes, ZIP output and six-file
+    # delivery coexist in the conservative assembler model. No phase max trick.
+    assembly_peak = source_bytes + source_bytes + len(files["library-manifest.json"]) + len(files["library.zip"]) + file_bytes
+    execution.require(declaration["surfaces"]["host_jxa_source"]["state"] == "bounded" and
+        assembly["logical_bytes"] >= source_bytes and assembly["peak_bytes"] >= assembly_peak, "library source/ZIP/member/delivery concurrent assembly peak undercount")
+    execution.require(jxa["logical_bytes"] >= initialization["jxa_source"]["bytes"] and
+        jxa["peak_bytes"] >= plan.assembled_source_bound(initialization["jxa_source"]["bytes"]), "JXA component cannot borrow the library assembly reservation")
+    checked_descriptor = validate_invocation_descriptor(descriptor, nonce, manifest_hash)
+    execution.require(same(checked_descriptor, invocation_descriptor(raw)), "invocation must reference exact delivery bytes")
+    return dict(schema_version=1, scope="i5-preparation-native-library-delivery-review", nonce=nonce, uuid=apt.UUID,
+        consistency_passed=True, authenticity_verified=False, loader_verified=False, complete_write_boundary=False,
+        delivery=execution.fingerprint(raw), descriptor=checked_descriptor, artifact=validated,
+        config_fingerprints={name: execution.fingerprint(files[name]) for name in ("isolation.json", "apt-manifest.json", "expected.json")},
+        library_file_bytes=file_bytes, library_assembly_peak_bytes=assembly_peak, host_feasibility=coverage["feasibility"],
+        apt_tree_bytes=input_tree_bytes,
+        blockers=coverage["review_blockers"] + ["fixed readonly FD loader and true media provenance remain unimplemented/unverified"], **FALSE)
 
 
 def project_status(raw, expected):
@@ -458,5 +627,9 @@ def validate_binding(raw, core_raw, blobs, sources, *, now):
 
 assemble = execution.malformed_as_value_error(assemble)
 validate_artifact = execution.malformed_as_value_error(validate_artifact)
+assemble_lifecycle = execution.malformed_as_value_error(assemble_lifecycle)
+validate_lifecycle_artifact = execution.malformed_as_value_error(validate_lifecycle_artifact)
+invocation_descriptor = execution.malformed_as_value_error(invocation_descriptor)
+validate_delivery = execution.malformed_as_value_error(validate_delivery)
 project_status = execution.malformed_as_value_error(project_status)
 validate_binding = execution.malformed_as_value_error(validate_binding)

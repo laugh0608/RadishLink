@@ -17,6 +17,12 @@ from sw_i5_apt import MIB, UUID, decode, digest, fields, require
 from sw_i5_resources import below, covering, parse_mounts
 
 STORAGE = {"input": 256 * MIB, "work": 128 * MIB, "result": 8 * MIB}
+NATIVE_ROOT_BYTES, NATIVE_ROOT_INODES = MIB, 1024
+NATIVE_CGROUP2, NATIVE_TMPFS = 0x63677270, 0x01021994
+NATIVE_INPUT_FS = {"iso9660": 0x9660, "squashfs": 0x73717368}
+NATIVE_CREATE_ORDER = ("guest_root", "work", "result", "cgroup_parent", "cgroup_supervisor", "cgroup_worker", "control", "lease", "ack")
+NATIVE_CLEAN_ORDER = tuple(reversed(NATIVE_CREATE_ORDER))
+NATIVE_FALSE_FLAGS = ("authorized", "install_authorized", "physical_verified", "i5_ready")
 LIMITS = {
     "parent": {"memory.max": str(512 * MIB), "memory.swap.max": "0", "pids.max": "48", "memory.oom.group": "0", "cpu.max": "200000 100000"},
     "supervisor": {"memory.max": str(64 * MIB), "memory.swap.max": "0", "pids.max": "8", "memory.oom.group": "1", "cpu.max": "25000 100000"},

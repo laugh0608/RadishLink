@@ -187,7 +187,8 @@ class ForkWorker:
 
 
 def supervise(worker, boundary, guard, lease_fd, lease, *, clock=time.monotonic,
-              pause=time.sleep, cleanup_seconds=CLEANUP_SECONDS, reap=None, exporter=None):
+              pause=time.sleep, cleanup_seconds=CLEANUP_SECONDS, reap=None, exporter=None,
+              register_worker=None, absolute_deadline=None):
     """Run in the independent supervisor, outside the worker cgroup.
 
     The injected boundary owns cgroup.kill/populated; the injected guard checks
@@ -195,6 +196,8 @@ def supervise(worker, boundary, guard, lease_fd, lease, *, clock=time.monotonic,
     supplies reap(). Neither process-group absence nor leader exit is enough.
     """
     require(0 < cleanup_seconds <= CLEANUP_SECONDS, "cleanup deadline")
+    require(absolute_deadline is None or (type(absolute_deadline) in (int, float) and
+            math.isfinite(absolute_deadline) and clock() < absolute_deadline), "supervisor outer deadline")
     result = {"schema_version": 1, "scope": "i5-preparation-supervision", "uuid": UUID,
               "nonce": lease.nonce, "manifest_sha256": lease.manifest_sha256, "i5_ready": False,
               "passed": False, "failure": None, "cleanup_errors": [], "admitted": False,
@@ -212,6 +215,8 @@ def supervise(worker, boundary, guard, lease_fd, lease, *, clock=time.monotonic,
         require(not boundary.populated(), "worker cgroup not empty before admission")
         pid = worker.spawn()
         started = True
+        if register_worker is not None:
+            register_worker(pid)
         boundary.attach(pid)
         admitted = True
         guard.bind_worker(pid, worker.admission_fd)
@@ -253,6 +258,8 @@ def supervise(worker, boundary, guard, lease_fd, lease, *, clock=time.monotonic,
             except (OSError, ValueError, RuntimeError) as exc:
                 result["cleanup_errors"].append("cgroup kill: " + str(exc))
             until = clock() + cleanup_seconds
+            if absolute_deadline is not None:
+                until = min(until, absolute_deadline)
             while True:
                 try:
                     code = worker.poll()
@@ -301,7 +308,9 @@ def reap_descendants(worker):
 
 def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUEST_SECONDS,
                     silence=LEASE_SECONDS, subreaper=enable_subreaper, prepare=lambda: None,
-                    control_fd=None, exporter=None, keep_fds=(), ack_fd=None, mailbox=None):
+                    control_fd=None, exporter=None, keep_fds=(), ack_fd=None, mailbox=None,
+                    register_supervisor=None, register_worker=None, absolute_deadline=None,
+                    cleanup_seconds=CLEANUP_SECONDS, retire_supervisor=None):
     """Internal process wiring, not a preparation authorization API.
 
     Return the supervisor PID, caller's lease write FD and bounded report read
@@ -313,10 +322,11 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
     lease_read, lease_write = ((mailbox, None) if mailbox is not None else
                                (os.pipe() if control_fd is None else (os.dup(control_fd), None)))
     report_read, report_write = os.pipe()
+    gate_read, gate_write = os.pipe()
     try:
         pid = os.fork()
     except BaseException:
-        for fd in (lease_read, lease_write, report_read, report_write):
+        for fd in (lease_read, lease_write, report_read, report_write, gate_read, gate_write):
             if type(fd) is int:
                 os.close(fd)
         raise
@@ -335,16 +345,21 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
                 if type(descriptor) is int and descriptor >= 3:
                     kernel_fds.append(descriptor)
             lease_fds = [lease_read] if mailbox is None else mailbox.fds
-            keep = sorted({*lease_fds, report_write, *keep_fds, *kernel_fds, *([] if ack_fd is None else [ack_fd])})
+            keep = sorted({*lease_fds, report_write, gate_read, *keep_fds, *kernel_fds, *([] if ack_fd is None else [ack_fd])})
             first = 3
             for fd in keep:
                 os.closerange(first, fd)
                 first = fd + 1
             os.closerange(first, os.sysconf("SC_OPEN_MAX"))
             os.setsid()
+            require(os.read(gate_read, 1) == b"G", "supervisor admission cancelled")
+            os.close(gate_read)
             guard.admit_supervisor()
             subreaper()
             lease = Lease(nonce, manifest_sha256, started=time.monotonic(), total=total, silence=silence)
+            if absolute_deadline is not None:
+                require(type(absolute_deadline) in (int, float) and math.isfinite(absolute_deadline), "supervisor absolute deadline")
+                lease.deadline = min(lease.deadline, absolute_deadline - cleanup_seconds)
             if mailbox is not None:
                 lease.acknowledge = mailbox.acknowledge
             if ack_fd is not None:
@@ -358,7 +373,9 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
                 if lease.sequence < 0:
                     time.sleep(0.01)
             result = supervise(ForkWorker(work, prepare), boundary, guard, lease_read, lease,
-                               reap=reap_descendants if subreaper is enable_subreaper else None, exporter=exporter)
+                               reap=reap_descendants if subreaper is enable_subreaper else None, exporter=exporter,
+                               register_worker=register_worker, absolute_deadline=absolute_deadline,
+                               cleanup_seconds=cleanup_seconds)
             if exporter is not None:
                 from sw_i5_preparation_channels import encode, write_bounded
                 def checkpoint():
@@ -391,6 +408,55 @@ def fork_supervisor(work, boundary, guard, nonce, manifest_sha256, *, total=GUES
                 except BaseException:
                     pass  # Broken/full report channel still produces nonzero exit.
             os._exit(2)
+    os.close(gate_read)
+    try:
+        if register_supervisor is not None:
+            register_supervisor(pid)
+        require(os.write(gate_write, b"G") == 1, "supervisor admission write")
+    except BaseException as failure:
+        os.close(gate_write)
+        if type(lease_read) is int: os.close(lease_read)
+        if type(lease_write) is int: os.close(lease_write)
+        os.close(report_read); os.close(report_write)
+        if retire_supervisor is not None:
+            try: retire_supervisor(pid)
+            except BaseException as exc:
+                error = RuntimeError("supervisor retirement unconfirmed for PID " + str(pid))
+                error.pid, error.reaped = pid, False
+                raise error from exc
+        # The closed gate grants no work. This is still our direct child.
+        until = time.monotonic() + min(2, cleanup_seconds)
+        if absolute_deadline is not None:
+            until = min(until, absolute_deadline)
+        # Reserve half of this fixed window for SIGKILL and confirmed waitpid.
+        graceful_until = time.monotonic() + max(0, until - time.monotonic()) / 2
+        reaped, exit_code = False, None
+        while time.monotonic() < graceful_until:
+            done, status = os.waitpid(pid, os.WNOHANG)
+            if done:
+                reaped = True
+                exit_code = os.waitstatus_to_exitcode(status)
+                break
+            time.sleep(0.005)
+        if not reaped:
+            try: os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError: pass
+            while time.monotonic() < until:
+                done, status = os.waitpid(pid, os.WNOHANG)
+                if done:
+                    reaped = True
+                    exit_code = os.waitstatus_to_exitcode(status)
+                    break
+                time.sleep(0.005)
+        if not reaped:
+            # Preserve the exact ticket even if the caller's original callback
+            # failed before it could finish its external registration.
+            error = RuntimeError("supervisor registration failed; reap unconfirmed for PID " + str(pid))
+            error.pid, error.reaped = pid, False
+            raise error from failure
+        failure.pid, failure.reaped, failure.exit_code = pid, True, exit_code
+        raise
+    os.close(gate_write)
     if type(lease_read) is int:
         os.close(lease_read)
     os.close(report_write)

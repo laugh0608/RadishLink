@@ -19,12 +19,11 @@ import sw_i5_apt as apt
 import sw_i5_preparation_isolation as isolation
 import sw_i5_resources as resources
 
-ROOT_BYTES, ROOT_INODES = apt.MIB, 1024
-CGROUP2, TMPFS = 0x63677270, 0x01021994
-INPUT_FS = {"iso9660": 0x9660, "squashfs": 0x73717368}
-CREATE_ORDER = ("guest_root", "work", "result", "cgroup_parent", "cgroup_supervisor", "cgroup_worker", "control", "lease", "ack")
-CLEAN_ORDER = tuple(reversed(CREATE_ORDER))
-FALSE_FLAGS = ("authorized", "install_authorized", "physical_verified", "i5_ready")
+ROOT_BYTES, ROOT_INODES = isolation.NATIVE_ROOT_BYTES, isolation.NATIVE_ROOT_INODES
+CGROUP2, TMPFS = isolation.NATIVE_CGROUP2, isolation.NATIVE_TMPFS
+INPUT_FS = isolation.NATIVE_INPUT_FS
+CREATE_ORDER, CLEAN_ORDER = isolation.NATIVE_CREATE_ORDER, isolation.NATIVE_CLEAN_ORDER
+FALSE_FLAGS = isolation.NATIVE_FALSE_FLAGS
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 

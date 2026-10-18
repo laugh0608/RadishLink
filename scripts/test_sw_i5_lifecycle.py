@@ -335,6 +335,15 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaises(ValueError): evidence.read_evidence(self.parent / NONCE, NONCE, DIGEST)
         path.write_bytes(original)
 
+    def test_native_request_validation_is_explicit_and_cannot_enter_host_initialization(self):
+        request = transport.native_transport_request(fixtures.native_descriptor())
+        adapter = self.adapter()
+        for candidate, initialization in ((dict(request, schema_version=True), None),
+                                           (dict(request, program_base64="eA=="), None), (request, object())):
+            with patch.object(os, "fork", side_effect=AssertionError("invalid native request forked")), self.assertRaises(ValueError):
+                lifecycle.fork_lifecycle(self.parent, candidate, rpc=lambda *a, **k: None,
+                    start=adapter, readiness=adapter, shutdown=adapter, budget=budget(), initialization=initialization)
+
     def test_controller_sigkill_is_detected_by_independent_owner(self):
         record = self.root / "kill-controller-pids.json"
         api, state = self.process_api(blocked=True, record=record)

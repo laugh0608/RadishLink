@@ -84,6 +84,47 @@ def unknown(row):
                representation=None, backing="unknown", mechanism="unknown", observation_source=None)
 
 
+def coverage(ledger=None, backend="injected-offline"):
+    ledger = capacity() if ledger is None else ledger
+    ref = lambda raw: dict(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+    value = common(plan.HOST_COVERAGE_SCOPE)
+    value["manifest_sha256"] = ledger["manifest_sha256"]
+    value.update(capacity=ref(encode(ledger)), backend=backend, surfaces={})
+    blobs = {}
+    for index, (name, budget) in enumerate(ledger["surfaces"].items()):
+        components = {}
+        for component, owner in plan.COVERAGE_COMPONENTS[name].items():
+            size = None if budget["state"] == "unknown" else 0 if budget["state"] == "disabled" else budget["logical_bytes"] // len(plan.COVERAGE_COMPONENTS[name])
+            components[component] = dict(owner=owner, logical_bytes=size, copies=None if size is None else 0 if size == 0 else 1, peak_bytes=size,
+                physical_domain=None if budget["state"] != "bounded" else "domain:" + name + (":" + component if name in ("readonly_input", "guest_system_tmpfs") else ""))
+        domains = {}
+        for component_index, part in enumerate(components.values()):
+            domain_id = part["physical_domain"]
+            if domain_id is not None:
+                domains[domain_id] = dict(realm="host" if name in plan.COVERAGE_HOST_SURFACES else "guest",
+                    path="/synthetic/physical/" + domain_id.replace(":", "_"), dev=index * 10 + component_index + 1,
+                    mount_id=None if name in plan.COVERAGE_HOST_SURFACES else index * 10 + component_index + 1,
+                    inode_limit=1024 if budget["backing"] == "noswap-tmpfs" else None,
+                    ino=index * 10 + component_index + 100, filesystem_id="filesystem:" + domain_id, representation=budget["representation"])
+        for domain in domains.values():
+            domain["hard_reserve_bytes"] = budget["hard_limit_bytes"] // len(domains)
+            domain["whole_device_bytes"] = domain["hard_reserve_bytes"] if budget["charge"] == "D" else 0
+        row = dict(owner_domain=budget["owner_domain"], charge=budget["charge"], state=budget["state"],
+                   components=components, physical_domains=domains, configuration=None, observation=None)
+        if budget["state"] != "unknown":
+            configured = dict(schema_version=1, scope="i5-preparation-boundary-configuration-claim", uuid=apt.UUID,
+                nonce=NONCE, manifest_sha256=ledger["manifest_sha256"], capacity=value["capacity"], surface=name,
+                owner_domain=row["owner_domain"], charge=row["charge"], state=row["state"], mechanism=budget["mechanism"],
+                hard_limit_bytes=budget["hard_limit_bytes"], components=components, physical_domains=domains, configured_before_start=True)
+            blobs["configuration." + name] = encode(configured)
+            row["configuration"] = ref(blobs["configuration." + name])
+            observed = dict(configured, scope="i5-preparation-boundary-observation-claim", configuration=row["configuration"], evidence_kind="injected-offline")
+            blobs["observation." + name] = encode(observed)
+            row["observation"] = ref(blobs["observation." + name])
+        value["surfaces"][name] = row
+    return value, blobs
+
+
 class ReviewTests(unittest.TestCase):
     def reject_plan(self, value, match):
         with self.assertRaisesRegex(ValueError, match):
@@ -460,6 +501,175 @@ class ReviewTests(unittest.TestCase):
         imports = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
         self.assertTrue(imports.isdisjoint({"os", "subprocess", "tempfile", "ctypes", "argparse"}))
         self.assertFalse(any(isinstance(node, ast.If) and "__name__" in ast.unparse(node.test) for node in tree.body))
+
+
+class HostCoverageTests(unittest.TestCase):
+    def review(self, value, blobs, ledger=None):
+        return plan.review_host_coverage(encode(value), encode(capacity() if ledger is None else ledger), NONCE, DIGEST, blobs=blobs)
+
+    def test_full_synthetic_inventory_is_consistent_but_always_blocked(self):
+        value, blobs = coverage()
+        result = self.review(value, blobs)
+        self.assertFalse(result["review_passed"])
+        self.assertEqual(result["feasibility"], "injected-offline-only")
+        self.assertFalse(result["complete_write_boundary"])
+        self.assertFalse(result["authenticity_verified"])
+        self.assertFalse(result["execution_authorized"])
+        self.assertTrue(all(result[key] is False for key in plan.FLAGS))
+        self.assertEqual(set(plan.COVERAGE_COMPONENTS), set(plan.PREP_SURFACES))
+
+    def test_macos_global_logs_swap_crash_are_required_unknown(self):
+        ledger = capacity()
+        for name in plan.MACOS_UNBOUNDED_SURFACES:
+            unknown(ledger["surfaces"][name])
+        value, blobs = coverage(ledger, "macos-utm")
+        result = self.review(value, blobs, ledger)
+        self.assertEqual(result["feasibility"], "blocked-host-system-writes")
+        self.assertTrue(any("APFS" in item for item in result["review_blockers"]))
+        value, blobs = coverage(backend="macos-utm")
+        with self.assertRaisesRegex(ValueError, "no complete hard boundary"):
+            self.review(value, blobs)
+        # Even a fully self-consistent disabled/zero claim cannot close this gate.
+        ledger = capacity()
+        unknown(ledger["surfaces"]["utm_qemu_logs_state"])
+        value, blobs = coverage(ledger, "macos-utm")
+        with self.assertRaisesRegex(ValueError, "host_swap_crash.*no complete hard boundary"):
+            self.review(value, blobs, ledger)
+
+    def test_capacity_profile_bytes_flags_and_inventory_are_bound(self):
+        value, blobs = coverage()
+        for key, bad in (("backend", "apfs-volume-quota-verified"), ("physical_verified", True), ("authorized", True), ("schema_version", True)):
+            mutated = copy.deepcopy(value)
+            mutated[key] = bad
+            with self.subTest(key=key), self.assertRaises(ValueError): self.review(mutated, blobs)
+        with self.assertRaisesRegex(ValueError, "exact capacity bytes"):
+            plan.review_host_coverage(encode(value), encode(capacity()) + b" ", NONCE, DIGEST, blobs=blobs)
+        for surface in plan.PREP_SURFACES:
+            mutated = copy.deepcopy(value)
+            del mutated["surfaces"][surface]
+            with self.subTest(surface=surface), self.assertRaisesRegex(ValueError, "surfaces.*fields"):
+                self.review(mutated, blobs)
+        mutated = copy.deepcopy(value)
+        mutated["surfaces"]["host_jxa_source"]["owner_domain"] = "host_retention"
+        with self.assertRaisesRegex(ValueError, "existing capacity projection"):
+            self.review(mutated, blobs)
+
+    def test_components_cover_all_writes_and_sum_concurrent_copy_peaks(self):
+        value, blobs = coverage()
+        name = "host_jxa_source"
+        for change in ("missing", "owner", "copy", "peak", "bool"):
+            mutated = copy.deepcopy(value)
+            parts = mutated["surfaces"][name]["components"]
+            if change == "missing": del parts["library_source_assembly"]
+            elif change == "owner": parts["library_source_assembly"]["owner"] = "evidence-owner"
+            elif change == "copy": parts["library_source_assembly"].update(copies=2, peak_bytes=MIB)
+            elif change == "peak": parts["library_source_assembly"]["peak_bytes"] = MIB
+            else: parts["library_source_assembly"]["copies"] = True
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "components|copy peaks"):
+                self.review(mutated, blobs)
+        # One whole device cannot be represented by two independent payload peaks.
+        mutated = copy.deepcopy(value)
+        for row in mutated["surfaces"]["readonly_input"]["components"].values(): row.update(logical_bytes=MIB, peak_bytes=MIB)
+        with self.assertRaisesRegex(ValueError, "component copy peaks"):
+            self.review(mutated, blobs)
+
+    def test_physical_domain_alias_and_ancestor_escape_are_rejected(self):
+        value, blobs = coverage()
+        left, right = "host_jxa_source", "host_evidence_export_source"
+        for change in ("identity", "device", "filesystem", "ancestor", "representation", "bool", "realm"):
+            mutated = copy.deepcopy(value)
+            a = next(iter(mutated["surfaces"][left]["physical_domains"].values()))
+            b = next(iter(mutated["surfaces"][right]["physical_domains"].values()))
+            if change == "identity": b.update(dev=a["dev"], ino=a["ino"])
+            elif change == "device": b["dev"] = a["dev"]
+            elif change == "filesystem": b["filesystem_id"] = a["filesystem_id"]
+            elif change == "ancestor": b["path"] = a["path"] + "/child"
+            elif change == "representation": b["representation"] = a["representation"]
+            elif change == "realm": b["realm"] = "guest"
+            else: b["dev"] = True
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "physical|integer"):
+                self.review(mutated, blobs)
+
+    def test_separate_media_and_physical_reserves_use_existing_surface_and_D(self):
+        value, blobs = coverage()
+        for mutation in ("same_media", "reserve_peak", "reserve_sum", "whole_bool", "D_missing", "H_device"):
+            modified = copy.deepcopy(value)
+            row = modified["surfaces"]["readonly_input"]
+            domains = list(row["physical_domains"].values())
+            if mutation == "same_media":
+                row["components"]["library_media"]["physical_domain"] = row["components"]["apt_media"]["physical_domain"]
+                del row["physical_domains"][next(key for key in row["physical_domains"] if key.endswith("library_media"))]
+            elif mutation == "reserve_peak": domains[0]["hard_reserve_bytes"] -= 1
+            elif mutation == "reserve_sum":
+                for domain in domains: domain.update(hard_reserve_bytes=MIB, whole_device_bytes=MIB)
+            elif mutation == "whole_bool": domains[0]["whole_device_bytes"] = True
+            elif mutation == "D_missing": domains[0]["whole_device_bytes"] = 0
+            else: next(iter(modified["surfaces"]["host_jxa_source"]["physical_domains"].values()))["whole_device_bytes"] = 1
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, "physical|reserve|integer|device|distinct"):
+                self.review(modified, blobs)
+        # Correctly rehash every observation, yet whole media devices exceed D.
+        ledger = capacity()
+        ledger["domains"]["input"]["guest_device_bytes"] = MIB
+        modified, facts = coverage(ledger)
+        row = modified["surfaces"]["readonly_input"]
+        for domain in row["physical_domains"].values(): domain["whole_device_bytes"] = MIB
+        for role in ("configuration", "observation"):
+            key = role + ".readonly_input"
+            fact = json.loads(facts[key])
+            fact["physical_domains"] = row["physical_domains"]
+            if role == "observation": fact["configuration"] = row["configuration"]
+            facts[key] = encode(fact)
+            row[role] = dict(bytes=len(facts[key]), sha256=hashlib.sha256(facts[key]).hexdigest())
+        with self.assertRaisesRegex(ValueError, "complete physical devices exceed existing D"):
+            self.review(modified, facts, ledger)
+
+    def test_raw_configuration_and_independent_observation_are_exact(self):
+        value, blobs = coverage()
+        name = "host_jxa_source"
+        ref = lambda raw: dict(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+        for role, mutation in (("configuration", "surface"), ("observation", "physical_domains"), ("observation", "configuration"),
+                               ("observation", "evidence_kind"), ("observation", "configured_before_start"), ("observation", "schema_version")):
+            modified, facts = copy.deepcopy(value), dict(blobs)
+            key = role + "." + name
+            raw = json.loads(facts[key])
+            if mutation == "physical_domains": next(iter(raw[mutation].values()))["dev"] += 1
+            elif mutation == "configuration": raw[mutation]["sha256"] = "e" * 64
+            elif mutation == "configured_before_start": raw[mutation] = 1
+            elif mutation == "schema_version": raw[mutation] = True
+            else: raw[mutation] = "native-verified"
+            facts[key] = encode(raw)
+            modified["surfaces"][name][role] = ref(facts[key])
+            with self.subTest(role=role, mutation=mutation), self.assertRaisesRegex(ValueError, "configuration|observation"):
+                self.review(modified, facts)
+        with self.assertRaisesRegex(ValueError, "exact fact set"):
+            self.review(value, dict(blobs, extra=b"{}"))
+        with self.assertRaisesRegex(ValueError, "fingerprint mismatch"):
+            self.review(value, {key: raw + b" " if key == "observation." + name else raw for key, raw in blobs.items()})
+
+    def test_unknown_is_not_zero_or_a_completion_fact(self):
+        ledger = capacity()
+        unknown(ledger["surfaces"]["host_backing_metadata"])
+        value, blobs = coverage(ledger)
+        for key, bad in (("physical_domains", {"unbound": {}}), ("configuration", {}), ("observation", {})):
+            mutated = copy.deepcopy(value)
+            mutated["surfaces"]["host_backing_metadata"][key] = bad
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "completion facts"):
+                self.review(mutated, blobs, ledger)
+        value["surfaces"]["host_backing_metadata"]["components"]["backing_snapshots_metadata"]["logical_bytes"] = 0
+        with self.assertRaisesRegex(ValueError, "unknown component"):
+            self.review(value, blobs, ledger)
+
+    def test_pure_candidate_has_no_io_and_no_legacy_acceptance(self):
+        value, blobs = coverage()
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            for name in ("builtins.open", "os.open", "os.stat", "os.lstat", "subprocess.Popen", "subprocess.run"):
+                stack.enter_context(patch(name, side_effect=AssertionError("forbidden I/O")))
+            self.assertFalse(self.review(value, blobs)["review_passed"])
+        for validator in (lambda: plan.validate_capacity(encode(value), "preparation", NONCE, DIGEST),
+                          lambda: plan.validate_plan(encode(value), NONCE, DIGEST),
+                          lambda: isolation.Contract.parse(encode(value), NONCE, DIGEST)):
+            with self.assertRaises(ValueError): validator()
 
 
 if __name__ == "__main__":

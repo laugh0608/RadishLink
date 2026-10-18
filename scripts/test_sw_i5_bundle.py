@@ -22,13 +22,214 @@ import sw_i5_preparation_transport as transport
 import sw_i5_utm_control as control
 from test_sw_i5_execution import NOW, SyntheticFixture
 import test_sw_i5_native as native_test
-from test_sw_i5_preparation_plan import initialization
+from test_sw_i5_preparation_plan import initialization, coverage, unknown
 
 STATUS = b"Package: synthetic-example\nArchitecture: arm64\nStatus: install ok installed\nVersion: 1.0\n\n"
 
 
 def runtime_sources():
     return {name: (Path(__file__).parents[1] / name).read_bytes() for name in bundle.RUNTIME}
+
+
+class DeliveryFixture:
+    """Six synthetic media members; no image, mount or supplied code execution."""
+    def __init__(self):
+        old = SyntheticFixture()
+        self.sources = {name: (Path(__file__).parents[1] / name).read_bytes() for name in bundle.LIFECYCLE_RUNTIME}
+        artifact = bundle.assemble_lifecycle(self.sources)
+        self.manifest_hash = execution.fingerprint(old.blobs["manifest"])["sha256"]
+        self.nonce = old.contract["nonce"]
+        ledger = old.ledger
+        ledger["domains"]["input"].update(cap_bytes=8 * apt.MIB, guest_device_bytes=8 * apt.MIB)
+        for name in ("readonly_input", "input_media_creation", "input_media_staging_copy", "host_jxa_source"):
+            ledger["surfaces"][name].update(logical_bytes=8 * apt.MIB, peak_bytes=8 * apt.MIB, hard_limit_bytes=8 * apt.MIB)
+        ledger["surfaces"]["guest_system_tmpfs"].update(logical_bytes=2 * apt.MIB, peak_bytes=2 * apt.MIB, hard_limit_bytes=2 * apt.MIB)
+        for name in plan.MACOS_UNBOUNDED_SURFACES: unknown(ledger["surfaces"][name])
+        ledger["envelope_bytes"] = sum(row["cap_bytes"] for row in ledger["domains"].values())
+        self.capacity_raw = execution.encode(ledger)
+        self.plan_value = old.initialization
+        self.plan_value["capacity_sha256"] = execution.fingerprint(self.capacity_raw)["sha256"]
+        self.plan_raw = execution.encode(self.plan_value)
+        self.coverage, self.coverage_blobs = coverage(ledger, "macos-utm")
+        row = self.coverage["surfaces"]["readonly_input"]
+        domains = row["physical_domains"]
+        apt_domain = domains[row["components"]["apt_media"]["physical_domain"]]
+        library_domain = domains[row["components"]["library_media"]["physical_domain"]]
+        apt_domain["path"] = self.plan_value["readonly_input"]["path"]
+        library_domain["path"] = bundle.LIBRARY_ROOT
+        root_row = self.coverage["surfaces"]["guest_system_tmpfs"]
+        root_domain = root_row["physical_domains"][root_row["components"]["initialization_root"]["physical_domain"]]
+        root_domain["path"] = "/run/radishlink-i5-preparation"
+        self.native_expected = dict(root_parent={key: root_domain[key] for key in ("dev", "ino", "mount_id")}, cgroup_root=dict(dev=1002, ino=1002, mount_id=1002),
+            readonly_input={key: apt_domain[key] for key in ("dev", "ino", "mount_id")})
+        self.library_expected = {key: library_domain[key] for key in ("dev", "ino", "mount_id")}
+        self.rebind_coverage()
+        contract = dict(schema_version=1, scope="i5-preparation-isolation", uuid=apt.UUID, nonce=self.nonce, manifest_sha256=self.manifest_hash,
+            root=self.plan_value["objects"]["guest_root"]["path"], input=self.plan_value["readonly_input"]["path"],
+            uid=self.plan_value["guest_uid"], gid=self.plan_value["guest_gid"], i5_ready=False)
+        self.files = {"library.zip": artifact["program"], "library-manifest.json": artifact["manifest"],
+            "isolation.json": execution.encode(contract), "apt-manifest.json": old.blobs["manifest"], "expected.json": execution.encode(self.native_expected)}
+        self.value = dict(schema_version=1, scope=bundle.DELIVERY_SCOPE, kind="offline-candidate", uuid=apt.UUID, nonce=self.nonce,
+            manifest_sha256=self.manifest_hash, plan=execution.fingerprint(self.plan_raw), capacity=execution.fingerprint(self.capacity_raw),
+            host_coverage=execution.fingerprint(self.coverage_raw), library_expected=self.library_expected, native_expected=self.native_expected,
+            library_filesystem=dict(path=bundle.LIBRARY_ROOT, filesystem="iso9660", filesystem_magic=0x9660,
+                mount_options=["nodev", "noexec", "nosuid", "ro"], super_options=["ro"], capacity_bytes=4 * apt.MIB, inodes=4096),
+            members={}, **bundle.FALSE)
+        self.rebind()
+
+    def rebind_coverage(self):
+        for name, row in self.coverage["surfaces"].items():
+            if row["state"] == "unknown": continue
+            for role in ("configuration", "observation"):
+                key = role + "." + name
+                fact = execution.decode(self.coverage_blobs[key])
+                fact.update(components=row["components"], physical_domains=row["physical_domains"])
+                if role == "observation": fact["configuration"] = row["configuration"]
+                self.coverage_blobs[key] = execution.encode(fact)
+                row[role] = execution.fingerprint(self.coverage_blobs[key])
+        self.coverage_raw = execution.encode(self.coverage)
+
+    def rebind(self):
+        self.value["members"] = {name: execution.fingerprint(self.files[name]) for name in bundle.DELIVERY_FILES[:-1]}
+        self.value["host_coverage"] = execution.fingerprint(self.coverage_raw)
+        self.raw = execution.encode(self.value)
+        self.files["delivery.json"] = self.raw
+        self.descriptor = bundle.invocation_descriptor(self.raw)
+
+    def review(self):
+        return bundle.validate_delivery(self.raw, files=self.files, sources=self.sources, plan_raw=self.plan_raw,
+            capacity_raw=self.capacity_raw, coverage_raw=self.coverage_raw, coverage_blobs=self.coverage_blobs, descriptor=self.descriptor)
+
+
+class LifecycleDeliveryTests(unittest.TestCase):
+    def test_deterministic_seven_source_library_and_historical_artifact_remain_distinct(self):
+        fixture = DeliveryFixture()
+        actual = bundle.assemble_lifecycle(fixture.sources)
+        self.assertEqual(actual, bundle.assemble_lifecycle(dict(reversed(list(fixture.sources.items())))))
+        with zipfile.ZipFile(io.BytesIO(actual["program"])) as archive:
+            self.assertEqual(set(archive.namelist()), {name.removeprefix("scripts/") for name in bundle.LIFECYCLE_RUNTIME} | {bundle.MANIFEST})
+            self.assertNotIn("__main__.py", archive.namelist())
+        with self.assertRaises(ValueError): bundle.validate_artifact(actual["manifest"], actual["program"], bundle.BOOTSTRAP, runtime_sources())
+        old = bundle.assemble(runtime_sources())
+        with self.assertRaises(ValueError): bundle.validate_lifecycle_artifact(old["manifest"], old["program"], fixture.sources)
+
+    def test_six_files_bind_actual_native_config_and_all_flags_stay_false(self):
+        fixture = DeliveryFixture()
+        result = fixture.review()
+        self.assertTrue(result["consistency_passed"])
+        self.assertEqual(result["host_feasibility"], "blocked-host-system-writes")
+        self.assertEqual(result["library_file_bytes"], sum(map(len, fixture.files.values())))
+        self.assertEqual(result["config_fingerprints"], {name: execution.fingerprint(fixture.files[name]) for name in ("isolation.json", "apt-manifest.json", "expected.json")})
+        self.assertFalse(result["loader_verified"])
+        self.assertFalse(result["authenticity_verified"])
+        self.assertTrue(all(result[name] is False for name in bundle.FALSE))
+        # This instantiates our reviewed config, never any source in the ZIP.
+        import sw_i5_preparation_native_lifecycle as lifecycle_native
+        config = lifecycle_native.NativeGuestConfig(fixture.files["isolation.json"], fixture.files["apt-manifest.json"],
+            expected=execution.decode(fixture.files["expected.json"]), delivery_sha256=fixture.descriptor["delivery_sha256"])
+        self.assertEqual(config.delivery_sha256, fixture.descriptor["delivery_sha256"])
+
+    def test_small_invocation_has_fixed_fields_and_no_hash_cycle(self):
+        fixture = DeliveryFixture()
+        self.assertLess(len(execution.encode(fixture.descriptor)), 1024)
+        self.assertEqual(set(fixture.descriptor), {"schema_version", "scope", "uuid", "nonce", "manifest_sha256", "delivery_sha256"})
+        self.assertNotIn("delivery.json", fixture.value["members"])
+        for key, value in (("library_path", "/tmp/untrusted.zip"), ("entrypoint", "arbitrary.run"), ("argv", []), ("schema_version", True), ("delivery_sha256", "x" * 64)):
+            descriptor = dict(fixture.descriptor)
+            descriptor[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                bundle.validate_invocation_descriptor(descriptor, fixture.nonce, fixture.manifest_hash)
+        fixture.descriptor["delivery_sha256"] = "f" * 64
+        with self.assertRaisesRegex(ValueError, "exact delivery bytes"): fixture.review()
+
+    def test_source_closure_nested_import_and_supplied_sources_never_execute(self):
+        fixture = DeliveryFixture()
+        fixture.sources[bundle.LIFECYCLE_SOURCE] += b'\nraise AssertionError("must not execute supplied source")\n'
+        with patch("builtins.open", side_effect=AssertionError("no source read")), patch("subprocess.Popen", side_effect=AssertionError("no launch")):
+            artifact = bundle.assemble_lifecycle(fixture.sources)
+            self.assertIn(b"must not execute supplied source", artifact["program"])
+        for extra in (b"\ndef hidden():\n import arbitrary_dependency\n", b"\ndef hidden():\n from sw_i5_preparation_plan import assembled_source_bound\n"):
+            sources = dict(fixture.sources)
+            sources[bundle.LIFECYCLE_SOURCE] += extra
+            with self.assertRaises(ValueError): bundle.assemble_lifecycle(sources)
+        for name in bundle.LIFECYCLE_RUNTIME:
+            sources = dict(fixture.sources)
+            del sources[name]
+            with self.assertRaises(ValueError): bundle.assemble_lifecycle(sources)
+
+    def test_config_and_media_mutations_rejected_after_rehash(self):
+        for mutation in ("uid", "input", "expected", "library_alias", "mount_alias", "rw", "magic", "path", "extra_member", "main"):
+            fixture = DeliveryFixture()
+            if mutation in ("uid", "input"):
+                contract = execution.decode(fixture.files["isolation.json"])
+                contract[mutation] = 61001 if mutation == "uid" else bundle.LIBRARY_ROOT
+                fixture.files["isolation.json"] = execution.encode(contract)
+            elif mutation == "expected":
+                expected = execution.decode(fixture.files["expected.json"])
+                expected["root_parent"]["dev"] += 1
+                fixture.files["expected.json"] = execution.encode(expected)
+            elif mutation == "library_alias": fixture.value["library_expected"] = dict(fixture.native_expected["readonly_input"])
+            elif mutation == "mount_alias": fixture.value["library_expected"]["mount_id"] = fixture.native_expected["root_parent"]["mount_id"]
+            elif mutation == "rw": fixture.value["library_filesystem"]["mount_options"] = ["rw"]
+            elif mutation == "magic": fixture.value["library_filesystem"]["filesystem_magic"] = True
+            elif mutation == "path": fixture.value["library_filesystem"]["path"] = fixture.plan_value["readonly_input"]["path"]
+            elif mutation == "main":
+                with zipfile.ZipFile(io.BytesIO(fixture.files["library.zip"])) as archive: members = {name: archive.read(name) for name in archive.namelist()}
+                members["__main__.py"] = b"print('bad')\n"
+                fixture.files["library.zip"] = bundle.zip_bytes(members)
+            else: fixture.files["extra"] = b"not an allowed library member"
+            fixture.rebind()
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError): fixture.review()
+
+    def test_entire_media_not_zip_and_each_copy_are_charged(self):
+        for mutation in ("creation", "staging", "source_peak", "jxa_peak", "device", "reserve", "all_files"):
+            fixture = DeliveryFixture()
+            if mutation in ("creation", "staging", "source_peak", "jxa_peak"):
+                surface, component = ("input_media_creation", "library_media_creation") if mutation == "creation" else ("input_media_staging_copy", "library_media_staging") if mutation == "staging" else ("host_jxa_source", "library_source_assembly") if mutation == "source_peak" else ("host_jxa_source", "jxa_source")
+                part = fixture.coverage["surfaces"][surface]["components"][component]
+                part["logical_bytes"] = part["peak_bytes"] = 1
+            elif mutation in ("device", "reserve"):
+                row = fixture.coverage["surfaces"]["readonly_input"]
+                domain = row["physical_domains"][row["components"]["library_media"]["physical_domain"]]
+                domain["whole_device_bytes" if mutation == "device" else "hard_reserve_bytes"] -= 1
+            else: fixture.value["library_filesystem"]["capacity_bytes"] = len(fixture.files["library.zip"])
+            fixture.rebind_coverage()
+            fixture.rebind()
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError): fixture.review()
+
+    def test_validation_has_no_filesystem_or_execution_effects(self):
+        fixture = DeliveryFixture()
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            for name in ("builtins.open", "os.open", "os.stat", "os.lstat", "os.mkdir", "os.fork", "subprocess.Popen", "subprocess.run"):
+                stack.enter_context(patch(name, side_effect=AssertionError("forbidden I/O")))
+            self.assertTrue(fixture.review()["consistency_passed"])
+
+    def test_rehashed_apt_and_root_binding_cannot_omit_complete_domains(self):
+        for mutation in ("apt_tree", "apt_logical", "apt_creation", "apt_staging", "root_identity", "root_inode", "root_reserve"):
+            fixture = DeliveryFixture()
+            if mutation == "apt_tree":
+                fixture.plan_value["readonly_input"]["bytes"] = 1
+                fixture.plan_value["objects"]["readonly_input"]["bytes"] = 1
+                for snapshot in fixture.plan_value["offline_observations"]["objects"]["readonly_input"].values(): snapshot["bytes"] = 1
+                fixture.plan_raw = execution.encode(fixture.plan_value)
+                fixture.value["plan"] = execution.fingerprint(fixture.plan_raw)
+            elif mutation in ("apt_logical", "apt_creation", "apt_staging"):
+                surface, component = ("readonly_input", "apt_media") if mutation == "apt_logical" else ("input_media_creation", "apt_media_creation") if mutation == "apt_creation" else ("input_media_staging_copy", "apt_media_staging")
+                part = fixture.coverage["surfaces"][surface]["components"][component]
+                part["logical_bytes"] = part["peak_bytes"] = apt.MIB
+            else:
+                root = fixture.coverage["surfaces"]["guest_system_tmpfs"]
+                domain = root["physical_domains"][root["components"]["initialization_root"]["physical_domain"]]
+                if mutation == "root_identity":
+                    fixture.value["native_expected"]["root_parent"]["ino"] += 1
+                    fixture.files["expected.json"] = execution.encode(fixture.value["native_expected"])
+                elif mutation == "root_inode": domain["inode_limit"] += 1
+                else: domain["hard_reserve_bytes"] += 1
+            fixture.rebind_coverage()
+            fixture.rebind()
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, "APT|media|native root|physical reserves"):
+                fixture.review()
 
 
 class BindingFixture:

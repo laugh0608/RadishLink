@@ -25,6 +25,15 @@ import test_sw_i5_channels as fixtures
 NONCE, DIGEST = fixtures.NONCE, fixtures.DIGEST
 
 
+def native_descriptor():
+    return {"schema_version": 1, "scope": "i5-preparation-native-library-invocation", "uuid": apt.UUID,
+            "nonce": NONCE, "manifest_sha256": DIGEST, "delivery_sha256": "d" * 64}
+
+
+def native_ready():
+    return dict(native_descriptor(), scope="i5-preparation-native-lifecycle-ready", ready=True)
+
+
 def export_fixture(root):
     fixtures.result_files(root)
     exporter = fixtures.SyntheticExport(root)
@@ -287,6 +296,100 @@ class FakeUTM:
 
 
 class TransportTests(unittest.TestCase):
+    def test_native_execute_ready_mailbox_order_and_single_attempt_failure_matrix(self):
+        # This isolates transport ordering. The native lifecycle suite runs the
+        # actual P/N/S/W producer; no native backend is inferred by this fake RPC.
+        for mode in ("ok", "lost", "bad-ready", "bad-ready-type", "wrong-export", "wrong-delivery", "eof", "cancel-ready", "null-deadline"):
+            with self.subTest(mode=mode):
+                api = FakeUTM(b"protocol-fixture")
+                ready_count = []
+                reader, writer = os.pipe()
+                ar, aw = os.pipe()
+                out = tempfile.TemporaryFile()
+                os.write(writer, supervision.Lease(NONCE, DIGEST, started=time.monotonic()).frame(0))
+                def rpc(request, timeout, limit):
+                    if request["action"] == "execute-native":
+                        api.actions.append((request["action"], request["args"]))
+                        api.started += 1
+                        if mode == "lost": raise OSError("lost native execute response")
+                        if mode == "eof": os.close(writer)
+                        value = 777
+                    elif request["action"] == "native-ready":
+                        api.actions.append((request["action"], request["args"]))
+                        ready_count.append(1)
+                        value = None if len(ready_count) == 1 or mode == "null-deadline" else native_ready()
+                        if mode == "cancel-ready":
+                            os.write(writer, supervision.Lease(NONCE, DIGEST, started=0).frame(1, "cancel"))
+                        if value and mode == "bad-ready": value["delivery_sha256"] = "e" * 64
+                        if value and mode == "bad-ready-type": value["schema_version"] = True
+                    else: return api(request, timeout, limit)
+                    response = dict(request, scope="i5-preparation-utm-rpc-result", value=value)
+                    response.pop("args")
+                    return channels.encode(response)
+                exported = {"scope": "legacy" if mode == "wrong-export" else "i5-preparation-native-lifecycle-export", "passed": True,
+                            "native_lifecycle": {"delivery_sha256": ("e" if mode == "wrong-delivery" else "d") * 64}}
+                try:
+                    with patch.object(channels, "validate_export", return_value=exported):
+                        request = transport.native_transport_request(native_descriptor())
+                        if mode == "ok":
+                            self.assertEqual(transport.run_transport(reader, out.fileno(), aw, request, rpc=rpc), 0)
+                        else:
+                            with self.assertRaises(ValueError):
+                                transport.run_transport(reader, out.fileno(), aw, request, rpc=rpc,
+                                    total=0.05 if mode == "null-deadline" else 3)
+                    self.assertEqual(api.started, 1)
+                    actions = [a[0] for a in api.actions]
+                    self.assertNotIn("execute", actions)
+                    if mode in ("ok", "wrong-export", "wrong-delivery"):
+                        self.assertLess(actions.index("execute-native"), actions.index("native-ready"))
+                        self.assertLess(actions.index("native-ready"), actions.index("open"))
+                        self.assertLess(actions.index("read"), actions.index("write"))
+                    else: self.assertNotIn("open", actions)
+                finally:
+                    for fd in (reader, writer, ar, aw):
+                        try: os.close(fd)
+                        except OSError: pass
+                    out.close()
+
+    def test_native_descriptor_and_ready_reject_unknown_fields_types_and_binding(self):
+        request = transport.native_transport_request(native_descriptor())
+        self.assertTrue(transport.validate_transport_request(request))
+        for change in ({"schema_version": True}, {"nonce": "e" * 32}, {"extra": 1}, {"program_base64": "eA=="}):
+            with self.assertRaises(ValueError): transport.validate_transport_request(dict(request, **change))
+        for change in ({"schema_version": True}, {"ready": 1}, {"scope": "wrong"}, {"extra": 1}):
+            with self.assertRaises(ValueError):
+                transport.validate_native_ready(dict(native_ready(), **change), NONCE, DIGEST, "d" * 64)
+
+    def test_native_initial_host_control_is_required_before_execute(self):
+        api = FakeUTM(b"not-used")
+        reader, writer = os.pipe()
+        ar, aw = os.pipe()
+        os.close(writer)
+        with tempfile.TemporaryFile() as output:
+            try:
+                with self.assertRaises(ValueError):
+                    transport.run_transport(reader, output.fileno(), aw,
+                        transport.native_transport_request(native_descriptor()), rpc=api, total=1)
+                self.assertEqual([a[0] for a in api.actions], ["identify"])
+                self.assertEqual(api.started, 0)
+            finally:
+                for fd in (reader, ar, aw): os.close(fd)
+
+    def test_legacy_request_cannot_consume_native_export(self):
+        api = FakeUTM(b"scope-fixture")
+        reader, writer = os.pipe()
+        ar, aw = os.pipe()
+        os.write(writer, supervision.Lease(NONCE, DIGEST, started=time.monotonic()).frame(0))
+        with tempfile.TemporaryFile() as output:
+            try:
+                with patch.object(channels, "validate_export", return_value={"scope": "i5-preparation-native-lifecycle-export"}), \
+                        self.assertRaisesRegex(ValueError, "legacy transport export scope"):
+                    transport.run_transport(reader, output.fileno(), aw,
+                        transport.transport_request(NONCE, DIGEST, b"synthetic"), rpc=api, total=1)
+                self.assertEqual(api.started, 1)
+            finally:
+                for fd in (reader, writer, ar, aw): os.close(fd)
+
     def test_transport_error_is_preserved_in_durable_host_failure(self):
         with tempfile.TemporaryDirectory(prefix="radishlink-utm-failure-") as directory:
             store = evidence.EvidenceStore(Path(directory).resolve(), NONCE, DIGEST)
@@ -350,6 +453,8 @@ class TransportTests(unittest.TestCase):
                             self.assertEqual(out.read(), output)
                             self.assertEqual(api.polls, 2)
                             self.assertEqual(json.loads(os.read(ar, 512))["sequence"], 0)
+                            self.assertEqual([a[0] for a in api.actions[:8]],
+                                ["identify", "open", "read", "open", "read", "write", "read", "execute"])
                         else:
                             with self.assertRaises(ValueError):
                                 transport.run_transport(r, out.fileno(), aw, request, rpc=api)

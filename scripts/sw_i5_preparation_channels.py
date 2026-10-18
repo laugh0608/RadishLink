@@ -19,6 +19,7 @@ import time
 
 import sw_i5_apt as apt
 import sw_i5_preparation_supervisor as supervision
+import sw_i5_preparation_isolation as isolation
 
 EXPORT_LIMIT = apt.RESULT_LIMIT
 DATA_LIMIT = 1024 * 1024
@@ -32,6 +33,37 @@ ARTIFACTS = ("result/result.json", "result/worker.stdout", "result/worker.stderr
 
 def encode(value):
     return (json.dumps(value, separators=(",", ":"), ensure_ascii=True) + "\n").encode()
+
+
+def send(fd, raw, deadline):
+    os.set_blocking(fd, False)
+    offset = 0
+    while offset < len(raw):
+        apt.require(time.monotonic() < deadline, "staging IPC write deadline")
+        _, ready, _ = select.select([], [fd], [], min(0.01, max(0, deadline - time.monotonic())))
+        if not ready: continue
+        try: count = os.write(fd, raw[offset:offset + 65536])
+        except (BlockingIOError, InterruptedError): continue
+        apt.require(count > 0, "staging IPC zero write")
+        offset += count
+
+
+def receive(fd, deadline, limit=2048, *, line=True, allow_eof=False):
+    os.set_blocking(fd, False)
+    raw = bytearray()
+    while True:
+        apt.require(time.monotonic() < deadline, "staging IPC read deadline")
+        ready, _, _ = select.select([fd], [], [], min(0.01, max(0, deadline - time.monotonic())))
+        if not ready: continue
+        try: chunk = os.read(fd, 1 if line else min(65536, limit - len(raw)))
+        except (BlockingIOError, InterruptedError): continue
+        if not chunk and not raw and allow_eof: return b""
+        apt.require(chunk, "staging IPC EOF")
+        raw.extend(chunk)
+        apt.require(len(raw) <= limit, "staging IPC byte limit")
+        if (line and raw.endswith(b"\n")) or (not line and len(raw) == limit):
+            apt.require(time.monotonic() < deadline, "late staging IPC bytes")
+            return bytes(raw)
 
 
 def close_except(fds):
@@ -272,6 +304,8 @@ class ResultExport:
 
 def validate_export(raw, nonce, manifest_sha256):
     packet = apt.decode(raw, EXPORT_LIMIT)
+    if type(packet) is dict and packet.get("scope") == "i5-preparation-native-lifecycle-export":
+        return validate_native_export(raw, nonce, manifest_sha256)
     apt.fields(packet, "schema_version scope nonce uuid manifest_sha256 evidence_kind i5_ready passed supervision "
                "preparation artifacts export_errors")
     apt.require(type(packet["schema_version"]) is int and packet["schema_version"] == 1 and packet["scope"] == EXPORT_SCOPE and
@@ -565,3 +599,216 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
     os.close(report_write)
     os.close(ack_write)
     return pid, control_write, report_read, ack_read
+
+
+NATIVE_EXPORT_SCOPE = "i5-preparation-native-lifecycle-export"
+NATIVE_FACT_SCOPE = "i5-preparation-native-lifecycle-facts"
+NATIVE_FACT_LIMIT = 128 * 1024
+NATIVE_LIFECYCLE_FLAGS = ("execution_authorized", "install_authorized", "physical_verified", "i5_ready")
+
+
+def _register_object(registry, events, value):
+    apt.fields(value, "role state identity bytes sequence")
+    role, state, ident = value["role"], value["state"], value["identity"]
+    apt.require(role in isolation.NATIVE_CREATE_ORDER and state in ("intent", "bound", "cleaned") and value["sequence"] is None and
+                type(value["bytes"]) is int and value["bytes"] == (1024 if role in ("lease", "ack") else 0), "native object registration fields")
+    if state == "intent":
+        intended = [item["role"] for item in events if item["state"] == "intent"]
+        apt.require(ident is None and role not in registry and role not in intended and
+                    all(row["state"] == "bound" for row in registry.values()) and
+                    not any(item["state"] == "cleaned" for item in events) and
+                    intended + [role] == list(isolation.NATIVE_CREATE_ORDER[:len(intended) + 1]),
+                    "native duplicate/out-of-order intent")
+    else:
+        apt.require(type(ident) is list and len(ident) == 2 and all(type(n) is int and n > 0 for n in ident), "native registration identity")
+        apt.require(role in registry and (registry[role]["state"] == "intent" if state == "bound" else
+                    registry[role]["state"] == "bound" and registry[role]["identity"] == ident), "native registration order")
+    apt.require(len(events) < 27, "native registration count")
+    if state == "cleaned":
+        cleaned = [item["role"] for item in events if item["state"] == "cleaned"] + [role]
+        apt.require(cleaned == [item for item in isolation.NATIVE_CLEAN_ORDER if item in cleaned],
+                    "native cleanup registration order")
+    events.append(dict(value))
+    if state == "cleaned": registry.pop(role)
+    else: registry[role] = dict(value)
+
+
+def _validate_observations(value, nonce, digest):
+    for key in ("initialization", "independent_readback"):
+        record = value[key]
+        apt.fields(record, "schema_version scope uuid nonce manifest_sha256 backend_kind cgroup_snapshots "
+                   "prerequisite_observations objects input_bytes input_files_sha256 " + " ".join(isolation.NATIVE_FALSE_FLAGS))
+        apt.require(record.get("scope") == "i5-preparation-native-initialization" and
+                    type(record.get("schema_version")) is int and record["schema_version"] == 1 and record.get("uuid") == apt.UUID and
+                    record.get("nonce") == nonce and record.get("manifest_sha256") == digest and
+                    record.get("backend_kind") == "injected-offline" and
+                    all(record.get(flag) is False for flag in isolation.NATIVE_FALSE_FLAGS) and
+                    set(record.get("objects", {})) == {*isolation.NATIVE_CREATE_ORDER, "readonly_input"}, "native lifecycle initialization facts")
+        apt.require(type(record["input_bytes"]) is int and 0 < record["input_bytes"] <= isolation.STORAGE["input"] and
+                    apt.digest(record["input_files_sha256"]), "native input projection")
+        prerequisites = record["prerequisite_observations"]
+        apt.fields(prerequisites, "root_parent cgroup_root readonly_input")
+        for role, item in prerequisites.items():
+            apt.fields(item, "dev ino mount_id path device filesystem filesystem_magic mount_options super_options capacity_bytes inodes")
+            apt.require(all(type(item[k]) is int and item[k] > 0 for k in ("dev", "ino", "mount_id", "filesystem_magic")) and
+                        type(item["device"]) is str and type(item["path"]) is str and item["path"].startswith("/") and
+                        all(type(item[k]) is list and item[k] == sorted(set(item[k])) and all(type(v) is str for v in item[k])
+                            for k in ("mount_options", "super_options")), "native prerequisite fields")
+            if role == "cgroup_root":
+                apt.require(item["path"] == "/sys/fs/cgroup/radishlink-i5-preparation" and item["filesystem"] == "cgroup2" and
+                            item["filesystem_magic"] == isolation.NATIVE_CGROUP2 and item["capacity_bytes"] is None and
+                            item["inodes"] is None and "rw" in item["mount_options"] and "rw" in item["super_options"],
+                            "native cgroup prerequisite")
+            else:
+                maximum = isolation.NATIVE_ROOT_BYTES if role == "root_parent" else isolation.STORAGE["input"]
+                apt.require(type(item["capacity_bytes"]) is int and 0 < item["capacity_bytes"] <= maximum and
+                            type(item["inodes"]) is int and item["inodes"] > 0, "native prerequisite capacity")
+                if role == "root_parent":
+                    apt.require(item["path"] == "/run/radishlink-i5-preparation" and item["filesystem"] == "tmpfs" and
+                                item["filesystem_magic"] == isolation.NATIVE_TMPFS and
+                                item["inodes"] <= isolation.NATIVE_ROOT_INODES and
+                                {"rw", "nosuid", "nodev", "noexec"} <= set(item["mount_options"]) and
+                                {"rw", "noswap"} <= set(item["super_options"]) and
+                                "ro" not in item["mount_options"] + item["super_options"], "native root prerequisite")
+                else:
+                    apt.require(item["filesystem"] in isolation.NATIVE_INPUT_FS and
+                                item["filesystem_magic"] == isolation.NATIVE_INPUT_FS[item["filesystem"]] and
+                                "ro" in item["mount_options"] and "ro" in item["super_options"] and
+                                "rw" not in item["mount_options"] + item["super_options"] and
+                                record["input_bytes"] <= item["capacity_bytes"], "native input prerequisite")
+        for key_name in ("dev", "mount_id", "device"):
+            apt.require(len({item[key_name] for item in prerequisites.values()}) == 3, "native prerequisite domain alias")
+        groups = record["cgroup_snapshots"]
+        apt.fields(groups, "parent supervisor worker")
+        for role, item in groups.items():
+            apt.fields(item, "path identity type procs subtree children limits events memory_events pids_events")
+            apt.require(type(item["identity"]) is list and all(type(n) is int and n > 0 for n in item["identity"]),
+                        "native cgroup identity types")
+            converted = dict(item, identity=tuple(item["identity"]))
+            isolation.verify_cgroup(converted, role)
+            apt.require(item["procs"] == [] and item["events"]["populated"] == 0, "native initial cgroup must be empty")
+            for name in ("events", "memory_events", "pids_events"):
+                apt.require(type(item[name]) is dict and all(type(n) is int and n == 0 for n in item[name].values()),
+                            "native cgroup strict zero counters")
+        objects, identities = record["objects"], []
+        apt.fields(objects, " ".join((*isolation.NATIVE_CREATE_ORDER, "readonly_input")))
+        root = "/run/radishlink-i5-preparation/" + nonce
+        cgroup = "/sys/fs/cgroup/radishlink-i5-preparation/" + nonce
+        input_path = prerequisites["readonly_input"]["path"]
+        parsed_input = Path(input_path)
+        apt.require(str(parsed_input) == input_path and parsed_input.is_absolute() and ".." not in parsed_input.parts and
+                    parsed_input != Path("/") and parsed_input != Path(root) and Path(root) not in parsed_input.parents and
+                    parsed_input not in Path(root).parents and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./-" for c in input_path),
+                    "native readonly input lexical/disjoint path")
+        paths = dict(guest_root=root, work=root + "/work", result=root + "/result", control=root + "/control",
+                     lease=root + "/control/lease.slot", ack=root + "/control/ack.slot", cgroup_parent=cgroup,
+                     cgroup_supervisor=cgroup + "/supervisor", cgroup_worker=cgroup + "/worker", readonly_input=input_path)
+        for role, row in objects.items():
+            apt.fields(row, "before after independent_readback")
+            apt.require((row["before"] is not None) == (role == "readonly_input"), "native object creation baseline")
+            observer_values = {"before": "preexisting-observer", "after": "creator", "independent_readback": "independent-reader"}
+            after = row["after"]
+            for observation, item in row.items():
+                if item is None: continue
+                apt.fields(item, "observer realm role path nonce manifest_sha256 dev ino uid gid mode kind nlink bytes sha256 symlink limits")
+                apt.require(item["observer"] == observer_values[observation] and item["realm"] == "guest" and item["role"] == role and
+                            item["path"] == paths[role] and item["nonce"] == nonce and item["manifest_sha256"] == digest and
+                            all(type(item[k]) is int and item[k] > 0 for k in ("dev", "ino", "nlink")) and
+                            all(type(item[k]) is int and item[k] == 0 for k in ("uid", "gid")) and
+                            type(item["mode"]) is int and type(item["bytes"]) is int and item["symlink"] is False,
+                            "native object observation identity/types")
+                slot, readonly = role in ("lease", "ack"), role == "readonly_input"
+                apt.require(item["mode"] == (0o600 if slot else 0o555 if readonly else 0o700) and
+                            item["kind"] == ("regular" if slot else "readonly-tree" if readonly else "directory") and
+                            item["bytes"] == (1024 if slot else record["input_bytes"] if readonly else 0) and
+                            item["sha256"] == (hashlib.sha256(bytes(1024)).hexdigest() if slot else digest if readonly else None) and
+                            (not slot or item["nlink"] == 1), "native object observation content")
+                expected_limits = isolation.LIMITS[role.removeprefix("cgroup_")] if role.startswith("cgroup_") else None
+                apt.require(item["limits"] == expected_limits, "native object limits")
+                apt.require({k: v for k, v in item.items() if k != "observer"} ==
+                            {k: v for k, v in after.items() if k != "observer"}, "native object independent readback mismatch")
+            identities.append((after["dev"], after["ino"]))
+            domain = "readonly_input" if role == "readonly_input" else "cgroup_root" if role.startswith("cgroup_") else "root_parent"
+            apt.require(after["dev"] == prerequisites[domain]["dev"], "native object backing domain")
+            if role == "readonly_input":
+                apt.require(after["ino"] == prerequisites[domain]["ino"], "native input prerequisite identity")
+            if role.startswith("cgroup_"):
+                snapshot = groups[role.removeprefix("cgroup_")]
+                apt.require(snapshot["identity"] == [after["dev"], after["ino"]] and snapshot["path"] == after["path"],
+                            "native cgroup object/snapshot binding")
+        apt.require(len(set(identities)) == 10, "native object identity alias")
+    apt.require(value["initialization"] == value["independent_readback"], "native independent readback changed")
+
+
+def validate_native_export(raw, nonce, manifest_sha256):
+    value = apt.decode(raw, EXPORT_LIMIT)
+    apt.fields(value, "schema_version scope uuid nonce manifest_sha256 evidence_kind i5_ready passed task_export native_lifecycle")
+    apt.require(type(value["schema_version"]) is int and value["schema_version"] == 1 and value["scope"] == NATIVE_EXPORT_SCOPE and
+                value["uuid"] == apt.UUID and value["nonce"] == nonce and value["manifest_sha256"] == manifest_sha256 and
+                value["evidence_kind"] == "synthetic" and value["i5_ready"] is False and type(value["passed"]) is bool,
+                "native export scope/binding")
+    facts = value["native_lifecycle"]
+    apt.fields(facts, "schema_version scope uuid nonce manifest_sha256 delivery_sha256 backend_kind execution_authorized "
+               "install_authorized physical_verified i5_ready initialization independent_readback cleanup registered pending "
+               "processes owner_exit owner_reaped fd_closed task_supervisor_reaped task_worker_reaped first_failure cleanup_errors")
+    apt.require(type(facts["schema_version"]) is int and facts["schema_version"] == 1 and facts["scope"] == NATIVE_FACT_SCOPE and
+                facts["uuid"] == apt.UUID and facts["nonce"] == nonce and facts["manifest_sha256"] == manifest_sha256 and
+                apt.digest(facts["delivery_sha256"]) and facts["backend_kind"] == "injected-offline" and
+                all(facts[flag] is False for flag in NATIVE_LIFECYCLE_FLAGS), "native facts binding/STOP flags")
+    apt.require(len(encode(facts)) <= NATIVE_FACT_LIMIT and type(facts["registered"]) is list and
+                type(facts["pending"]) is dict and type(facts["cleanup_errors"]) is list and len(facts["cleanup_errors"]) <= 12 and
+                all(type(item) is str and 0 < len(item) <= 1000 for item in facts["cleanup_errors"]) and
+                (facts["first_failure"] is None or type(facts["first_failure"]) is str and 0 < len(facts["first_failure"]) <= 1000),
+                "native facts limits/types")
+    for flag in ("owner_reaped", "fd_closed", "task_supervisor_reaped", "task_worker_reaped"):
+        apt.require(type(facts[flag]) is bool, "native lifecycle boolean state")
+    apt.require((facts["owner_exit"] is None or type(facts["owner_exit"]) is int) and
+                facts["owner_reaped"] == (facts["owner_exit"] is not None), "native owner reap/exit contradiction")
+    apt.fields(facts["processes"], "owner supervisor worker")
+    processes = facts["processes"]
+    apt.require(type(processes["owner"]) is int and processes["owner"] > 1 and
+                all(pid is None or type(pid) is int and pid > 1 for pid in processes.values()) and
+                len({pid for pid in processes.values() if pid is not None}) == sum(pid is not None for pid in processes.values()) and
+                (not facts["task_supervisor_reaped"] or processes["supervisor"] is not None) and
+                (not facts["task_worker_reaped"] or processes["worker"] is not None), "native process tickets/reap binding")
+    registry, events = {}, []
+    for event in facts["registered"]: _register_object(registry, events, event)
+    apt.require(encode(registry) == encode(facts["pending"]), "native registration/pending mismatch")
+    init, readback, cleanup = facts["initialization"], facts["independent_readback"], facts["cleanup"]
+    apt.require((init is None) == (readback is None), "native initialization readback pair")
+    if init is not None:
+        _validate_observations(dict(initialization=init, independent_readback=readback), nonce, manifest_sha256)
+        bound = {e["role"]: e["identity"] for e in events if e["state"] == "bound"}
+        apt.require(set(bound) == set(isolation.NATIVE_CREATE_ORDER), "native initialization registry incomplete")
+        for role, ident in bound.items():
+            observations = init["objects"][role]
+            for key in ("after", "independent_readback"):
+                item = observations[key]
+                apt.require([item["dev"], item["ino"]] == ident and item["role"] == role and
+                            item["nonce"] == nonce and item["manifest_sha256"] == manifest_sha256,
+                            "native initialization/registration identity mismatch")
+    if cleanup is not None:
+        apt.fields(cleanup, "schema_version scope uuid nonce manifest_sha256 backend_kind errors cleaned pending " + " ".join(isolation.NATIVE_FALSE_FLAGS))
+        apt.require(type(cleanup["schema_version"]) is int and cleanup["schema_version"] == 1 and
+                    cleanup["scope"] == "i5-preparation-native-cleanup" and cleanup["uuid"] == apt.UUID and
+                    cleanup["nonce"] == nonce and cleanup["manifest_sha256"] == manifest_sha256 and
+                    cleanup["backend_kind"] == "injected-offline" and all(cleanup[f] is False for f in isolation.NATIVE_FALSE_FLAGS),
+                    "native cleanup scope/binding")
+        apt.require(type(cleanup["errors"]) is list and type(cleanup["cleaned"]) is list and type(cleanup["pending"]) is dict and
+                    len(cleanup["errors"]) <= 12 and all(type(e) is str and 0 < len(e) <= 1000 for e in cleanup["errors"]) and
+                    all(error in facts["cleanup_errors"] for error in cleanup["errors"]) and
+                    cleanup["cleaned"] == [e["role"] for e in events if e["state"] == "cleaned"] and
+                    encode(cleanup["pending"]) == encode({key: {field: row[field] for field in ("state", "identity")} for key, row in registry.items()}),
+                    "native cleanup/registry mismatch")
+    task = value["task_export"]
+    if task is not None:
+        apt.require(type(task) is dict and task.get("scope") == EXPORT_SCOPE, "native recursive task export rejected")
+        validate_export(encode(task), nonce, manifest_sha256)
+        apt.require(not facts["task_worker_reaped"] or task["supervision"]["reaped"], "native task reap contradiction")
+    expected = bool(facts["first_failure"] is None and facts["owner_exit"] == 0 and facts["owner_reaped"] and
+                    facts["fd_closed"] and facts["task_supervisor_reaped"] and facts["task_worker_reaped"] and
+                    init is not None and cleanup is not None and not registry and not cleanup["errors"] and
+                    not facts["cleanup_errors"] and task and task["passed"])
+    apt.require(value["passed"] == expected and (expected or facts["first_failure"] or facts["cleanup_errors"] or
+                facts["owner_exit"] != 0), "native lifecycle completion contradiction")
+    return value

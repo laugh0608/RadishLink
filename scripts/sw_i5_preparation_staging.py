@@ -15,35 +15,7 @@ import sw_i5_preparation_channels as channels
 HEADER_LIMIT = 2048
 
 
-def send(fd, raw, deadline):
-    os.set_blocking(fd, False)
-    offset = 0
-    while offset < len(raw):
-        apt.require(time.monotonic() < deadline, "staging IPC write deadline")
-        _, ready, _ = select.select([], [fd], [], min(0.01, max(0, deadline - time.monotonic())))
-        if not ready: continue
-        try: count = os.write(fd, raw[offset:offset + 65536])
-        except (BlockingIOError, InterruptedError): continue
-        apt.require(count > 0, "staging IPC zero write")
-        offset += count
-
-
-def receive(fd, deadline, limit=HEADER_LIMIT, *, line=True, allow_eof=False):
-    os.set_blocking(fd, False)
-    raw = bytearray()
-    while True:
-        apt.require(time.monotonic() < deadline, "staging IPC read deadline")
-        ready, _, _ = select.select([fd], [], [], min(0.01, max(0, deadline - time.monotonic())))
-        if not ready: continue
-        try: chunk = os.read(fd, 1 if line else min(65536, limit - len(raw)))
-        except (BlockingIOError, InterruptedError): continue
-        if not chunk and not raw and allow_eof: return b""
-        apt.require(chunk, "staging IPC EOF")
-        raw.extend(chunk)
-        apt.require(len(raw) <= limit, "staging IPC byte limit")
-        if (line and raw.endswith(b"\n")) or (not line and len(raw) == limit):
-            apt.require(time.monotonic() < deadline, "late staging IPC bytes")
-            return bytes(raw)
+from sw_i5_preparation_channels import send, receive
 
 
 class StagingClient:

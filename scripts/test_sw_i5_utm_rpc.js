@@ -79,6 +79,31 @@ for (const r of [request("open", {role: "../outside"}), request("read", {handle:
 test(() => assert.throws(() => context.preparationRPC(request("result", {process: 777}),
     {result: () => ({exited: true, exitCode: 0, signalCode: 0, outputData: "A".repeat(2796205), errorData: ""})})));
 test(() => assert.throws(() => context.run(["--preparation-rpc"])));
+const nativeDescriptor = {schema_version: 1, scope: "i5-preparation-native-library-invocation", uuid: context.TARGET_UUID,
+    nonce: "a".repeat(32), manifest_sha256: "b".repeat(64), delivery_sha256: "d".repeat(64)};
+const nativeReady = {...nativeDescriptor, scope: "i5-preparation-native-lifecycle-ready", ready: true};
+test(() => {
+    const injected = {executeNative: (descriptor, timeout) => {
+        assert.deepEqual(plain(descriptor), nativeDescriptor); assert.equal(timeout, 2); return 777;
+    }, nativeReady: () => nativeReady};
+    assert.equal(context.preparationRPC(request("execute-native", {descriptor: nativeDescriptor}), injected).value, 777);
+    assert.deepEqual(plain(context.preparationRPC(request("native-ready", {process: 777}), injected).value), nativeReady);
+    assert.equal(context.preparationRPC(request("native-ready", {process: 777}), {nativeReady: () => null}).value, null);
+});
+for (const change of [{schema_version: true}, {extra: 1}, {library_root: "/tmp/arbitrary"}, {nonce: "e".repeat(32)}]) {
+    test(() => assert.throws(() => context.preparationRPC(request("execute-native", {descriptor: {...nativeDescriptor, ...change}}),
+        {executeNative: () => assert.fail("invalid descriptor executed")})));
+}
+for (const change of [{schema_version: true}, {ready: 1}, {extra: 1}, {scope: "wrong"}]) {
+    test(() => assert.throws(() => context.preparationRPC(request("native-ready", {process: 777}),
+        {nativeReady: () => ({...nativeReady, ...change})})));
+}
+test(() => {
+    const before = calls.length;
+    assert.throws(() => context.preparationRPC(request("execute-native", {descriptor: nativeDescriptor}), api), /REAL_ADAPTER_STOP/);
+    assert.throws(() => context.preparationRPC(request("native-ready", {process: 777}), api), /REAL_ADAPTER_STOP/);
+    assert.equal(calls.length, before);
+});
 console.log("I5_UTM_RPC_SELF_TEST_PASS: " + count + " pure cases; no application calls");
 
 // Real byte contract with injected codecs/short reads and writes. No native IO.

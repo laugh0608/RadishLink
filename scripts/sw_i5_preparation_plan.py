@@ -62,6 +62,29 @@ HARD_MECHANISMS = {
     "readonly-media": "existing-readonly-bound-input",
 }
 DISABLED = {"guest_swap": "guest-all-swap-disabled", "host_swap_crash": "host-swap-and-crash-disabled"}
+HOST_COVERAGE_SCOPE = "i5-preparation-host-coverage-candidate"
+# A fixed coverage inventory, not another capacity configuration. Each tuple
+# names independently accountable components and their responsible owner.
+COVERAGE_COMPONENTS = {
+    "guest_root_var": {"root_var": "guest-system-owner"},
+    "efi_firmware": {"guest_efi_firmware": "guest-system-owner"},
+    "guest_swap": {"all_guest_swap": "guest-system-owner"},
+    "guest_system_tmpfs": {"initialization_root": "guest-initializer", "other_system_tmpfs": "guest-system-owner"},
+    "utm_qemu_logs_state": {"utm_qemu_state_logs": "host-vm-owner", "firmware_state": "host-vm-owner", "host_global_logs": "host-system-owner"},
+    "host_swap_crash": {"host_swap": "host-system-owner", "host_crash": "host-system-owner"},
+    "host_jxa_source": {"jxa_source": "evidence-worker", "library_source_assembly": "library-assembler"},
+    "host_evidence_export_source": {"export_source": "evidence-worker"},
+    "host_evidence_retained": {"retained_evidence": "evidence-owner"},
+    "readonly_input": {"apt_media": "media-provisioner", "library_media": "media-provisioner"},
+    "input_media_creation": {"apt_media_creation": "media-provisioner", "library_media_creation": "media-provisioner"},
+    "input_media_staging_copy": {"apt_media_staging": "media-provisioner", "library_media_staging": "media-provisioner"},
+    "preparation_work": {"work": "guest-worker"},
+    "preparation_result": {"result": "guest-worker"},
+    "host_backing_metadata": {"backing_snapshots_metadata": "host-vm-owner"},
+}
+MACOS_UNBOUNDED_SURFACES = ("utm_qemu_logs_state", "host_swap_crash")
+COVERAGE_HOST_SURFACES = frozenset(("utm_qemu_logs_state", "host_swap_crash", "host_jxa_source",
+    "host_evidence_export_source", "host_evidence_retained", "input_media_creation", "input_media_staging_copy", "host_backing_metadata"))
 
 
 def check(ok, path, message):
@@ -404,3 +427,149 @@ def review(plan_raw, ledger_raw, nonce, manifest_sha256):
               "capacity.surfaces." + surface, "bound source/input bytes exceed declared copy peak")
     return report("i5-review-preparation-report", plan["review_blockers"] + capacity["review_blockers"], nonce, manifest_sha256,
                   initialization=plan, capacity=capacity)
+
+
+def review_host_coverage(raw, capacity_raw, nonce, manifest_sha256, *, blobs):
+    """Bind a fixed write inventory to the existing preparation ledger only.
+
+    No I/O, provisioning, native authentication or authorization occurs here.
+    The macOS/UTM backend has no complete system write boundary in this package;
+    synthetic JSON cannot turn that engineering decision into a physical PASS.
+    """
+    value = decode(raw, HOST_COVERAGE_SCOPE)
+    fields(value, "schema_version scope kind uuid nonce manifest_sha256 capacity backend surfaces " + " ".join(FLAGS), "coverage")
+    binding(value, nonce, manifest_sha256, HOST_COVERAGE_SCOPE)
+    fields(value["capacity"], "bytes sha256", "coverage.capacity")
+    integer(value["capacity"]["bytes"], "coverage.capacity.bytes", 1, 256 * 1024)
+    check(type(capacity_raw) is bytes and value["capacity"] == dict(bytes=len(capacity_raw), sha256=hashlib.sha256(capacity_raw).hexdigest()),
+          "coverage.capacity", "exact capacity bytes required")
+    capacity_report = validate_capacity(capacity_raw, "preparation", nonce, manifest_sha256)
+    ledger = decode(capacity_raw, "i5-review-capacity")
+    check(value["backend"] in ("macos-utm", "injected-offline"), "coverage.backend", "reviewed backend required")
+    fields(value["surfaces"], " ".join(PREP_SURFACES), "coverage.surfaces")
+    check(type(blobs) is dict and all(type(k) is str and type(v) is bytes for k, v in blobs.items()),
+          "coverage.blobs", "explicit raw bytes mapping required")
+    check(sum(map(len, blobs.values())) + len(raw) + len(capacity_raw) <= 32 * MIB,
+          "coverage.blobs", "aggregate candidate input limit")
+    used_blobs, physical_ids, identities, devices, roots, mounts = set(), set(), set(), set(), [], set()
+    whole_devices = {name: 0 for name in ledger["domains"]}
+    blockers = list(capacity_report["review_blockers"])
+
+    def fact(ref, name):
+        fields(ref, "bytes sha256", name)
+        integer(ref["bytes"], name + ".bytes", 1, 256 * 1024)
+        check(apt.digest(ref["sha256"]), name, "raw fact digest required")
+        check(name in blobs and ref == dict(bytes=len(blobs[name]), sha256=hashlib.sha256(blobs[name]).hexdigest()),
+              name, "raw fact fingerprint mismatch")
+        used_blobs.add(name)
+        return decode(blobs[name], name)
+
+    for name in PREP_SURFACES:
+        path, row, budget = "coverage.surfaces." + name, value["surfaces"][name], ledger["surfaces"][name]
+        fields(row, "owner_domain charge state components physical_domains configuration observation", path)
+        for key in ("owner_domain", "charge", "state"):
+            check(type(row[key]) is type(budget[key]) and row[key] == budget[key], path + "." + key, "existing capacity projection required")
+        fields(row["components"], " ".join(COVERAGE_COMPONENTS[name]), path + ".components")
+        logical, copy_bytes, peak = 0, 0, 0
+        for component, owner in COVERAGE_COMPONENTS[name].items():
+            part, prefix = row["components"][component], path + ".components." + component
+            fields(part, "owner logical_bytes copies peak_bytes physical_domain", prefix)
+            check(part["owner"] == owner, prefix + ".owner", "fixed responsible owner required")
+            if row["state"] == "unknown":
+                check(all(part[k] is None for k in ("logical_bytes", "copies", "peak_bytes")), prefix, "unknown component cannot be charged zero")
+            else:
+                minimum = 0 if row["state"] == "disabled" else 1
+                integer(part["logical_bytes"], prefix + ".logical_bytes", minimum)
+                integer(part["copies"], prefix + ".copies", minimum, 16)
+                integer(part["peak_bytes"], prefix + ".peak_bytes", minimum)
+                check(part["peak_bytes"] >= part["logical_bytes"] * part["copies"], prefix, "copy peak undercount")
+                if row["state"] == "disabled":
+                    check(all(part[k] == 0 for k in ("logical_bytes", "copies", "peak_bytes")), prefix, "disabled component must be zero")
+                logical += part["logical_bytes"]
+                copy_bytes += part["logical_bytes"] * part["copies"]
+                peak += part["peak_bytes"]
+            check(part["physical_domain"] is None if row["state"] != "bounded" else
+                  type(part["physical_domain"]) is str and re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", part["physical_domain"]) is not None,
+                  prefix + ".physical_domain", "bounded components require an explicit physical domain; other states cannot claim one")
+        if value["backend"] == "macos-utm" and name in MACOS_UNBOUNDED_SURFACES:
+            check(row["state"] == "unknown", path, "current macOS/UTM system writes have no complete hard boundary")
+        if row["state"] == "unknown":
+            check(row["physical_domains"] == {} and all(row[k] is None for k in ("configuration", "observation")), path, "unknown boundary cannot carry completion facts")
+            continue
+        check(logical <= budget["logical_bytes"] and copy_bytes <= budget["logical_bytes"] * budget["copies"] and peak <= budget["peak_bytes"],
+              path, "component copy peaks exceed existing capacity surface")
+        domains = row["physical_domains"]
+        check(type(domains) is dict and set(domains) == {part["physical_domain"] for part in row["components"].values() if part["physical_domain"] is not None},
+              path + ".physical_domains", "exact referenced physical domains required")
+        if row["state"] == "disabled":
+            check(domains == {}, path + ".physical_domains", "disabled surface has no physical write domain")
+        if name == "readonly_input" and row["state"] == "bounded":
+            check(len(domains) == 2, path, "APT and library media require distinct physical domains")
+        reserved = 0
+        for domain_id, domain in domains.items():
+            fields(domain, "realm path dev ino mount_id filesystem_id representation hard_reserve_bytes whole_device_bytes inode_limit", path + ".physical_domains." + domain_id)
+            for key in ("filesystem_id",):
+                check(type(domain[key]) is str and re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", domain[key]) is not None,
+                      path + ".physical_domains." + key, "stable physical identity required")
+            check(domain["realm"] == ("host" if name in COVERAGE_HOST_SURFACES else "guest"), path, "fixed physical realm required")
+            if domain["realm"] == "guest":
+                integer(domain["mount_id"], path + ".physical_domains.mount_id", 1)
+                check(domain["mount_id"] not in mounts, path, "guest physical mount identity reused")
+                mounts.add(domain["mount_id"])
+            else:
+                check(domain["mount_id"] is None, path, "host mount identity is represented by filesystem ID, not a Linux mount ID")
+            root = lexical(domain["path"], path + ".physical_domains.path")
+            for key in ("dev", "ino"): integer(domain[key], path + ".physical_domains." + key, 1)
+            if budget["backing"] == "noswap-tmpfs":
+                integer(domain["inode_limit"], path + ".physical_domains.inode_limit", 1)
+            else:
+                check(domain["inode_limit"] is None, path, "inode quota declaration is reserved for bounded tmpfs")
+            integer(domain["hard_reserve_bytes"], path + ".physical_domains.hard_reserve_bytes", 1)
+            integer(domain["whole_device_bytes"], path + ".physical_domains.whole_device_bytes", 0 if row["charge"] == "H" else 1)
+            check(domain["whole_device_bytes"] == 0 if row["charge"] == "H" else domain["whole_device_bytes"] >= domain["hard_reserve_bytes"],
+                  path, "D requires the complete physical device; H cannot hide another device charge")
+            check(sum(part["peak_bytes"] for part in row["components"].values() if part["physical_domain"] == domain_id) <= domain["hard_reserve_bytes"],
+                  path, "domain component peaks exceed its share of the existing hard reserve")
+            reserved += domain["hard_reserve_bytes"]
+            whole_devices[row["owner_domain"]] += domain["whole_device_bytes"]
+            check(domain["representation"] == budget["representation"], path, "physical representation must bind existing capacity surface")
+            identity, device = (domain["realm"], domain["dev"], domain["ino"]), (domain["realm"], domain["dev"])
+            check(domain_id not in physical_ids and identity not in identities and device not in devices,
+                  path, "physical domains cannot alias or share a filesystem quota")
+            check(all(realm != domain["realm"] or fsid != domain["filesystem_id"] for realm, _, fsid in roots),
+                  path, "physical filesystem identity reused")
+            check(all(realm != domain["realm"] or (root != other and root not in other.parents and other not in root.parents)
+                      for realm, other, _ in roots), path, "physical roots overlap; aggregate or remain unknown")
+            physical_ids.add(domain_id)
+            identities.add(identity)
+            devices.add(device)
+            roots.append((domain["realm"], root, domain["filesystem_id"]))
+        check(reserved <= budget["hard_limit_bytes"], path, "physical reserves exceed existing capacity surface")
+        expected = dict(schema_version=1, scope="i5-preparation-boundary-configuration-claim", uuid=apt.UUID,
+                        nonce=nonce, manifest_sha256=manifest_sha256, capacity=value["capacity"], surface=name,
+                        owner_domain=row["owner_domain"], charge=row["charge"], state=row["state"],
+                        mechanism=budget["mechanism"], hard_limit_bytes=budget["hard_limit_bytes"],
+                        components=row["components"], physical_domains=domains, configured_before_start=True)
+        configured = fact(row["configuration"], "configuration." + name)
+        check(json.dumps(configured, sort_keys=True, separators=(",", ":"), allow_nan=False) ==
+              json.dumps(expected, sort_keys=True, separators=(",", ":"), allow_nan=False),
+              path + ".configuration", "configuration claim does not match exact existing boundary")
+        observed = fact(row["observation"], "observation." + name)
+        expected.update(scope="i5-preparation-boundary-observation-claim", configuration=row["configuration"], evidence_kind="injected-offline")
+        check(json.dumps(observed, sort_keys=True, separators=(",", ":"), allow_nan=False) ==
+              json.dumps(expected, sort_keys=True, separators=(",", ":"), allow_nan=False),
+              path + ".observation", "independent observation claim must bind configuration and same physical identity")
+    for name, size in whole_devices.items():
+        check(size <= ledger["domains"][name]["guest_device_bytes"], "coverage.domains." + name,
+              "complete physical devices exceed existing D allocation")
+    check(set(blobs) == used_blobs, "coverage.blobs", "exact fact set required; extra unbound facts rejected")
+    blockers.append("physical identities, hard limits and independent observation provenance remain unverified")
+    if value["backend"] == "macos-utm":
+        blockers.append("macos-utm: host swap, crash and global logs lack a complete hard boundary; APFS volume quotas cannot close this gate")
+    else:
+        blockers.append("injected-offline: synthetic coverage cannot admit a native backend")
+    result = report("i5-preparation-host-coverage-review", blockers, nonce, manifest_sha256,
+                    backend=value["backend"], capacity=value["capacity"], complete_write_boundary=False,
+                    feasibility="blocked-host-system-writes" if value["backend"] == "macos-utm" else "injected-offline-only",
+                    authenticity_verified=False, execution_authorized=False)
+    return result

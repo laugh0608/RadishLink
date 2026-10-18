@@ -156,6 +156,30 @@ else: raise RuntimeError("unrelated fd leaked")
                 self.bridge(PREFIX + 'v[' + repr(field) + '] = ' + repr(value) + '\n' + REPLY)(request(), 2, 2048)
         self.assert_reaped()
 
+    def test_native_fixed_descriptor_actions_and_old_program_limit(self):
+        descriptor = {"schema_version": 1, "scope": "i5-preparation-native-library-invocation", "uuid": apt.UUID,
+                      "nonce": NONCE, "manifest_sha256": DIGEST, "delivery_sha256": "d" * 64}
+        for value in (request("execute-native", {"descriptor": descriptor}), request("native-ready", {"process": 777})):
+            rpc.validate_request(value, NONCE, DIGEST)
+            reply = self.bridge(PREFIX + REPLY)(value, 2, 2048)
+            self.assertEqual(json.loads(reply)["action"], value["action"])
+        for change in ({"schema_version": True}, {"extra": 1}, {"library_root": "/tmp/arbitrary"}, {"nonce": "e" * 32}):
+            with self.assertRaises(ValueError):
+                rpc.validate_request(request("execute-native", {"descriptor": dict(descriptor, **change)}), NONCE, DIGEST)
+        for size in (48 * 1024, 48 * 1024 + 1):
+            raw = b"x" * size
+            value = request("execute", {"program_base64": __import__("base64").b64encode(raw).decode(),
+                "program_sha256": hashlib.sha256(raw).hexdigest()})
+            if size == 48 * 1024: rpc.validate_request(value, NONCE, DIGEST)
+            else:
+                with self.assertRaises(ValueError): rpc.validate_request(value, NONCE, DIGEST)
+        source = b"function preparationRPCStream(){}"
+        native = rpc.JXAProcessRPC(source, hashlib.sha256(source).hexdigest(), NONCE, DIGEST,
+            launcher=lambda *a, **k: self.fail("native action launched"), stager=self.explicit_stager())
+        for action, args in (("execute-native", {"descriptor": descriptor}), ("native-ready", {"process": 777})):
+            with self.assertRaisesRegex(ValueError, "REAL_ADAPTER_STOP"): native(request(action, args), 2, 2048)
+        self.assert_reaped()
+
     def test_cancellation_callback_and_baseexception_reap_child(self):
         called = []
         def cancelled():

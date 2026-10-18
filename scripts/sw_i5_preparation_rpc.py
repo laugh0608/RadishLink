@@ -31,6 +31,19 @@ def encode(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("utf-8")
 
 
+def validate_invocation_descriptor(value, nonce, manifest_sha256):
+    """Fixed library identity only; caller paths, scripts and callbacks are absent."""
+    supervision.Lease(nonce, manifest_sha256, started=0)
+    apt.fields(value, "schema_version scope uuid nonce manifest_sha256 delivery_sha256")
+    apt.require(type(value["schema_version"]) is int and value["schema_version"] == 1 and
+                value["scope"] == "i5-preparation-native-library-invocation" and value["uuid"] == apt.UUID and
+                value["nonce"] == nonce and value["manifest_sha256"] == manifest_sha256 and
+                apt.digest(value["delivery_sha256"]), "native invocation descriptor binding")
+    raw = encode(value)
+    apt.require(len(raw) <= 48 * 1024, "native invocation descriptor limit")
+    return apt.decode(raw, 48 * 1024)
+
+
 def validate_request(request, nonce, manifest_sha256):
     supervision.Lease(nonce, manifest_sha256, started=0)
     apt.fields(request, "schema_version scope uuid nonce manifest_sha256 sequence action args")
@@ -40,13 +53,16 @@ def validate_request(request, nonce, manifest_sha256):
                 type(request["sequence"]) is int and 0 <= request["sequence"] < 2 ** 53, "RPC request binding")
     action, args = request["action"], request["args"]
     fields = {"identify": "", "open": "role", "read": "handle", "write": "handle data",
-              "execute": "program_base64 program_sha256", "result": "process", "close": "handle"}
+              "execute": "program_base64 program_sha256", "execute-native": "descriptor",
+              "native-ready": "process", "result": "process", "close": "handle"}
     apt.require(type(action) is str and action in fields, "RPC action")
     apt.fields(args, fields[action])
     for key in ("handle", "process"):
         if key in args:
             apt.require(type(args[key]) is int and 0 < args[key] < 2 ** 53, "RPC handle")
     if action == "open": apt.require(args["role"] in ("lease", "ack"), "RPC mailbox role")
+    if action == "execute-native":
+        validate_invocation_descriptor(args["descriptor"], nonce, manifest_sha256)
     if action in ("write", "execute"):
         text = args["data" if action == "write" else "program_base64"]
         maximum = 1024 if action == "write" else 48 * 1024
@@ -218,6 +234,8 @@ class JXAProcessRPC:
         apt.require(self.stager is not None, "I5_BOUND_STAGING_REQUIRED")
         apt.require(type(timeout) in (int, float) and math.isfinite(timeout) and 0 < timeout <= 2, "RPC process budget")
         validate_request(request, self.nonce, self.digest)
+        apt.require(request["action"] not in ("execute-native", "native-ready"),
+                    "I5_NATIVE_LIFECYCLE_REAL_ADAPTER_STOP: use an explicitly injected offline RPC")
         source = assemble_jxa(self.source, self.source_sha256, request)
         deadline = started + timeout
         failure, cleanup = None, None

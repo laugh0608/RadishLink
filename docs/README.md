@@ -50,6 +50,7 @@
 - [I5 环境可行性与下一次操作包](testing/sw-g4-synthetic-i5-environment-feasibility.md)：安装差量草案、768 MiB 完整核算及验签/离线解析候选，非执行授权。
 - [I5 准备执行合同与原生证据候选](testing/sw-g4-synthetic-i5-execution-contract.md)：执行源闭包、纯一致性校验、物理前置条件与真实证据模型，非执行授权。
 - [I5 原生初始化与 bootstrap 离线实施](testing/sw-g4-synthetic-i5-native-initialization.md)：物理承载候选、Linux 后端职责、固定源码组装与独立证据绑定，非真实环境通过结论。
+- [I5 宿主写入边界与原生生命周期离线接入](testing/sw-g4-synthetic-i5-host-delivery.md)：完整写入裁决、独立库包交付、父监督职责与离线故障验收，真实入口保持停止。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 

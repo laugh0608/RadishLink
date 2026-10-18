@@ -676,8 +676,8 @@ def fork_lifecycle(evidence_parent, request, *, rpc, start, readiness, shutdown,
     # performed by the evidence worker, never in the owner controller loop.
     apt.require(type(evidence_parent) in (str, Path) or isinstance(evidence_parent, Path), "explicit evidence parent")
     apt.require(type(request) is dict, "lifecycle transport request")
-    program = transport.unbase64(request.get("program_base64"), 48 * 1024)
-    apt.require(type(request.get("schema_version")) is int and request == transport.transport_request(request["nonce"], request["manifest_sha256"], program), "lifecycle request binding")
+    native = transport.validate_transport_request(request)
+    apt.require(not native or initialization is None, "native lifecycle requires guest-owned initialization")
     if initialization is not None:
         from sw_i5_preparation_initialization import SyntheticInitialization
         apt.require(type(initialization) is SyntheticInitialization, "explicit synthetic initialization")

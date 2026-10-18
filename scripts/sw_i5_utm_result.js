@@ -329,6 +329,27 @@ function preparationRPC(request, api) {
             manifest_sha256: request.manifest_sha256, program_base64: a.program_base64};
         validateRequest(execution);
         value = api.execute(execution, 2); handle(value); break;
+    case "execute-native":
+        fields("descriptor");
+        var descriptor = a.descriptor;
+        requireFact(descriptor && Object.keys(descriptor).sort().join(",") ===
+            "delivery_sha256,manifest_sha256,nonce,schema_version,scope,uuid" && descriptor.schema_version === 1 &&
+            descriptor.scope === "i5-preparation-native-library-invocation" && descriptor.uuid === TARGET_UUID &&
+            descriptor.nonce === request.nonce && descriptor.manifest_sha256 === request.manifest_sha256 &&
+            typeof descriptor.delivery_sha256 === "string" && /^[0-9a-f]{64}$/.test(descriptor.delivery_sha256),
+            "native invocation descriptor binding");
+        value = api.executeNative(descriptor, 2); handle(value); break;
+    case "native-ready":
+        fields("process"); value = api.nativeReady(handle(a.process), 2);
+        if (value !== null) {
+            requireFact(value && Object.keys(value).sort().join(",") ===
+                "delivery_sha256,manifest_sha256,nonce,ready,schema_version,scope,uuid" && value.schema_version === 1 &&
+                value.scope === "i5-preparation-native-lifecycle-ready" && value.uuid === TARGET_UUID &&
+                value.nonce === request.nonce && value.manifest_sha256 === request.manifest_sha256 && value.ready === true &&
+                typeof value.delivery_sha256 === "string" && /^[0-9a-f]{64}$/.test(value.delivery_sha256),
+                "native initialization ready binding");
+        }
+        break;
     case "result":
         fields("process"); value = api.result(handle(a.process), 2);
         requireFact(value && typeof value.exited === "boolean", "RPC exited field");
@@ -367,6 +388,8 @@ function preparationNativeAPI(app) {
                 base64Encoding: true, closing: false}, {timeout: timeout});
         },
         execute: function (request, timeout) { return execution.execute(request, timeout).id({timeout: timeout}); },
+        executeNative: function () { throw new Error("I5_NATIVE_LIFECYCLE_REAL_ADAPTER_STOP"); },
+        nativeReady: function () { throw new Error("I5_NATIVE_LIFECYCLE_REAL_ADAPTER_STOP"); },
         result: function (id, timeout) { return app.getResult(vm.guestProcesses.byId(id), {timeout: timeout}); },
         close: function (id, timeout) { app.close(vm.guestFiles.byId(id), {timeout: timeout}); }
     };
@@ -392,7 +415,7 @@ function preparationRPCStream(io, expectedText, makeAPI) {
     var request = JSON.parse(text);
     var api;
     var deferred = {};
-    ["identify", "open", "read", "write", "execute", "result", "close"].forEach(function (name) {
+    ["identify", "open", "read", "write", "execute", "executeNative", "nativeReady", "result", "close"].forEach(function (name) {
         deferred[name] = function () {
             if (!api) { api = makeAPI(); }
             return api[name].apply(api, arguments);
