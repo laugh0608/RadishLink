@@ -58,7 +58,9 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 第四包已完成[原生初始化与 bootstrap 离线实施](../testing/sw-g4-synthetic-i5-native-initialization.md)：固定 guest 承载候选与后端职责，新增真实 Linux syscall 后端代码、同进程 FD owner、确定性库包组装和独立证据绑定；26 个后端测试、33 个组装/绑定测试及独立变异验收通过；验收后所有者另行明确授权将十三个文件提交到 dev，提交为 `b8fb2d5`，未 push。
 
-第五包的[宿主写入边界与原生生命周期](../testing/sw-g4-synthetic-i5-host-delivery.md)已固定完整组件、物理域与副本计费、独立六文件 library 交付和父监督责任，并接入持久 FD owner、既有任务 supervisor/worker 与宿主证据链的离线适配。当前 Mac/UTM 明确为 `blocked-host-system-writes`：系统 swap、崩溃/日志及域外状态硬上限仍未证明。真实 FD loader、Linux/UTM 验收和运行授权继续缺失；全部真实入口 STOP；验收后所有者另行明确授权将 28 个文件提交到 dev，本包随本次提交保存，未 push，没有启动 VM 或安装依赖。
+第五包的[宿主写入边界与原生生命周期](../testing/sw-g4-synthetic-i5-host-delivery.md)已固定完整组件、物理域与副本计费、独立六文件 library 交付和父监督责任，并接入持久 FD owner、既有任务 supervisor/worker 与宿主证据链的离线适配。当前 Mac/UTM 明确为 `blocked-host-system-writes`：系统 swap、崩溃/日志及域外状态硬上限仍未证明。真实 FD loader、Linux/UTM 验收和运行授权继续缺失；全部真实入口 STOP；验收后所有者另行明确授权将 28 个文件提交到 dev，提交为 `fa48743`，未 push，没有启动 VM 或安装依赖。
+
+第六包形成[宿主可行性与真实 FD loader 合同草案](../testing/sw-g4-synthetic-i5-host-loader-decision.md)，当前 Mac/UTM 按完整写入合同为 NO-GO。所有者随后选择 A：保留原合同、优先评估已有 Linux 资源、暂不新增采购，并确认目前只有已记录的 Mac/UTM。[路线 A 评估](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)已列最低条件、完整准备预算候选和差距：现有资源没有合格宿主；3608 MiB（424 + 3184）仅适用于复用既有 Linux 基线、不重装/整盘迁移的设计，尚未证明够用或获执行批准。正式 I5 768 MiB 不变；loader 的加载前监督、同一 FD/bytes 消费、新 scope 与实际资源仍待冻结。两包仅修改文档，所有者在收尾时另行授权提交到 dev、不 push；资源事实变化前不进入实施或真实环境操作，全部真实入口继续 STOP。
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 

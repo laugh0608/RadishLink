@@ -123,6 +123,8 @@ Apple 的 [APFS 卷说明](https://support.apple.com/en-asia/guide/disk-utility/
 
 ## 后续关闭条件
 
+第六包的设计裁决见[宿主可行性与真实 FD loader 合同草案](sw-g4-synthetic-i5-host-loader-decision.md)。其稳定预期/本次观察和可信加载职责是待接受的新设计，不改写本页六文件候选及离线验收结果。所有者后续已选 A、暂不采购，并确认仅有 Mac/UTM；[已有资源与预算评估](sw-g4-synthetic-i5-linux-host-assessment.md)判定暂无合格宿主，准备包络仅为有前提的候选，尚不进入实施。
+
 1. 为当前被阻塞的宿主系统写入提出可证明方案，或由所有者决定承载/合同变更；补齐真实配置、观察和全部副本的完整计费。
 2. 固定真实库加载、guest 工具/解释器/内核、介质 image、APT 树和 status 基线，生成无占位符的操作清单。
 3. 另行明确授权启动前配置与单次 Linux/UTM 验收，覆盖真实额度拒绝、阻塞、取消、owner 强杀、未知残留、关机与回收；不得直接沿用离线授权。
