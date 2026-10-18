@@ -1,7 +1,7 @@
 # I5 环境可行性收敛与下一次操作包
 
 - 日期：2026-10-18，Asia/Shanghai
-- 状态：Draft，可审阅；此前准备链实现为 `b0ca919`；RPC 进程桥与生命周期内部接线已通过离线验收，本轮实现随本次提交保存，未 push。真实验签/原生闭包、初始化、新执行合同及 768 MiB 后端可行性未通过，下一次操作尚不可执行
+- 状态：Draft，可审阅；此前准备链实现为 `b0ca919`；RPC/生命周期已通过离线验收并提交为 `17a142e`，未 push；本第一包初始化合同与容量账本已通过离线验收，随本次提交保存，未 push。真实验签/原生闭包、初始化实施、新执行合同及 768 MiB 后端可行性未通过，下一次操作尚不可执行
 - 用途与读者：供所有者、环境实施者及复核者决定验签/解析范围、完整容量边界及后续实施前置
 - 授权沿革：初稿为证据核对与文档设计，随后逐轮明确授权离线实现、测试与提交，各节保留当时范围；始终不启动 VM、不安装依赖、不运行 I5-R
 - 非目标：自写 OpenPGP/依赖求解器、开启真实运行入口、调整五域额度、接受安装锁、安全/许可证结论、修改旧 evidence 或授权记录
@@ -12,7 +12,7 @@
 
 初稿阶段仅做文档设计与证据核对；后续离线实现另按各节记录。涉及的未来系统/依赖操作按 L3 评审，本日未执行。未改变 [I5 资源合同](sw-g4-synthetic-i5-resource-isolation.md)、候选 JSON、入口 STOP、profile 或 I5 运行 evidence schema；新增准备合同独立版本化。
 
-本页初稿及六处入口同步已按所有者要求提交为 `e16ee48`，未 push。随后获准继续补齐信任输入与离线实施方案；信任输入见[续接输入与实施方案](#续接可信输入与离线实施方案2026-10-13)，已提交实现见[UTM 传输与证据持久化](#utm-传输与证据持久化离线续接2026-10-13)，本轮实现与最新缺口见[受监督 RPC 与单次生命周期](#受监督-rpc-与单次生命周期离线接线2026-10-18)；[10 月 13 日回顾](../status/2026-10-13-progress.md#接下来的事项)保留当时接续顺序。前面的静态包表不视为原生求解结果。
+本页初稿及六处入口同步已按所有者要求提交为 `e16ee48`，未 push。随后获准继续补齐信任输入与离线实施方案；信任输入见[续接输入与实施方案](#续接可信输入与离线实施方案2026-10-13)，已提交实现见[UTM 传输与证据持久化](#utm-传输与证据持久化离线续接2026-10-13)，RPC/生命周期见[内部接线验收](#受监督-rpc-与单次生命周期离线接线2026-10-18)，最新实现与缺口见[初始化合同与容量账本离线评审](#初始化合同与容量账本离线评审2026-10-18)；[10 月 13 日回顾](../status/2026-10-13-progress.md#接下来的事项)保留当时接续顺序。前面的静态包表不视为原生求解结果。
 
 初稿开始时本地 `dev` 基线为 `763d7ac`，核对前工作区干净。原始输入沿用[完整补充盘点](sw-g4-synthetic-i5-environment-preparation.md#完整补充盘点与正常回收通过2026-10-09)及[候选清单](../../tools/t0/i5-environment-candidates.json)：
 
@@ -512,3 +512,62 @@ JXA 增加内部有界字节驱动；原生源最多 128 KiB，按精确源摘�
 仍未执行或未关闭：真实 JXA/UTM guest-agent 行为与身份回收、控制槽和隔离环境初始化、原生基线/验签/APT 求解、全部宿主与 guest 写入硬额度、Linux 进程/namespace/cgroup 实测及物理介质掉电行为。owner 自身 SIGKILL、后代逃离已知 session 或内核不可杀任务只能保留外部恢复缺口。公开 preparation、I5 shell/Go 入口及 I5-R STOP 不变；768 MiB 不变，旧单次授权不延续。
 
 收尾检查：`./scripts/check-repo.sh` 通过（209 文件）、`git diff --check` 通过，8 个新增/修改 Python 文件 AST 解析通过，未生成 bytecode。验收时 `dev` 保持 HEAD `4384656`，相对本地 `origin/dev` 无 ahead/behind，15 个任务文件（其中 4 个新增）未暂存、未提交；没有 push 或其他远程写入。未启动长期服务或 VM，测试短寿命进程按精确 PID/登记 group 收尾，临时合成目录随测试清理；这不扩大前述外部恢复保证。
+
+
+## 初始化合同与容量账本离线评审（2026-10-18）
+
+前轮 RPC 与生命周期实现已按所有者要求提交为 `17a142e`，未 push。随后所有者授权本第一包的离线设计、纯校验、测试及文档同步，继续由主持 Agent 负责设计和独立验收、`gpt-6.1-sol / high` 实施；不授权实际初始化、VM、依赖安装、提交或 push。以下面向环境实施者和证据复核者，只表达可评审的计划与声明一致性，不是容量验收、操作授权或可执行命令清单。
+
+### 设计边界
+
+初始化计划与容量账本使用独立的 review-only 合同；旧 operation v1–v4、resource config v1、准备结果与 receipt 的既有语义保持不变。校验仅消费显式提供的 JSON bytes 和绑定参数，不查询文件系统、账号、VM 或内核，不执行任何创建、挂载、格式化、限额设置或清理动作。
+
+`review_passed` 只表示计划结构、合成观测和声明算术符合本版本要求。真实执行、安装、I5 就绪及物理验证标志始终为 false，执行阻塞项始终保留。语法、版本、未知字段、绑定或矛盾数据直接拒绝；草案显式缺失的观测与容量信息形成逐项阻塞，不能以零值、默认成功或自动补齐掩盖。
+
+入口位于[纯校验模块](../../scripts/sw_i5_preparation_plan.py)，没有 CLI。两份输入均为至多 256 KiB 的 UTF-8 JSON bytes，拒绝重复字段、非有限值、额外帧及未知字段；使用独立 schema 1 和固定 UUID、32 位十六进制 nonce、manifest SHA256。计划的 `capacity_sha256` 绑定账本原始 bytes，连空白变化也须重新评审。
+
+| 接口 | 输入 scope / 用途 | 结果边界 |
+| --- | --- | --- |
+| `validate_plan(raw, nonce, manifest_sha256)` | `i5-review-initialization`；检查固定初始化角色和合成身份读回 | 不单独证明关联账本有效 |
+| `validate_capacity(raw, profile, nonce, manifest_sha256)` | `i5-review-capacity`；显式选择 `preparation` 或 `i5-runtime` | 检查该 profile 的覆盖与算术，不探测后端 |
+| `review(plan_raw, ledger_raw, nonce, manifest_sha256)` | 仅联合评审准备期计划与账本 | 检查精确账本摘要、输入/源码/控制槽/证据副本预留和双方阻塞项 |
+
+报告绑定本次 UUID、nonce、manifest，保留 `review_only=true` 和永久执行阻塞项；`authorized`、`install_authorized`、`i5_ready`、`physical_verified` 均固定为 false。`unknown` 容量行必须用 null 表达未知，不能用 0；报告中的金额仅是已知声明的小计，存在未知项时 `review_passed=false`，不得视为完整物理总额。测试 fixture 只提供合成填法，不是可直接运行的操作包。
+
+### 初始化与阶段归属
+
+- 宿主受控 JXA 暂存根、证据父目录及独占 attempt 的准备/读回归入既有 init 窗口；guest 准备根、WORK/RESULT 挂载点、cgroup 父域与两个子域、control 目录及两个固定 1024-byte 槽的准备/读回归入 readiness。
+- 控制槽必须在 transport 打开前已准备完成，不能依赖同一次 execute 创建。JXA 每次 RPC 的源文件暂存、核对和清理仍发生于该次 RPC 的截止内；提前准备暂存根不等于提前生成了后续请求源。
+- 对象明确创建者、使用者、所有者、权限、创建/绑定规则、独立读回及失败保留/清理条件。规范路径校验只是词法约束；真实无 symlink、无替换和实际身份一致性仍需未来独立观测。
+- 时间子分配必须包含于既有阶段，不能把初始化子步骤另加到总账。默认 897 秒保守账本、900 秒绝对截止和所有原有清理预留不变；本包不调整生命周期实现。
+
+固定 13 个对象包括宿主三项、guest root/WORK/RESULT、三个 cgroup、control、lease/ack 和只读输入。新对象必须声明原先不存在；已有输入和证据父目录按绑定策略保持身份，已消费 nonce、路径交叠、相同 realm 的 inode 别名、槽多链接、权限/长度错误或独立读回替换均拒绝。合成快照的 `independent-reader` 只是明确角色，不是已经有真实独立观察的证据。
+
+### 容量口径
+
+| 账本 | 固定边界 | 本包能检查的内容 |
+| --- | --- | --- |
+| 准备期 | INPUT ≤256 MiB、WORK ≤128 MiB、RESULT ≤8 MiB、宿主留存候选 ≤32 MiB | 还须显式列出环境写入、介质制作/暂存和副本峰值的候选包络；四项之和不能冒充完整预算，候选包络不构成额度授权 |
+| I5 运行期 | build 256、daemon 160、evidence 240、diagnostic 64、node tmpfs 48 MiB，合计 768 MiB | 四磁盘域分别核算整盘 D 和本域外部开销 H，要求 D + H ≤ C；节点 48 MiB 不作为系统 tmpfs 的免费空间 |
+
+整盘 D 已包含 guest 文件系统元数据；在 D 内的逻辑份额不再与 D 重复相加，但份额峰值必须能被 D 容纳。H 必须覆盖不含在 D 中的宿主额外硬预留，四域 backing 元数据分别绑定本域。不能用数据预计占用小替代设备上限，也不能将满额四盘的额外开销移出账本。
+
+固定写入面必须覆盖 guest 系统/root-var、EFI/固件、swap 与系统 tmpfs，UTM/QEMU 日志和状态、宿主 backing、换出/崩溃、JXA 暂存及证据复制；I5 另覆盖构建、daemon/containerd/builder 和节点 tmpfs。独立副本计共存峰值；同一物理表示不得重复计费。未知 backing、没有归属或仅有 `du`/可用空间采样/逻辑文件长度的项，不能通过完整账本评审。只有 guest swap 与宿主 swap/crash 两个面允许按各自明确的禁用机制和离线来源声明计零，不能从 guest swap 禁用推导宿主无换出；其余固定面必须为有正预留的 bounded 或显式 unknown。
+
+联合评审额外核对输入介质制作与暂存两份、JXA 拼装后源码、两个控制槽、证据导出源与最终留存两份。JXA 每份保守上界为 `source_bytes + 6 × REQUEST_LIMIT + 4096`：包含最长 96 KiB 请求的 JSON 转义与 wrapper，不能只预留原始 ≤128 KiB 的源码。控制槽数据下限为两份各 1024 bytes，证据源/留存各至少覆盖既有 4 MiB STORE_LIMIT；这些 payload 下限不证明文件系统元数据已满足。WORK/RESULT 分别按既有 128/8 MiB noswap tmpfs 的完整上限预留，不能填较小预计占用换取通过。所有 backing/硬机制仍只是本包的离线声明，必须在后续实际配置、独立读回和拒绝测试中证明。
+
+### 验证与后续
+
+主持 Agent 审阅新增模块与测试并独立验收；本包只新增[计划/账本校验](../../scripts/sw_i5_preparation_plan.py)和[合成测试](../../scripts/test_sw_i5_preparation_plan.py)，没有修改既有运行代码或旧 operation/resource 合同。
+
+- `python3 -B scripts/test_sw_i5_preparation_plan.py`：19 个测试方法通过。覆盖两个 profile、13 个固定对象、缺失/未知项、版本与精确字节绑定、UTF-8/重复字段/非法类型、nonce 消费、路径与身份替换、槽权限/长度/链接、阶段预算、D + H 超额、整盘与小 payload 区分、副本漏算、JXA 拼装源峰值、swap 禁用、旧 schema 拒绝新合同，以及禁止文件系统/进程/环境查询的调用检查。
+- 主持 Agent 额外执行 12,368 次结构/类型变异：结果仅为保留全部停止标志的离线报告或 `ValueError`，无意外异常、无执行标志开启。该检查不宣称所有无效输入都已穷尽。
+- 本任务基线回归：`python3 -B scripts/check-sw-i5-resources.py self-test` 20 项、`python3 -B scripts/test_sw_i5_preparation.py` 20 个方法通过；收尾 `python3 -B scripts/test_sw_i5_utm_control.py` 4 个方法和 `python3 -B scripts/test_sw_i5_guest.py` 45 个方法通过。旧运行代码未修改，不重复宣称执行了前轮完整生命周期矩阵。
+
+实现 Agent 首次运行新增测试 exit 1：17 个方法中两个方法产生 21 个失败断言，20 个来自测试将原本 null 的字段再次改为 null，另一个将 D 设为恰好等于份额而误期望超限。修正为实际改变字段和低于份额的边界后通过，没有放宽实现的拒绝规则。主持审查另外修正了错误套用 guest 范围的 host GID、bytes JSON 对 UTF-16 的隐式接受、JXA 包装请求漏算，并补齐报告绑定；最终 19 个方法由主持 Agent 独立复验通过。实现 Agent 另有一次资源自测命令遗漏 `self-test` 参数，退出 2；按现有用法补齐动作后 20 项通过，该用法错误没有引发源码修改。
+
+真实初始化编排、受限暂存接线、新执行合同及真实准备证据版本、物理后端选择和 Linux/UTM 验收仍属于后续工作包；全部真实入口与 I5-R 保持 STOP。现有 `JXAProcessRPC` 仍使用原暂存机制，新计划不会自动替它设置根目录或 quota。不得把测试 fixture、声明机制名或 `review_passed=true` 当作实际路径、硬限额或当前操作授权。
+
+离线验收时收尾：`./scripts/check-repo.sh` 通过（211 文件），`git diff --check` 和两个新增 Python 文件的 AST 检查通过；最终代码冻结后主持 Agent 再次独立运行新增 19 个方法通过。`dev` 保持 `17a142e`、相对本地 `origin/dev` ahead 1；本包 8 个文件（6 份文档、2 个新增脚本）未暂存、未提交。没有启动 VM、安装依赖、真实 Application/UTM 调用、远程写入或遗留本任务后台进程。
+
+随后所有者明确要求将本包 8 个文件提交到 `dev`、不 push；本节实现与记录随本次提交保存。该提交授权不包含第二包实施或真实环境操作，后续梳理仍保持全部 STOP。
