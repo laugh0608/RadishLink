@@ -19,6 +19,9 @@ import sw_i5_preparation_channels as channels
 STORE_LIMIT = 4 * apt.MIB
 RECEIPT_LIMIT = 8192
 PERSIST_SECONDS = 6
+LIFECYCLE_LIMIT = 5 * 1024
+FIRST_ERROR_BYTES = 1536
+CLEANUP_BYTES = 768
 
 
 def validate_host_report(raw, nonce, manifest_sha256):
@@ -58,6 +61,90 @@ def validate_host_report(raw, nonce, manifest_sha256):
 
 def fingerprint(raw):
     return {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def validate_action_result(value, nonce, manifest_sha256, action, mode=None):
+    apt.fields(value, "schema_version scope uuid nonce manifest_sha256 action mode status forced_stop")
+    apt.require(type(value["schema_version"]) is int and value["schema_version"] == 1 and
+                value["scope"] == "i5-preparation-lifecycle-action-result" and value["uuid"] == apt.UUID and
+                value["nonce"] == nonce and value["manifest_sha256"] == manifest_sha256 and value["action"] == action and
+                value["status"] == {"start": "started", "readiness": "ready", "shutdown": "stopped"}[action] and
+                type(value["forced_stop"]) is bool and (action == "shutdown" or value["forced_stop"] is False) and
+                value["mode"] in (("normal", "recovery") if action == "shutdown" else ("work",)) and
+                (mode is None or value["mode"] == mode), "lifecycle action binding/status")
+    return value
+
+
+def validate_lifecycle(value, nonce, manifest_sha256, host_passed):
+    apt.fields(value, "schema_version scope uuid nonce manifest_sha256 evidence_kind i5_ready total_seconds "
+               "attempt_ready start_attempted start readiness shutdown_attempted shutdown transport_registered "
+               "sessions_reaped frozen first_failure failure_truncated cleanup_errors cleanup_truncated passed")
+    apt.require(type(value["schema_version"]) is int and value["schema_version"] == 1 and
+                value["scope"] == "i5-preparation-lifecycle" and value["uuid"] == apt.UUID and
+                value["nonce"] == nonce and value["manifest_sha256"] == manifest_sha256 and
+                value["evidence_kind"] == "synthetic" and value["i5_ready"] is False and value["frozen"] is True and
+                type(value["total_seconds"]) in (int, float) and 0 < value["total_seconds"] <= 900 and
+                all(type(value[k]) is bool for k in ("attempt_ready", "start_attempted", "shutdown_attempted",
+                    "transport_registered", "sessions_reaped", "frozen", "passed", "failure_truncated", "cleanup_truncated")), "lifecycle fields/binding")
+    apt.require(value["first_failure"] is None or (type(value["first_failure"]) is str and
+                0 < len(value["first_failure"]) <= 2048), "lifecycle first failure")
+    apt.require(type(value["cleanup_errors"]) is list and len(value["cleanup_errors"]) <= 16 and
+                all(type(e) is str and 0 < len(e) <= 2048 for e in value["cleanup_errors"]), "lifecycle cleanup errors")
+    apt.require(len(channels.encode(value)) <= LIFECYCLE_LIMIT and
+                len(channels.encode(value["first_failure"])) <= FIRST_ERROR_BYTES and
+                len(channels.encode(value["cleanup_errors"])) <= CLEANUP_BYTES and
+                (not value["failure_truncated"] or (value["first_failure"] is not None and value["first_failure"].endswith(" [truncated]"))),
+                "lifecycle diagnostic byte limits")
+    for action, key in (("start", "start"), ("readiness", "readiness"), ("shutdown", "shutdown")):
+        if value[key] is not None: validate_action_result(value[key], nonce, manifest_sha256, action)
+    apt.require((value["start_attempted"] or (value["start"] is None and value["readiness"] is None and
+                not value["shutdown_attempted"] and not value["transport_registered"])) and
+                (not value["start_attempted"] or value["attempt_ready"]) and
+                (value["start"] is not None or value["readiness"] is None) and
+                (not value["transport_registered"] or value["readiness"] is not None) and
+                (value["shutdown_attempted"] or value["shutdown"] is None) and
+                value["shutdown_attempted"] == value["start_attempted"] and
+                (not host_passed or (value["transport_registered"] and value["start"] is not None and value["readiness"] is not None)) and
+                value["sessions_reaped"] == (not value["cleanup_errors"] and not value["cleanup_truncated"]), "lifecycle attempt ordering")
+    apt.require(value["shutdown"] is None or value["shutdown"]["mode"] != "normal" or host_passed, "normal stop requires host success")
+    stopped = value["shutdown"] is not None and value["shutdown"]["mode"] == "normal" and not value["shutdown"]["forced_stop"]
+    expected = bool(host_passed and value["attempt_ready"] and value["start_attempted"] and value["start"] is not None and
+                    value["readiness"] is not None and value["shutdown_attempted"] and stopped and
+                    value["transport_registered"] and value["sessions_reaped"] and value["first_failure"] is None and
+                    not value["cleanup_errors"] and not value["cleanup_truncated"])
+    apt.require(value["passed"] == expected and (expected or value["first_failure"] or value["cleanup_errors"]),
+                "lifecycle passed/failure contradiction")
+    return value
+
+
+def read_file(fd, info, name, limit):
+    stream = os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
+    try:
+        before = os.fstat(stream)
+        apt.require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and before.st_uid == os.getuid() and
+                    before.st_dev == info.st_dev and before.st_mode & 0o077 == 0 and before.st_size <= limit,
+                    "unsafe evidence file")
+        data = bytearray()
+        while len(data) <= limit:
+            chunk = os.read(stream, min(65536, limit - len(data) + 1))
+            if not chunk: break
+            data.extend(chunk)
+        after = os.fstat(stream)
+        apt.require(len(data) == before.st_size and len(data) <= limit and
+                    (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
+                    (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) and
+                    os.stat(name, dir_fd=fd, follow_symlinks=False).st_ino == after.st_ino, "evidence changed while reading")
+        return bytes(data)
+    finally:
+        os.close(stream)
+
+
+def validate_attempt(raw, nonce, manifest_sha256):
+    value = apt.decode(raw, RECEIPT_LIMIT)
+    apt.require(value == {"schema_version": 1, "scope": "i5-preparation-evidence-attempt", "nonce": nonce,
+                "uuid": apt.UUID, "manifest_sha256": manifest_sha256, "i5_ready": False} and
+                type(value["schema_version"]) is int, "evidence attempt binding")
+
 
 
 class EvidenceStore:
@@ -122,7 +209,13 @@ class EvidenceStore:
         os.unlink(partial, dir_fd=self.fd)
         os.fsync(self.fd)
 
-    def persist(self, raw, process_exit, *, failure=None):
+    def verify_attempt(self):
+        self.check()
+        apt.require(set(os.listdir(self.fd)) == {"attempt.json"}, "interrupted attempt initialization")
+        validate_attempt(read_file(self.fd, os.fstat(self.fd), "attempt.json", RECEIPT_LIMIT), self.nonce, self.manifest_sha256)
+        self.check()
+
+    def persist(self, raw, process_exit, *, failure=None, lifecycle=None):
         apt.require(not self.consumed, "evidence attempt consumed")
         self.consumed = True
         apt.require(type(raw) is bytes and len(raw) <= channels.HOST_REPORT_LIMIT, "host evidence byte limit")
@@ -136,11 +229,15 @@ class EvidenceStore:
                 accepted, passed = True, value["passed"]
             except (OSError, ValueError, RuntimeError) as exc:
                 failure = str(exc)[:2048]
+        if lifecycle is not None:
+            validate_lifecycle(lifecycle, self.nonce, self.manifest_sha256, passed)
         self.write("host-report.bin", raw)
         receipt = {"schema_version": 1, "scope": "i5-preparation-evidence-receipt", "nonce": self.nonce,
                    "uuid": apt.UUID, "manifest_sha256": self.manifest_sha256, "i5_ready": False,
                    "evidence_kind": "synthetic", "accepted": accepted, "passed": passed,
                    "process_exit": process_exit, "failure": failure, "payload": fingerprint(raw)}
+        if lifecycle is not None:
+            receipt.update(schema_version=2, lifecycle=lifecycle, passed=passed and lifecycle["passed"])
         self.write("receipt.json", channels.encode(receipt))
         return read_evidence(self.path, self.nonce, self.manifest_sha256)
 
@@ -212,34 +309,15 @@ def read_evidence(path, nonce, manifest_sha256):
         info = os.fstat(fd)
         apt.require(info.st_uid == os.getuid() and info.st_mode & 0o077 == 0, "private evidence directory required")
         apt.require(set(os.listdir(fd)) == {"attempt.json", "host-report.bin", "receipt.json"}, "interrupted or extra evidence files")
-        def read(name, limit):
-            stream = os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
-            try:
-                before = os.fstat(stream)
-                apt.require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and before.st_uid == os.getuid() and
-                            before.st_dev == info.st_dev and before.st_mode & 0o077 == 0 and before.st_size <= limit,
-                            "unsafe evidence file")
-                data = bytearray()
-                while len(data) <= limit:
-                    chunk = os.read(stream, min(65536, limit - len(data) + 1))
-                    if not chunk: break
-                    data.extend(chunk)
-                after = os.fstat(stream)
-                apt.require(len(data) == before.st_size and len(data) <= limit and
-                            (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) ==
-                            (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns) and
-                            os.stat(name, dir_fd=fd, follow_symlinks=False).st_ino == after.st_ino, "evidence changed while reading")
-                return bytes(data)
-            finally:
-                os.close(stream)
-        attempt = apt.decode(read("attempt.json", RECEIPT_LIMIT), RECEIPT_LIMIT)
-        apt.require(attempt == {"schema_version": 1, "scope": "i5-preparation-evidence-attempt", "nonce": nonce,
-                    "uuid": apt.UUID, "manifest_sha256": manifest_sha256, "i5_ready": False} and
-                    type(attempt["schema_version"]) is int, "evidence attempt binding")
+        def read(name, limit): return read_file(fd, info, name, limit)
+        validate_attempt(read("attempt.json", RECEIPT_LIMIT), nonce, manifest_sha256)
         raw = read("host-report.bin", channels.HOST_REPORT_LIMIT)
         receipt = apt.decode(read("receipt.json", RECEIPT_LIMIT), RECEIPT_LIMIT)
-        apt.fields(receipt, "schema_version scope nonce uuid manifest_sha256 i5_ready evidence_kind accepted passed process_exit failure payload")
-        apt.require(type(receipt["schema_version"]) is int and receipt["schema_version"] == 1 and
+        version = receipt.get("schema_version") if type(receipt) is dict else None
+        apt.require(type(version) is int and version in (1, 2), "evidence receipt version")
+        apt.fields(receipt, "schema_version scope nonce uuid manifest_sha256 i5_ready evidence_kind accepted passed process_exit failure payload" +
+                   (" lifecycle" if version == 2 else ""))
+        apt.require(type(receipt["schema_version"]) is int and receipt["schema_version"] == version and
                     receipt["scope"] == "i5-preparation-evidence-receipt" and receipt["nonce"] == nonce and
                     receipt["uuid"] == apt.UUID and receipt["manifest_sha256"] == manifest_sha256 and
                     receipt["i5_ready"] is False and receipt["evidence_kind"] == "synthetic" and
@@ -247,13 +325,19 @@ def read_evidence(path, nonce, manifest_sha256):
                     (receipt["process_exit"] is None or type(receipt["process_exit"]) is int) and
                     receipt["payload"] == fingerprint(raw) and type(receipt["payload"]["bytes"]) is int,
                     "evidence receipt binding/digest")
+        host_passed = False
         if receipt["accepted"]:
             value = validate_host_report(raw, nonce, manifest_sha256)
-            apt.require(receipt["failure"] is None and receipt["passed"] == value["passed"] and
+            host_passed = value["passed"]
+            if version == 2: validate_lifecycle(receipt["lifecycle"], nonce, manifest_sha256, host_passed)
+            expected = host_passed if version == 1 else host_passed and receipt["lifecycle"]["passed"]
+            apt.require(receipt["failure"] is None and receipt["passed"] == expected and
                         receipt["process_exit"] == (0 if value["passed"] else 2), "evidence acceptance mismatch")
         else:
             apt.require(receipt["passed"] is False and type(receipt["failure"]) is str and
                         0 < len(receipt["failure"]) <= 2048, "failed evidence cannot pass")
+        if version == 2:
+            validate_lifecycle(receipt["lifecycle"], nonce, manifest_sha256, host_passed)
         current = path.lstat()
         apt.require(stat.S_ISDIR(current.st_mode) and path.resolve(strict=True) == path and
                     (current.st_dev, current.st_ino) == (info.st_dev, info.st_ino) and

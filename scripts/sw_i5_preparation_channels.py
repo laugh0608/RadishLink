@@ -9,6 +9,7 @@ All external transport/recovery and privileged setup are explicitly injected.
 import base64
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import select
@@ -359,7 +360,8 @@ def serve_preparation(control_fd, output_fd, ack_fd, *, work, boundary, guard, n
 
 
 def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_SECONDS,
-                  silence=supervision.LEASE_SECONDS, cleanup_seconds=25, recovery_seconds=120):
+                  silence=supervision.LEASE_SECONDS, cleanup_seconds=25, recovery_seconds=120,
+                  registration_fd=None, admission_fd=None, absolute_deadline=None, reap_seconds=2, defer_recovery=False):
     """Return PID, caller lease writer, report reader and renewal ACK reader.
 
     transport(guest_control_read_fd, result_write_fd, guest_ack_write_fd) runs
@@ -369,6 +371,21 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
     Controller waits for the matching ACK before sending another frame; it
     cannot queue future renewals while the watchdog is starting or stalled.
     """
+    # Internal lifecycle attachment only; standalone callers keep the original
+    # four returned descriptors and recovery ownership. Supplied child-side
+    # registration/admission descriptors must be closed by the caller after fork.
+    attached = registration_fd is not None or admission_fd is not None
+    apt.require(not attached or (type(registration_fd) is int and registration_fd >= 3 and
+                type(admission_fd) is int and admission_fd >= 3 and registration_fd != admission_fd), "owner admission descriptors")
+    apt.require(absolute_deadline is None or (type(absolute_deadline) in (int, float) and
+                math.isfinite(absolute_deadline) and absolute_deadline > time.monotonic()), "watchdog absolute deadline")
+    apt.require(type(reap_seconds) in (int, float) and math.isfinite(reap_seconds) and 0 < reap_seconds <= 2,
+                "watchdog reap deadline")
+    def until(seconds):
+        return min(time.monotonic() + seconds, absolute_deadline if absolute_deadline is not None else float("inf"))
+    apt.require(type(defer_recovery) is bool and (not defer_recovery or (attached and recover is None)),
+                "deferred recovery requires attached lifecycle owner and no callback")
+    extra_fds = (registration_fd, admission_fd) if attached else ()
     apt.require(0 < cleanup_seconds <= 25, "transport cleanup deadline")
     apt.require(0 < recovery_seconds <= 120, "recovery deadline")
     supervision.Lease(nonce, manifest_sha256, started=0, total=total, silence=silence, side="host")
@@ -381,7 +398,7 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
         for fd in (control_read, control_write, report_read, report_write, ack_read, ack_write): os.close(fd)
         raise
     if pid == 0:
-        close_except((control_read, report_write, ack_write))
+        close_except((control_read, report_write, ack_write) + extra_fds)
         os.setsid()
         child, guest_write, stream_read, guest_ack_read = None, None, None, None
         interrupted = []
@@ -397,7 +414,11 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
             nonlocal recovered
             apt.require(not recovered, "recovery already attempted")
             recovered = True
-            return bounded_recovery(recover, recovery_seconds)
+            if defer_recovery:
+                return {"stopped": False, "passed": False, "i5_ready": False, "deferred": True}
+            seconds = min(recovery_seconds, until(recovery_seconds) - time.monotonic())
+            apt.require(seconds > 0, "watchdog recovery absolute deadline")
+            return bounded_recovery(recover, seconds)
         try:
             lease = supervision.Lease(nonce, manifest_sha256, started=time.monotonic(), total=total,
                                       silence=silence, side="host")
@@ -408,10 +429,25 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
             child = os.fork()
             if child == 0:
                 try:
-                    close_except((guest_read, stream_write, guest_ack_write))
+                    close_except((guest_read, stream_write, guest_ack_write) + extra_fds)
+                    watchdog_parent = os.getppid()
                     os.setsid()
                     signal.signal(signal.SIGTERM, signal.SIG_DFL)
                     signal.signal(signal.SIGINT, signal.SIG_DFL)
+                    if attached:
+                        write_frame(registration_fd, encode({"schema_version": 1, "scope": "i5-preparation-transport-admission",
+                            "uuid": apt.UUID, "nonce": nonce, "manifest_sha256": manifest_sha256,
+                            "pid": os.getpid(), "watchdog_pid": watchdog_parent}))
+                        os.close(registration_fd)
+                        admission_until = until(2)
+                        while True:
+                            apt.require(time.monotonic() < admission_until, "transport admission deadline")
+                            ready, _, _ = select.select([admission_fd], [], [], 0.01)
+                            if ready:
+                                permit = os.read(admission_fd, 2)
+                                apt.require(permit == b"1" and os.getppid() == watchdog_parent, "transport owner admission lost")
+                                break
+                        os.close(admission_fd)
                     code = transport(guest_read, stream_write, guest_ack_write)
                     os._exit(code if type(code) is int and 0 <= code <= 255 else 2)
                 except BaseException as exc:
@@ -419,13 +455,14 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
                         write_bounded(stream_write, encode({"schema_version": 1, "scope": "i5-preparation-transport-error",
                             "uuid": apt.UUID, "nonce": nonce, "manifest_sha256": manifest_sha256,
                             "failure": (type(exc).__name__ + ": " + str(exc))[:2048], "i5_ready": False}),
-                            deadline=time.monotonic() + 1)
+                            deadline=until(1))
                     except BaseException:
                         pass  # Closed result pipe remains a transport failure.
                     os._exit(2)
             os.close(guest_read)
             os.close(stream_write)
             os.close(guest_ack_write)
+            for fd in extra_fds: os.close(fd)
             guest_lease = supervision.Lease(nonce, manifest_sha256, started=time.monotonic())
             guest_closed = False
             def relay():
@@ -486,7 +523,7 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
             if stream_read is not None: os.close(stream_read)
             if guest_ack_read is not None: os.close(guest_ack_read)
             if child is not None:
-                packet["transport_exit"] = wait_child(child, time.monotonic() + cleanup_seconds)
+                packet["transport_exit"] = wait_child(child, until(cleanup_seconds))
                 if packet["transport_exit"] is None:
                     packet["cleanup_errors"].append("transport reap deadline")
                     # Exact newly created session only; never pgrep or VM PID.
@@ -497,7 +534,7 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
                             os.kill(child, signal.SIGKILL)
                         except ProcessLookupError:
                             pass
-                    packet["transport_exit"] = wait_child(child, time.monotonic() + 2)
+                    packet["transport_exit"] = wait_child(child, until(reap_seconds))
                     if packet["transport_exit"] is None:
                         packet["cleanup_errors"].append("transport kill/reap unconfirmed")
         packet["passed"] = bool(packet["watchdog"] and packet["watchdog"]["transport_complete"] and
@@ -510,7 +547,7 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
             except (OSError, ValueError, RuntimeError) as failure:
                 packet["cleanup_errors"].append("recovery: " + str(failure))
         try:
-            write_bounded(report_write, encode(packet), deadline=time.monotonic() + 2,
+            write_bounded(report_write, encode(packet), deadline=until(2),
                           checkpoint=checkpoint if packet["passed"] else lambda: None)
         except (OSError, ValueError, RuntimeError):
             if not recovered:

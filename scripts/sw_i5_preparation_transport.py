@@ -14,6 +14,7 @@ import time
 
 import sw_i5_apt as apt
 import sw_i5_preparation_channels as channels
+import sw_i5_preparation_rpc as process_rpc
 import sw_i5_preparation_supervisor as supervision
 
 SLOT_BYTES = 1024
@@ -118,8 +119,10 @@ def run_transport(control_fd, output_fd, ack_fd, request, *, rpc, clock=time.mon
     """Adapt watchdog pipes to bounded UTM RPCs; execute is never retried.
 
     rpc(request, timeout, limit) returns encoded RPC JSON. Each invocation must
-    itself be bounded externally; the independent host watchdog also supervises
-    a blocked adapter. Handles never escape this one transport attempt.
+    itself be bounded externally (ProcessRPC provides the internal process
+    bridge); the independent host watchdog also supervises a blocked adapter.
+    Handles never escape this one transport attempt. No native adapter is
+    selected implicitly, and a lost execute response is never retried.
     """
     apt.fields(request, "schema_version scope uuid nonce manifest_sha256 program_sha256 program_base64")
     program = unbase64(request["program_base64"], 48 * 1024)
@@ -140,11 +143,7 @@ def run_transport(control_fd, output_fd, ack_fd, request, *, rpc, clock=time.mon
         call_id += 1
         raw = rpc(envelope, timeout=min(2, remaining), limit=RPC_LIMIT)
         apt.require(clock() < (cleanup_deadline if cleanup_call else deadline), "late UTM RPC response")
-        value = apt.decode(raw, RPC_LIMIT)
-        apt.fields(value, "schema_version scope uuid nonce manifest_sha256 sequence action value")
-        expected = {k: envelope[k] for k in ("schema_version", "uuid", "nonce", "manifest_sha256", "sequence", "action")}
-        apt.require(all(value[k] == v and type(value[k]) is type(v) for k, v in expected.items()) and
-                    value["scope"] == "i5-preparation-utm-rpc-result", "UTM RPC response binding")
+        value = process_rpc.validate_response(raw, envelope, RPC_LIMIT)
         return value["value"]
     def read_slot(role):
         return unbase64(call("read", {"handle": handles[role]}), SLOT_BYTES)

@@ -80,3 +80,72 @@ test(() => assert.throws(() => context.preparationRPC(request("result", {process
     {result: () => ({exited: true, exitCode: 0, signalCode: 0, outputData: "A".repeat(2796205), errorData: ""})})));
 test(() => assert.throws(() => context.run(["--preparation-rpc"])));
 console.log("I5_UTM_RPC_SELF_TEST_PASS: " + count + " pure cases; no application calls");
+
+// Real byte contract with injected codecs/short reads and writes. No native IO.
+function streamFixture(r, options = {}) {
+    const text = options.expected === undefined ? JSON.stringify(r) : options.expected;
+    let input = options.bytes === undefined ? Buffer.from(text) : options.bytes;
+    const writes = [], observed = [];
+    const io = {
+        read: max => { const n = Math.min(max, options.chunk || 17, input.length);
+            const part = input.subarray(0, n); input = input.subarray(n); return part; },
+        join: parts => Buffer.concat(parts),
+        decode: data => new TextDecoder("utf-8", {fatal: true}).decode(data),
+        encode: value => Buffer.from(value),
+        write: (bytes, offset, size) => { const n = Math.min(size, options.write || 11);
+            writes.push(bytes.subarray(offset, offset + n)); return n; }
+    };
+    const injected = {identify: () => ({uuid: context.TARGET_UUID, status: "started"}),
+        execute: () => { observed.push("execute"); return 777; },
+        result: id => { observed.push(id); return {exited: false}; }};
+    return {io, text, writes, observed, make: () => { observed.push("api"); return injected; }};
+}
+test(() => {
+    const f = streamFixture(request("identify", {}));
+    context.preparationRPCStream(f.io, f.text, f.make);
+    const result = JSON.parse(Buffer.concat(f.writes));
+    assert.equal(result.action, "identify");
+    assert.deepEqual(f.observed, ["api"]);
+});
+for (const bytes of [Buffer.from('{"half":'), Buffer.from('{}\n{}'), Buffer.from([255]), Buffer.alloc(98305, 32)]) {
+    test(() => { const f = streamFixture(request("identify", {}), {bytes, expected: bytes.toString("utf8"), chunk: 65536});
+        assert.throws(() => context.preparationRPCStream(f.io, f.text, f.make)); assert.deepEqual(f.observed, []); });
+}
+test(() => {
+    const f = streamFixture(request("identify", {}), {expected: "{}", bytes: Buffer.from("{} ")});
+    assert.throws(() => context.preparationRPCStream(f.io, f.text, f.make), /binding/);
+    assert.deepEqual(f.observed, []);
+});
+test(() => {
+    const f = streamFixture({...request("identify", {}), uuid: "other"});
+    assert.throws(() => context.preparationRPCStream(f.io, f.text, f.make), /binding/);
+    assert.deepEqual(f.observed, []);
+});
+test(() => {
+    const f = streamFixture(request("execute", {program_base64: "eA==", program_sha256: "c".repeat(64)}));
+    f.io.write = () => { throw new Error("synthetic consumer disappeared"); };
+    assert.throws(() => context.preparationRPCStream(f.io, f.text, f.make), /consumer disappeared/);
+    assert.deepEqual(f.observed, ["api", "execute"]);
+});
+test(() => {
+    const f = streamFixture(request("identify", {}));
+    f.io.write = () => 0;
+    assert.throws(() => context.preparationRPCStream(f.io, f.text, f.make), /zero write/);
+});
+test(() => {
+    const f = streamFixture(request("identify", {}));
+    f.io.read = max => Buffer.alloc(max + 1);
+    assert.throws(() => context.preparationRPCStream(f.io, f.text, f.make), /read size/);
+    assert.deepEqual(f.observed, []);
+});
+test(() => {
+    const f = streamFixture(request("identify", {}));
+    assert.throws(() => context.preparationRPCStream(f.io, f.text, () => ({identify: () => "x".repeat(6291456)})), /output byte limit/);
+    assert.equal(f.writes.length, 0);
+});
+test(() => {
+    const f = streamFixture(request("result", {process: 777}));
+    context.preparationRPCStream(f.io, f.text, f.make);
+    assert.deepEqual(f.observed, ["api", 777]);
+});
+console.log("I5_UTM_RPC_BYTE_DRIVER_PASS: " + count + " total pure cases; no application calls");

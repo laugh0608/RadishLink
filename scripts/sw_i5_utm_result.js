@@ -371,3 +371,68 @@ function preparationNativeAPI(app) {
         close: function (id, timeout) { app.close(vm.guestFiles.byId(id), {timeout: timeout}); }
     };
 }
+
+// Internal bounded byte driver. io is injected in pure Node tests. Blocking
+// native read/write/Apple events are bounded by the external process deadline,
+// never by a promise or an in-process timer. EOF terminates exactly one JSON.
+function preparationRPCStream(io, expectedText, makeAPI) {
+    requireFact(typeof expectedText === "string", "RPC expected input binding");
+    var chunks = [], total = 0, chunk;
+    while (true) {
+        chunk = io.read(Math.min(65536, 96 * 1024 - total + 1));
+        requireFact(chunk && integer(chunk.length) && chunk.length >= 0 &&
+            chunk.length <= Math.min(65536, 96 * 1024 - total + 1), "RPC byte read size");
+        if (chunk.length === 0) { break; }
+        total += chunk.length;
+        requireFact(total <= 96 * 1024, "RPC input byte limit");
+        chunks.push(chunk);
+    }
+    var text = io.decode(io.join(chunks));
+    requireFact(typeof text === "string" && text === expectedText, "RPC exact stdin binding/UTF8");
+    var request = JSON.parse(text);
+    var api;
+    var deferred = {};
+    ["identify", "open", "read", "write", "execute", "result", "close"].forEach(function (name) {
+        deferred[name] = function () {
+            if (!api) { api = makeAPI(); }
+            return api[name].apply(api, arguments);
+        };
+    });
+    var response = preparationRPC(request, deferred);
+    var bytes = io.encode(JSON.stringify(response));
+    requireFact(bytes && integer(bytes.length) && bytes.length > 0 && bytes.length <= 6 * 1024 * 1024,
+        "RPC output byte limit");
+    var offset = 0;
+    while (offset < bytes.length) {
+        var size = Math.min(65536, bytes.length - offset);
+        var count = io.write(bytes, offset, size);
+        requireFact(integer(count) && count > 0 && count <= size, "RPC byte short/zero write");
+        offset += count;
+    }
+}
+
+function preparationFoundationIO() {
+    // ReadDataOfLength bounds allocation per read. No readDataToEndOfFile,
+    // shell, argv payload or public run() flag is used by this internal driver.
+    ObjC.import("Foundation");
+    var input = $.NSFileHandle.fileHandleWithStandardInput;
+    var output = $.NSFileHandle.fileHandleWithStandardOutput;
+    return {
+        read: function (length) { return input.readDataOfLength(length); },
+        join: function (chunks) {
+            var data = $.NSMutableData.data;
+            chunks.forEach(function (chunk) { data.appendData(chunk); });
+            return data;
+        },
+        decode: function (data) {
+            var text = $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding);
+            requireFact(text && !text.isNil(), "RPC invalid UTF8");
+            return text.js;
+        },
+        encode: function (text) { return $(text).dataUsingEncoding($.NSUTF8StringEncoding); },
+        write: function (data, offset, length) {
+            output.writeData(data.subdataWithRange($.NSMakeRange(offset, length)));
+            return length;
+        }
+    };
+}

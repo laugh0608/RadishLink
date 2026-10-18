@@ -1,7 +1,7 @@
 # I5 环境可行性收敛与下一次操作包
 
-- 日期：2026-10-13，Asia/Shanghai
-- 状态：Draft，可审阅；固定输入及准备链内部实现已提交，最新 `b0ca919`，离线合成回归通过；真实验签/原生闭包、完整生命周期接线及 768 MiB 后端可行性未通过，下一次操作尚不可执行
+- 日期：2026-10-18，Asia/Shanghai
+- 状态：Draft，可审阅；此前准备链实现为 `b0ca919`；RPC 进程桥与生命周期内部接线已通过离线验收，本轮实现随本次提交保存，未 push。真实验签/原生闭包、初始化、新执行合同及 768 MiB 后端可行性未通过，下一次操作尚不可执行
 - 用途与读者：供所有者、环境实施者及复核者决定验签/解析范围、完整容量边界及后续实施前置
 - 授权沿革：初稿为证据核对与文档设计，随后逐轮明确授权离线实现、测试与提交，各节保留当时范围；始终不启动 VM、不安装依赖、不运行 I5-R
 - 非目标：自写 OpenPGP/依赖求解器、开启真实运行入口、调整五域额度、接受安装锁、安全/许可证结论、修改旧 evidence 或授权记录
@@ -12,7 +12,7 @@
 
 初稿阶段仅做文档设计与证据核对；后续离线实现另按各节记录。涉及的未来系统/依赖操作按 L3 评审，本日未执行。未改变 [I5 资源合同](sw-g4-synthetic-i5-resource-isolation.md)、候选 JSON、入口 STOP、profile 或 I5 运行 evidence schema；新增准备合同独立版本化。
 
-本页初稿及六处入口同步已按所有者要求提交为 `e16ee48`，未 push。随后获准继续补齐信任输入与离线实施方案；信任输入见[续接输入与实施方案](#续接可信输入与离线实施方案2026-10-13)，最新实现见[UTM 传输与证据持久化](#utm-传输与证据持久化离线续接2026-10-13)，接续顺序见[当日回顾](../status/2026-10-13-progress.md#接下来的事项)。前面的静态包表不视为原生求解结果。
+本页初稿及六处入口同步已按所有者要求提交为 `e16ee48`，未 push。随后获准继续补齐信任输入与离线实施方案；信任输入见[续接输入与实施方案](#续接可信输入与离线实施方案2026-10-13)，已提交实现见[UTM 传输与证据持久化](#utm-传输与证据持久化离线续接2026-10-13)，本轮实现与最新缺口见[受监督 RPC 与单次生命周期](#受监督-rpc-与单次生命周期离线接线2026-10-18)；[10 月 13 日回顾](../status/2026-10-13-progress.md#接下来的事项)保留当时接续顺序。前面的静态包表不视为原生求解结果。
 
 初稿开始时本地 `dev` 基线为 `763d7ac`，核对前工作区干净。原始输入沿用[完整补充盘点](sw-g4-synthetic-i5-environment-preparation.md#完整补充盘点与正常回收通过2026-10-09)及[候选清单](../../tools/t0/i5-environment-candidates.json)：
 
@@ -174,7 +174,7 @@ Docker 密钥获取位置以[官方 Debian 安装说明](https://docs.docker.com
 | 下一动作 | 产物/关闭标准 | 当前结论 |
 | --- | --- | --- |
 | 宿主离线输入准备 | 完整索引、信任依据、精确 keyring/介质清单；所有版本/hash/大小可审阅 | 固定索引/公钥字节及依据已取得；仍缺实际指纹/签名、原生基线、介质与源程序交付绑定，不把 review manifest 当执行授权 |
-| 验签/解析包离线实施 | 固定配置、受限输出、取消/回收、拒绝测试，准确 argv 和零占位符 manifest | 内部编排至传输/持久化已提交并通过合成测试；仍缺受监督原生 RPC、生命周期与初始化接线、总截止核算及真实证据合同，完整后再申请 L3 执行 |
+| 验签/解析包离线实施 | 固定配置、受限输出、取消/回收、拒绝测试，准确 argv 和零占位符 manifest | 内部编排至传输/持久化已提交；10 月 18 日 RPC/生命周期内部接线及 897/900 秒核算通过离线验收，本轮实现随本次提交保存，未 push；仍缺真实输入/初始化、完整硬额度及包含新增源文件的执行合同，完整后再申请 L3 执行 |
 | UTM 完整承载方案 | 每域实际 D/H、系统/固件/交换/宿主写入全部有机制和硬上限；容量不足时如何拒绝及回收 | 未通过；不能用验签包通过替代 |
 | 安装与隔离准备 | 已验证归档/许可/维护脚本，安装总峰值、服务自动启动抑制、身份与恢复清单 | 本包不包含；依赖差量成功也不自动安装 |
 | 真实环境验收与 I5-R | 独立硬边界、冷构建、daemon/store、域外拒绝、后代回收通过后，再评审入口重开与 21 样本 | 继续 STOP；不改 768 MiB 或原矩阵 |
@@ -464,3 +464,51 @@ RPC v1 绑定 UUID、nonce、manifest、递增调用 sequence 和 action；guest
 - `./scripts/check-repo.sh` 通过（204 文件），`git diff --check` 和六个相关 Python 文件的 AST 语法检查通过；该轮检查时十一文件未提交，`dev` 相对本地 `origin/dev` 为 ahead 5；随后提交为 `b0ca919`。前轮九文件提交 `acb654d` 后没有 push；本轮短寿命测试进程已回收，无遗留后台进程。
 - 没有启动 VM、安装依赖、运行真实 APT/验签或 I5-R，没有系统/设备/远程修改；UTM CLI、guest `--preparation-apt` 和 JXA `--collect` 的 preparation scope 仍在首次外部调用前 STOP。没有开启 RPC 的公开命令行入口。
 - 未覆盖：控制文件所在 guest 文件系统及 QEMU agent 写入的完整硬额度、独占身份/隔离初始化、实际 source/介质/program 的受授权交付、Python 与原生 JXA RPC 的受监督进程启动/I/O 桥、UTM 同句柄/写入/readback 行为实测及宿主证据 backing 的硬容量和掉电行为。guest-agent 接口只按本机声明做映射，不宣称跨 UTM 版本兼容；物理 768 MiB 和真实 Linux 回收门仍未通过。
+
+## 受监督 RPC 与单次生命周期离线接线（2026-10-18）
+
+所有者明确要求先完成 RPC 进程桥并独立验收，再继续生命周期整合、离线验证与文档同步；禁止启动 VM、安装依赖、提交或 push。主持 Agent 负责设计、实际 diff 审阅与关键行为独立复验，两个实现包串行委派给 `gpt-6.1-sol / high`；这是工程验收，不替代专业安全审计或 Linux/UTM 实测。验收时本节实现保留在本地未提交工作区；随后所有者明确要求提交已验收更改、不 push，本节实现和记录随本次提交保存，不改写 10 月 13 日及更早记录。
+
+### RPC 进程桥
+
+[进程桥](../../scripts/sw_i5_preparation_rpc.py)维持 `rpc(request, timeout, limit) -> bytes` 接口，每次调用创建一个子进程，以非阻塞管道同时推进 stdin/stdout/stderr；不用 shell，不把请求或 guest 程序放入 argv，也不重新提交 execute。子进程继承 transport 的 session/process group，关闭无关 FD，供外层监督统一收尾。直接子进程的终止和 reap 已包含在最大 2 秒调用截止内，内部预留至多 250 ms；预算不足即失败，不增加额外固定清理时间。
+
+RPC v1 继续绑定 UUID、nonce、manifest、sequence 和 action；请求至多 96 KiB、响应至多 6 MiB、stderr 至多 64 KiB。响应必须是单个合法 UTF-8 JSON，重复字段、错误身份、半帧、多帧、超限、非零退出、信号和非空 stderr 都不能成功。已执行但丢失响应时，transport 保留失败，只关闭已取得的 handle，不猜测未知 handle、不重试 execute。
+
+JXA 增加内部有界字节驱动；原生源最多 128 KiB，按精确源摘要和 stdin 字节绑定，在私有临时目录中独占创建、读回核对并清理。`JXAProcessRPC` 没有默认 launcher，未显式注入即拒绝；原公开 `run()` 未增加可执行 RPC 参数。离线测试使用真实 Python/Node 子进程和合成 Foundation/Application API，未调用真实 osascript、Apple event 或 UTM。临时源清理失败与 RPC 初始失败同时保留，清理完成后再次检查原绝对截止。
+
+同步进程创建、文件系统调用被内核阻塞，以及调用方被 SIGKILL 或关闭全部管道的遗留后代，不能仅靠此桥确认回收；必须由外层生命周期监督处理。继承 process group 不是 sandbox，逃离 session、不可杀进程和原生 UTM 的真实行为仍未验证。
+
+主持 Agent 独立复跑 RPC、transport、纯 JavaScript 新旧适配测试，并另行运行三个公开 preparation STOP 子进程与四种非法预算的启动前拒绝检查。收尾补测时曾出现一次 SIGTERM 整组取消竞态：管道先报 BrokenPipe，测试未收到预期的取消诊断而失败。修正后同时保留 I/O 首因和取消信号，并补齐测试自身失败收尾；11 个 RPC 测试方法和该信号用例 20 次针对性复验通过。保留该首次失败，不因复验通过抹去时序问题。
+
+### 生命周期整合与最终验收
+
+本轮按以下边界实施[内部生命周期](../../scripts/sw_i5_preparation_lifecycle.py)：
+
+- 调用控制端只持有专属 liveness/cancel 管道；独立 owner 持有 start、readiness、watchdog、唯一 shutdown/recovery 和最终持久化的职责。控制端在活动期被杀或断开时取消；owner 自身被 SIGKILL 仍需外部恢复，不宣称由进程内 finally 解决。
+- start/readiness/shutdown 全部要求显式注入，分别在有界子进程执行并检查 UUID、nonce、manifest、action、mode 和结果状态。启动与停止均至多一次；启动返回丢失也按已尝试处理，不能重启。
+- transport 建立独立 session 后先登记 PID，收到 owner 的单次 admission 才可进入 RPC。watchdog 的失败恢复只返回固定的显式委托状态，不能声称 stopped，也不再调用恢复 callback 或为委托另 fork 子进程；实际停止 callback 只由 owner 执行。收尾检查已登记的 session，leader 退出不自动等于后代已消失。
+- 独立证据 worker 持有既有 `EvidenceStore`，先排他创建并读回 attempt，再允许启动；最后只接收一次报告和冻结的生命周期事实，执行原有写前计费、非覆盖发布与重开校验。owner 不同步执行可能阻塞的证据文件 I/O。
+- 内部 synthetic receipt v2 增加生命周期事实；v1 默认语义保持。整体成功要求有效宿主结果、正常停止确认、必要进程清理和持久化完成。冻结前的取消必须失败；停止完成、最终事实冻结后的消费者丢失只影响交付，不能重跑或覆盖已写证据。持久化超时或证据 worker 的退出/reap 未确认仍报告未确认，不能仅凭文件可见推断完成。
+
+默认保守账本为 **897 秒**：初始化 6、启动 60、readiness 60、活动期 600、watchdog 清理 25、watchdog 报告 2、停止 120、持久化 6、最终输出 2，另加八个各 2 秒的回收槽。八槽分别对应证据初始化失败、启动、readiness、watchdog 内部 transport kill、watchdog、transport 组、停止和证据持久化；初始化与持久化由同一个证据 worker 承担，两个失败收尾槽属保守预留。
+
+全链从调用最初取得一次 monotonic 起点，以至多 900 秒绝对截止约束全部阶段；阶段上限还需为后续停止、持久化和回收保留时间。活动期 600 秒是本内部链的更紧上限，不扩张旧 host 620 秒；transport 工作窗最多 594 秒，为原 close 4 秒和输出 2 秒留在活动期内。guest 540 秒、租约静默 15 秒、RPC 2 秒及物理 768 MiB 不变。数字是代码拒绝边界和离线核算，不是实际 UTM 时限保证。
+
+### 验收记录与剩余缺口
+
+本包补测曾在 16 个方法中失败 1 项：长 Unicode callback 异常尚未登记时，清理阶段出现 `start kill: [Errno 1] Operation not permitted`，先占用了首因。实现改为在清理之前保存 action/host 原始异常，并在 kill 前先 poll/reap 已退出的直接子进程；真实清理异常仍保留并使整体失败，没有过滤 EPERM 或将回收失败改成通过。修复后针对性用例通过；实现 Agent 的 17 个生命周期方法通过，最后取消额外委托回收进程的修改另经七模式负例确认。主持 Agent 在最终代码冻结后独立复跑完整生命周期 17 个方法通过。
+
+主持 Agent 实际审阅最终 diff 与新增文件，并完成以下独立检查（全部外部 UTM/密码/APT 行为均为合成替身）：
+
+- `python3 -B scripts/test_sw_i5_rpc_process.py`：11 个方法通过；覆盖进程双向 I/O、有界输入/输出/stderr、退出/信号/取消、错误绑定、非 UTF-8、半帧/多帧、超时、JXA 源绑定及清理失败。SIGTERM 竞态修复另有 20 次针对性通过记录。
+- `python3 -B scripts/test_sw_i5_lifecycle.py`：17 个方法通过。覆盖完整 owner → watchdog → transport → 真实 RPC 子进程链、execute 生效但返回丢失、启动/readiness/停止失败与卡住、控制端 EOF/SIGKILL、watchdog 登记前后 SIGKILL、无管道后代残留、初始化 fsync/readback 失败、重复 nonce、落盘卡住、异常首因、Unicode 诊断限额、冻结前后取消、report 消费者关闭及 receipt v2 篡改。冻结后消费者关闭时 owner exit 2，原 receipt 保留、execute/shutdown 均一次；它不是向消费者成功交付的证明。
+- `python3 -B scripts/test_sw_i5_channels.py`：14 个方法通过；`python3 -B scripts/test_sw_i5_transport.py`：16 个方法通过，保留 standalone watchdog 与 receipt v1 的回归覆盖。
+- `node scripts/test_sw_i5_utm_rpc.js`：33 项纯 JavaScript 检查通过；原适配层 29 项纯 JavaScript 自测通过，无 Application/ObjC/UTM 调用。
+- 控制器 4、guest 45、APT/资源 helper 20、准备编排 20 个方法回归通过。三个公开 preparation 入口独立子进程检查均 exit 2 并包含 `I5_PREPARATION_ISOLATION_REQUIRED`；四类非法 RPC 预算在 launcher 前拒绝。额外 24 组早/晚阶段截止核对通过，所有阶段均同时受局部上限和后续清理预留约束。
+
+内部 operation v1–v4 的字段与源文件集合不变；本轮没有生成新的可执行 operation 版本，也没有把新增 RPC/lifecycle 模块悄悄塞入旧合同。未来真实执行必须绑定包含新增模块在内的完整执行源、实际基线/介质/program、精确初始化与恢复适配器，并重新核对零占位符清单。synthetic receipt v2 不是 operation v4 已可承载新执行链的证明。
+
+仍未执行或未关闭：真实 JXA/UTM guest-agent 行为与身份回收、控制槽和隔离环境初始化、原生基线/验签/APT 求解、全部宿主与 guest 写入硬额度、Linux 进程/namespace/cgroup 实测及物理介质掉电行为。owner 自身 SIGKILL、后代逃离已知 session 或内核不可杀任务只能保留外部恢复缺口。公开 preparation、I5 shell/Go 入口及 I5-R STOP 不变；768 MiB 不变，旧单次授权不延续。
+
+收尾检查：`./scripts/check-repo.sh` 通过（209 文件）、`git diff --check` 通过，8 个新增/修改 Python 文件 AST 解析通过，未生成 bytecode。验收时 `dev` 保持 HEAD `4384656`，相对本地 `origin/dev` 无 ahead/behind，15 个任务文件（其中 4 个新增）未暂存、未提交；没有 push 或其他远程写入。未启动长期服务或 VM，测试短寿命进程按精确 PID/登记 group 收尾，临时合成目录随测试清理；这不扩大前述外部恢复保证。

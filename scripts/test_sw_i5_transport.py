@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import select
 import tempfile
+import sys
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -16,6 +17,7 @@ import sw_i5_apt as apt
 import sw_i5_preparation_channels as channels
 import sw_i5_preparation_evidence as evidence
 import sw_i5_preparation_supervisor as supervision
+import sw_i5_preparation_rpc as process_rpc
 import sw_i5_preparation_transport as transport
 import sw_i5_utm_control as control
 import test_sw_i5_channels as fixtures
@@ -30,6 +32,40 @@ def export_fixture(root):
     try: return exporter.collect(fixtures.success_report(), lambda: None)
     finally: exporter.close()
 
+
+RPC_CHILD_SOURCE = r'''import base64, json, os, sys
+from pathlib import Path
+state_path, payload_path = map(Path, sys.argv[1:3])
+r = json.loads(sys.stdin.buffer.read())
+s = json.loads(state_path.read_text())
+s["calls"].append([r["action"], r["args"], os.getpid(), os.getpgrp()])
+action, a = r["action"], r["args"]
+if action == "identify": value = {"uuid": r["uuid"], "status": "started"}
+elif action == "open": value = 10 if a["role"] == "lease" else 11
+elif action == "write":
+    s["slots"][str(a["handle"])] = a["data"]
+    slot = base64.b64decode(a["data"])
+    frame = json.loads(slot[40:40 + int.from_bytes(slot[4:8], "big")])
+    ack = dict(frame, scope="i5-preparation-guest-ack"); ack.pop("action")
+    import hashlib
+    data = json.dumps(ack, separators=(",", ":")).encode()
+    prefix = b"I5M1" + len(data).to_bytes(4, "big") + hashlib.sha256(data).digest() + data
+    s["slots"]["11"] = base64.b64encode(prefix + bytes(1024 - len(prefix))).decode()
+    value = None
+elif action == "read": value = s["slots"][str(a["handle"])]
+elif action == "execute": s["executes"] += 1; value = 777
+elif action == "result":
+    assert a["process"] == 777
+    s["polls"] += 1
+    value = {"exited": False} if s["polls"] == 1 else {"exited": True, "exit_code": 0, "signal_code": 0,
+        "stdout_base64": base64.b64encode(payload_path.read_bytes()).decode(), "stderr_base64": ""}
+elif action == "close": value = None
+else: raise AssertionError(action)
+state_path.write_text(json.dumps(s))
+if s["lost"] and action == "execute": sys.exit(0)
+v = dict(r, scope="i5-preparation-utm-rpc-result", value=value); v.pop("args")
+sys.stdout.buffer.write(json.dumps(v).encode())
+'''
 
 def host_report(export):
     return dict(schema_version=1, scope="i5-preparation-host-report", nonce=NONCE, uuid=apt.UUID,
@@ -323,6 +359,44 @@ class TransportTests(unittest.TestCase):
                     finally:
                         for fd in (r, w, ar, aw): os.close(fd)
                         out.close()
+
+    def test_real_single_rpc_process_chain_keeps_handles_and_never_reexecutes(self):
+        with tempfile.TemporaryDirectory(prefix="radishlink-rpc-process-chain-") as directory:
+            root = Path(directory).resolve()
+            payload = root / "payload"
+            payload.mkdir()
+            raw_export = channels.encode(export_fixture(payload))
+            helper = root / "rpc-child.py"
+            helper.write_text(RPC_CHILD_SOURCE)
+            payload_file = root / "export.json"
+            payload_file.write_bytes(raw_export)
+            for lost in (False, True):
+                state = root / ("lost.json" if lost else "ok.json")
+                state.write_text(json.dumps({"slots": {str(i): base64.b64encode(bytes(1024)).decode() for i in (10, 11)},
+                    "calls": [], "executes": 0, "polls": 0, "lost": lost}))
+                bridge = process_rpc.ProcessRPC((sys.executable, "-I", "-B", str(helper), str(state), str(payload_file)), NONCE, DIGEST)
+                reader, writer = os.pipe()
+                ar, aw = os.pipe()
+                out = tempfile.TemporaryFile()
+                os.write(writer, supervision.Lease(NONCE, DIGEST, started=time.monotonic()).frame(0))
+                try:
+                    request = transport.transport_request(NONCE, DIGEST, b"synthetic reviewed source")
+                    if lost:
+                        with self.assertRaisesRegex(ValueError, "executed=True"):
+                            transport.run_transport(reader, out.fileno(), aw, request, rpc=bridge, total=10)
+                    else:
+                        self.assertEqual(transport.run_transport(reader, out.fileno(), aw, request, rpc=bridge, total=10), 0)
+                        out.seek(0)
+                        self.assertEqual(out.read(), raw_export)
+                    observed = json.loads(state.read_text())
+                    self.assertEqual(observed["executes"], 1)
+                    self.assertEqual([a[1]["handle"] for a in observed["calls"] if a[0] == "close"], [10, 11])
+                    self.assertEqual({a[3] for a in observed["calls"]}, {os.getpgrp()})
+                    if not lost:
+                        self.assertEqual([a[1]["process"] for a in observed["calls"] if a[0] == "result"], [777, 777])
+                finally:
+                    for fd in (reader, writer, ar, aw): os.close(fd)
+                    out.close()
 
     def test_host_watchdog_transport_and_persistence_chain(self):
         with tempfile.TemporaryDirectory(prefix="radishlink-utm-chain-") as directory:
