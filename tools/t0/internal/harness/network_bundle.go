@@ -79,6 +79,19 @@ func checkNetworkManifest(p NetworkProfile, m NetworkManifest) error {
 	return nil
 }
 func WriteNetworkBundle(root string, b NetworkBundle) error {
+	return writeNetworkBundle(root, b, nil)
+}
+
+// WriteNetworkBundleBudgeted is the supervisor's output path. The unbudgeted
+// wrapper remains for standalone offline verifier fixtures, not batch runs.
+func WriteNetworkBundleBudgeted(root string, b NetworkBundle, budget *NetworkWriteBudget) error {
+	if budget == nil {
+		return errors.New("network bundle requires a write budget")
+	}
+	return writeNetworkBundle(root, b, budget)
+}
+
+func writeNetworkBundle(root string, b NetworkBundle, budget *NetworkWriteBudget) error {
 	metrics, assertions, result, err := AssessNetwork(b)
 	if err != nil {
 		return err
@@ -119,13 +132,24 @@ func WriteNetworkBundle(root string, b NetworkBundle) error {
 		total += len(raw)
 		files[name] = raw
 	}
-	if total > 32*1024*1024 {
+	checksum := networkChecksum(files)
+	if total+len(checksum) > 32*1024*1024 {
 		return errors.New("network bundle cap")
+	}
+	if budget != nil {
+		if err = budget.Reserve(int64(total + len(checksum))); err != nil {
+			return err
+		}
 	}
 	if err = prepareEvidenceRoot(root); err != nil {
 		return err
 	}
 	for _, name := range networkFiles {
+		if budget != nil {
+			if err = budget.Check(); err != nil {
+				return err
+			}
+		}
 		limit := MaxEvidenceFileBytes
 		if name == "execution.ndjson" {
 			limit = 16 * 1024 * 1024
@@ -134,7 +158,15 @@ func WriteNetworkBundle(root string, b NetworkBundle) error {
 			return err
 		}
 	}
-	return finalizeNetwork(root)
+	if _, err = verifyNetwork(root, false); err != nil {
+		return err
+	}
+	if budget != nil {
+		if err = budget.Check(); err != nil {
+			return err
+		}
+	}
+	return atomicWriteEvidenceFile(root, "checksums.sha256", checksum)
 }
 func networkInventory(root string, checksum bool) (map[string][]byte, error) {
 	if err := inspectEvidenceRoot(root); err != nil {
@@ -190,10 +222,18 @@ func networkInventory(root string, checksum bool) (map[string][]byte, error) {
 		}
 		files[name] = raw
 	}
+	// Reserve checksum space even before finalization, so finalize cannot
+	// successfully produce a bundle which the checksum-aware reader rejects.
+	if total+int64(len(networkChecksum(files))) > 32*1024*1024 {
+		return nil, errors.New("network bundle cap including checksum")
+	}
 	if checksum {
 		raw, err := readEvidenceFile(root, "checksums.sha256")
 		if err != nil {
 			return nil, err
+		}
+		if total+int64(len(raw)) > 32*1024*1024 {
+			return nil, errors.New("network bundle cap including checksum")
 		}
 		checks, err := parseChecksums(raw)
 		if err != nil || len(checks) != len(networkFiles) {
@@ -261,11 +301,15 @@ func finalizeNetwork(root string) error {
 	if err != nil {
 		return err
 	}
+	return atomicWriteEvidenceFile(root, "checksums.sha256", networkChecksum(files))
+}
+
+func networkChecksum(files map[string][]byte) []byte {
 	var out bytes.Buffer
 	for _, name := range networkFiles {
 		fmt.Fprintf(&out, "%s  %s\n", scenarioDigest(files[name]), name)
 	}
-	return atomicWriteEvidenceFile(root, "checksums.sha256", out.Bytes())
+	return out.Bytes()
 }
 func networkProjection(b NetworkBundle) ([]byte, error) {
 	// All raw sources were validated before this explicit, typed normalization.

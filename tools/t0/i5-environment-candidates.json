@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "scope": "i5-environment-source-candidates",
+  "observed_date": "2026-10-06",
+  "install_authorized": false,
+  "i5_ready": false,
+  "docker_index": {
+    "url": "https://download.docker.com/linux/debian/dists/trixie/stable/binary-arm64/Packages.gz",
+    "bytes": 56440,
+    "sha256": "3271cf684b10183a5f930877b67efe0294f92ded4718caec59a0fd9a586d7146",
+    "inrelease_url": "https://download.docker.com/linux/debian/dists/trixie/InRelease",
+    "inrelease_date": "2026-10-02T16:24:32Z",
+    "inrelease_sha256": "247d0572861a9deb52b8e6c1ba065685253af3c5c2fe433ae77f89d15e681ba6",
+    "index_hash_matches_inrelease": true,
+    "signature_verified": false
+  },
+  "go": {
+    "version": "go1.26.8",
+    "architecture": "linux-arm64",
+    "url": "https://go.dev/dl/go1.26.8.linux-arm64.tar.gz",
+    "metadata_url": "https://go.dev/dl/?mode=json&include=all",
+    "bytes": 63811405,
+    "sha256": "211ffced9dcb9633a55eac6364816ec0ddd951389a740e88fa8b3337971bdda0",
+    "artifact_downloaded": false
+  },
+  "docker_packages": [
+    {
+      "name": "containerd.io",
+      "version": "2.3.6-1~debian.13~trixie",
+      "architecture": "arm64",
+      "url": "https://download.docker.com/linux/debian/dists/trixie/pool/stable/arm64/containerd.io_2.3.6-1~debian.13~trixie_arm64.deb",
+      "bytes": 19570340,
+      "sha256": "10c67eebc8e371f3b246fc35ff4a89c3ecf00d28e857c9659519050f47b4fb31",
+      "depends": "libc6 (>= 2.38), libseccomp2 (>= 2.6.0)",
+      "recommends": "",
+      "artifact_downloaded": false
+    },
+    {
+      "name": "docker-buildx-plugin",
+      "version": "0.37.1-1~debian.13~trixie",
+      "architecture": "arm64",
+      "url": "https://download.docker.com/linux/debian/dists/trixie/pool/stable/arm64/docker-buildx-plugin_0.37.1-1~debian.13~trixie_arm64.deb",
+      "bytes": 14807164,
+      "sha256": "47b658be0516d609da2e7ce016915fe2a6f4bd5713b76c995d6df2440ec6816f",
+      "depends": "",
+      "recommends": "",
+      "artifact_downloaded": false
+    },
+    {
+      "name": "docker-ce",
+      "version": "5:29.8.2-1~debian.13~trixie",
+      "architecture": "arm64",
+      "url": "https://download.docker.com/linux/debian/dists/trixie/pool/stable/arm64/docker-ce_29.8.2-1~debian.13~trixie_arm64.deb",
+      "bytes": 20857648,
+      "sha256": "b319ba32b49191ae8f6065fd4bee70f5f804e2f25e2a744a30c011f58168bed0",
+      "depends": "containerd.io (>= 2.1.5), docker-ce-cli, iptables, nftables, libc6 (>= 2.34), libsystemd0",
+      "recommends": "apparmor, ca-certificates, docker-ce-rootless-extras, git, pigz, procps, xz-utils",
+      "artifact_downloaded": false
+    },
+    {
+      "name": "docker-ce-cli",
+      "version": "5:29.8.2-1~debian.13~trixie",
+      "architecture": "arm64",
+      "url": "https://download.docker.com/linux/debian/dists/trixie/pool/stable/arm64/docker-ce-cli_29.8.2-1~debian.13~trixie_arm64.deb",
+      "bytes": 15816824,
+      "sha256": "443b79cd0a2439588b7cbd140867230941dba4c4185ee8044ce3fd561ea6bbaf",
+      "depends": "libc6 (>= 2.34)",
+      "recommends": "docker-buildx-plugin, docker-compose-plugin",
+      "artifact_downloaded": false
+    }
+  ],
+  "unresolved": [
+    "verify Docker InRelease with an independently trusted key",
+    "resolve and pin Debian transitive dependencies against guest baseline",
+    "verify artifact bytes and package control scripts before installation",
+    "collect complete license and attribution material",
+    "review Buildx 0.37.2 upstream versus indexed 0.37.1 before final lock",
+    "prove host backing and environment writes fit the unchanged 768 MiB envelope"
+  ]
+}

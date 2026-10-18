@@ -45,11 +45,25 @@
 - [后续 `SW-G4` 持久文字路径单元 I3](testing/sw-g4-synthetic-i3-plan.md)：合成 envelope、队列资源、文件提交恢复合同与完整离线路径验证记录。
 - [后续 `SW-G4` 场景与证据接入单元 I4](testing/sw-g4-synthetic-i4-plan.md)：离线 variant、版本化事实/断言、三次比较与实施验证记录。
 - [后续 `SW-G4` 三进程文字闭环单元 I5](testing/sw-g4-synthetic-i5-plan.md)：独立进程/TCP、监督屏障与证据合同；I5-I 离线验收记录及 I5-R 运行边界。
+- [I5 整批资源隔离设计](testing/sw-g4-synthetic-i5-resource-isolation.md)：保留 768 MiB、构建与写入隔离要求、入口停止检查及重新开放条件。
+- [I5 专用环境准备评审包](testing/sw-g4-synthetic-i5-environment-preparation.md)：工具来源候选、身份交接与宿主容量缺口，非安装授权。
+- [I5 环境可行性与下一次操作包](testing/sw-g4-synthetic-i5-environment-feasibility.md)：安装差量草案、768 MiB 完整核算及验签/离线解析候选，非执行授权。
+- [I5 准备执行合同与原生证据候选](testing/sw-g4-synthetic-i5-execution-contract.md)：执行源闭包、纯一致性校验、物理前置条件与真实证据模型，非执行授权。
+- [I5 原生初始化与 bootstrap 离线实施](testing/sw-g4-synthetic-i5-native-initialization.md)：物理承载候选、Linux 后端职责、固定源码组装与独立证据绑定，非真实环境通过结论。
+- [I5 宿主写入边界与原生生命周期离线接入](testing/sw-g4-synthetic-i5-host-delivery.md)：完整写入裁决、独立库包交付、父监督职责与离线故障验收，真实入口保持停止。
+- [I5 宿主可行性裁决与真实 FD loader 合同草案](testing/sw-g4-synthetic-i5-host-loader-decision.md)：当前承载 NO-GO、替代路线、稳定预期与本次观察、可信加载职责及决策状态。
+- [I5 路线 A 已有 Linux 资源与准备预算](testing/sw-g4-synthetic-i5-linux-host-assessment.md)：宿主最低条件、完整准备包络候选、现有资源差距与后续前置。
 - [`SW-G4 / SW-V0` Harness 最小实现与运行授权包](testing/sw-g4-sw-v0-harness-authorization.md)：harness 实施、运行合同与结论边界。
 - [技术证据](research/technology-evidence.md)
 
 ## 决策记录
 
+- [2026-10-18 开发回顾与接续事项](status/2026-10-18-progress.md)：当天全部提交、代码与文档核对、路线 A 资源门及接下来的事项。
+
+- [2026-10-13 开发回顾与接续事项](status/2026-10-13-progress.md)：当天全部提交、I5 准备链代码与文档核对、离线验证边界及后续事项。
+- [2026-10-09 开发回顾与明日事项](status/2026-10-09-progress.md)：当天全部提交、补充盘点与生命周期代码核对、文档同步及次日接续顺序。
+- [2026-10-06 开发回顾与明日事项](status/2026-10-06-progress.md)：当天全部提交、guest 盘点与回收代码核对、环境准备缺口及次日接续顺序。
+- [2026-10-01 开发回顾与明日事项](status/2026-10-01-progress.md)：当天全部提交、资源隔离实施核对、专用 VM 准备边界及次日接续顺序。
 - [2026-09-26 开发回顾与明日事项](status/2026-09-26-progress.md)：当天提交、代码与文档核对、I5-R 前置缺口及次日接续顺序。
 - [2026-09-03 状态与批次快照](status/2026-09-03-progress.md)：历史流水与证据引用，非当前授权。
 - [ADR 索引](adr/README.md)

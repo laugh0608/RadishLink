@@ -384,7 +384,7 @@ func (s *processSample) resourceID(alias string) string {
 	return ""
 }
 func (s *processSample) containerArgs(node string) []string {
-	args := []string{"create", "-i", "--name", s.run + "-" + strings.ToLower(node), "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m", "--user", "65532:65532", "--cpus", "0.5", "--memory", "256m", "--pids-limit", "64", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--sysctl", "net.ipv4.ip_forward=0", "--restart", "no", "--log-driver", "none"}
+	args := []string{"create", "-i", "--name", s.run + "-" + strings.ToLower(node), "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m", "--ipc", "none", "--user", "65532:65532", "--cpus", "0.5", "--memory", "256m", "--pids-limit", "64", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--sysctl", "net.ipv4.ip_forward=0", "--restart", "no", "--log-driver", "none"}
 	args = append(args, s.labelArgs(node)...)
 	network := "ab"
 	if node == "C" {
@@ -405,6 +405,8 @@ type dockerInspect struct {
 	}
 	HostConfig struct {
 		ReadonlyRootfs bool
+		IpcMode        string
+		Tmpfs          map[string]string
 		Privileged     bool
 		CapDrop        []string
 		SecurityOpt    []string
@@ -545,6 +547,9 @@ func (s *processSample) prepare() error {
 		}
 		if r.kind == "container" {
 			h := v.HostConfig
+			if h.IpcMode != "none" || len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,noexec,nosuid,size=16m" {
+				return errors.New("container temporary storage mismatch")
+			}
 			if !h.ReadonlyRootfs || h.Privileged || !slices.Equal(h.CapDrop, []string{"ALL"}) || !slices.Contains(h.SecurityOpt, "no-new-privileges") || h.Sysctls["net.ipv4.ip_forward"] != "0" || h.RestartPolicy.Name != "no" || h.Memory != 256*1024*1024 || h.NanoCpus != 500000000 || h.PidsLimit != 64 || h.LogConfig.Type != "none" || len(h.Binds) != 0 || len(h.PortBindings) != 0 || v.Config.User != "65532:65532" {
 				return errors.New("container controls mismatch")
 			}

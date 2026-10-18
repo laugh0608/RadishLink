@@ -17,13 +17,14 @@ import (
 
 // This runner never invokes Docker, a socket, or a subprocess. Its evidence is a verifier fixture only.
 type memoryRunner struct {
-	t          *testing.T
-	root       string
-	objects    map[string]dockerInspect
-	world      map[string]*memoryNetwork
-	actors     map[string]*nodeActor
-	calls      [][]string
-	failRemove bool
+	t               *testing.T
+	root            string
+	objects         map[string]dockerInspect
+	world           map[string]*memoryNetwork
+	actors          map[string]*nodeActor
+	calls           [][]string
+	failRemove      bool
+	inspectMutation func(*dockerInspect)
 }
 
 func newMemoryRunner(t *testing.T) *memoryRunner {
@@ -78,6 +79,11 @@ func (r *memoryRunner) Run(_ context.Context, name string, args ...string) ([]by
 		node := v.Config.Labels["org.radishlink.sw-i5.node"]
 		v.Config.User = option(args, "--user")
 		v.HostConfig.ReadonlyRootfs = slices.Contains(args, "--read-only")
+		v.HostConfig.IpcMode = option(args, "--ipc")
+		mountParts := strings.SplitN(option(args, "--tmpfs"), ":", 2)
+		if len(mountParts) == 2 {
+			v.HostConfig.Tmpfs = map[string]string{mountParts[0]: mountParts[1]}
+		}
 		v.HostConfig.CapDrop = []string{option(args, "--cap-drop")}
 		v.HostConfig.SecurityOpt = []string{option(args, "--security-opt")}
 		v.HostConfig.Sysctls = map[string]string{"net.ipv4.ip_forward": "0"}
@@ -105,6 +111,9 @@ func (r *memoryRunner) Run(_ context.Context, name string, args ...string) ([]by
 		v, ok := r.objects[args[len(args)-1]]
 		if !ok {
 			return nil, errors.New("test missing resource")
+		}
+		if r.inspectMutation != nil && v.Config.User != "" {
+			r.inspectMutation(&v)
 		}
 		return json.Marshal([]dockerInspect{v})
 	}
