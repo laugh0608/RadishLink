@@ -15,9 +15,7 @@ import os
 from pathlib import Path
 import selectors
 import signal
-import stat
 import subprocess
-import tempfile
 import threading
 import time
 
@@ -115,6 +113,8 @@ class ProcessRPC:
             while selector.get_map() or process.poll() is None:
                 apt.require(not interrupted and not self.cancelled(), "RPC cancelled")
                 remaining = io_deadline - time.monotonic()
+                if remaining <= 0 and process.poll() is not None and selector.get_map():
+                    raise ValueError("RPC pipe still open after child exit; descendant cleanup unconfirmed")
                 apt.require(remaining > 0, "RPC process deadline")
                 ready = selector.select(min(remaining, 0.01))
                 for key, _ in ready:
@@ -138,10 +138,9 @@ class ProcessRPC:
                         else:
                             apt.require(len(data) <= budget, "RPC " + name + " limit")
                             buffers[name].extend(data)
-                # EOF belongs to this invocation, not a descendant retaining a
-                # pipe. Never wait unboundedly after the direct child exits.
-                if not ready and process.poll() is not None and selector.get_map():
-                    raise ValueError("RPC pipe still open after child exit; descendant cleanup unconfirmed")
+                # A child can exit between an empty select and poll. Drain its
+                # remaining bytes/EOF until the same I/O deadline; a single
+                # empty readiness result cannot prove a descendant pipe leak.
             apt.require(sent == len(raw), "RPC incomplete stdin")
             apt.require(process.returncode == 0, "RPC child exit/signal: " + str(process.returncode))
             apt.require(not buffers["stderr"], "RPC child stderr is nonempty")
@@ -201,36 +200,33 @@ class JXAProcessRPC:
     No default launch, CLI, discovery or enable flag. Tests inject launchers that
     replace osascript with synthetic Python/Node; no real Application is called.
     """
-    def __init__(self, source, source_sha256, nonce, manifest_sha256, *, launcher=None, cancelled=lambda: False):
+    def __init__(self, source, source_sha256, nonce, manifest_sha256, *, launcher=None, cancelled=lambda: False, stager=None):
         apt.require(type(source) is bytes and 0 < len(source) <= 128 * 1024 and apt.digest(source_sha256) and
                     hashlib.sha256(source).hexdigest() == source_sha256, "JXA source digest")
         supervision.Lease(nonce, manifest_sha256, started=0)
         self.source, self.source_sha256, self.nonce, self.digest = source, source_sha256, nonce, manifest_sha256
         self.launcher, self.cancelled = launcher, cancelled
+        self.stager = stager
+
+    def with_stager(self, stager):
+        return JXAProcessRPC(self.source, self.source_sha256, self.nonce, self.digest,
+                             launcher=self.launcher, cancelled=self.cancelled, stager=stager)
 
     def __call__(self, request, timeout, limit):
         started = time.monotonic()
         apt.require(self.launcher is not None, "I5_NATIVE_RPC_INTERNAL_ONLY")
+        apt.require(self.stager is not None, "I5_BOUND_STAGING_REQUIRED")
         apt.require(type(timeout) in (int, float) and math.isfinite(timeout) and 0 < timeout <= 2, "RPC process budget")
         validate_request(request, self.nonce, self.digest)
         source = assemble_jxa(self.source, self.source_sha256, request)
-        directory = tempfile.TemporaryDirectory(prefix="radishlink-i5-rpc-")
+        deadline = started + timeout
         failure, cleanup = None, None
+        path = None
         try:
-            path = Path(directory.name) / "bound-rpc.js"
-            with path.open("xb") as output:
-                os.chmod(path, 0o600)
-                output.write(source)
-            # Private directory and exclusive regular source, exact bytes bound
-            # immediately before launching; the launcher receives only its path.
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
-            try:
-                info = os.fstat(fd)
-                apt.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and
-                            stat.S_IMODE(info.st_mode) == 0o600 and info.st_size == len(source) and
-                            os.read(fd, len(source) + 1) == source, "JXA staged source changed")
-            finally: os.close(fd)
-            remaining = started + timeout - time.monotonic()
+            path = self.stager.stage(request["sequence"], source, deadline)
+            # Keep source cleanup INSIDE the same call deadline. ProcessRPC's
+            # kill/reap reserve also remains inside its shortened work window.
+            remaining = deadline - time.monotonic() - min(0.25, timeout / 4)
             apt.require(remaining > 0, "RPC source staging deadline")
             result = ProcessRPC(("/usr/bin/osascript", "-l", "JavaScript", str(path)), self.nonce, self.digest,
                                 launcher=self.launcher, cancelled=self.cancelled)(request, remaining, limit)
@@ -238,7 +234,7 @@ class JXAProcessRPC:
             failure = exc
         finally:
             try:
-                directory.cleanup()
+                if path is not None: self.stager.clean(request["sequence"], deadline)
             except BaseException as exc:
                 cleanup = exc
         if failure is not None:
@@ -251,7 +247,7 @@ class JXAProcessRPC:
             raise failure
         if cleanup is not None:
             raise ValueError("JXA RPC source cleanup: " + str(cleanup)) from cleanup
-        apt.require(time.monotonic() < started + timeout, "RPC source cleanup deadline")
+        apt.require(time.monotonic() < deadline, "RPC source cleanup deadline")
         return result
 
 

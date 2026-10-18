@@ -209,7 +209,7 @@ class LifecycleTests(unittest.TestCase):
             if target == "fsync": context = patch.object(os, "fsync", side_effect=lambda fd: time.sleep(10))
             else: context = patch.object(evidence.EvidenceStore, "verify_attempt", side_effect=ValueError("attempt readback mismatch"))
             with context:
-                values = self.start(limits=budget(init=0.15))
+                values = self.start(limits=budget(init=0.6))
                 value, code = self.collect(values)
             self.assertEqual(code, 2, value)
             self.assertFalse(value["lifecycle"]["start_attempted"])

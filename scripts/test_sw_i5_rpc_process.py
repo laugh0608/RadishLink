@@ -38,6 +38,19 @@ class ProcessTests(unittest.TestCase):
         self.root, self.children = Path(self.temp.name), []
         self.index = 0
 
+    def explicit_stager(self):
+        root = self.root / "controlled-staging"
+        root.mkdir(mode=0o700)
+        class Fixture:
+            def stage(self, sequence, source, deadline):
+                path = root / (str(sequence) + ".js")
+                with path.open("xb") as output: output.write(source)
+                path.chmod(0o600)
+                return str(path)
+            def clean(self, sequence, deadline):
+                (root / (str(sequence) + ".js")).unlink()
+        return Fixture()
+
     def bridge(self, source, **options):
         path = self.root / (str(self.index) + ".py")
         self.index += 1
@@ -112,6 +125,24 @@ else: raise RuntimeError("unrelated fd leaked")
     def test_full_stderr_pipe_is_drained_without_deadlock(self):
         with self.assertRaisesRegex(ValueError, "stderr is nonempty"):
             self.bridge(PREFIX + 'sys.stderr.buffer.write(b"x" * 65536); sys.stderr.buffer.flush()\n' + REPLY)(request(), 2, 2048)
+        self.assert_reaped()
+
+    def test_child_exit_after_empty_select_still_drains_bytes_and_eof(self):
+        original = rpc.selectors.DefaultSelector
+        outer = self
+        class ExitBetweenSelectAndPoll:
+            def __init__(self): self.inner, self.delayed = original(), False
+            def __getattr__(self, name): return getattr(self.inner, name)
+            def select(self, timeout):
+                ready = self.inner.select(timeout)
+                if not self.delayed and any(key.data != "stdin" for key, _ in ready):
+                    outer.children[-1].wait(timeout=1)
+                    self.delayed = True
+                    return []
+                return ready
+        with patch.object(rpc.selectors, "DefaultSelector", ExitBetweenSelectAndPoll):
+            value = self.bridge(PREFIX + REPLY)(request(), 2, 2048)
+        self.assertEqual(json.loads(value)["sequence"], 0)
         self.assert_reaped()
 
     def test_binding_errors_rejected_without_launch_and_response_binding_checked(self):
@@ -245,7 +276,9 @@ context.run([]);
             child = subprocess.Popen((shutil.which("node"), str(helper), str(path)), **kwargs)
             self.children.append(child)
             return child
-        native = rpc.JXAProcessRPC(source, digest, NONCE, DIGEST, launcher=launch)
+        with self.assertRaisesRegex(ValueError, "I5_BOUND_STAGING_REQUIRED"):
+            rpc.JXAProcessRPC(source, digest, NONCE, DIGEST, launcher=launch)(request(), 2, 2048)
+        native = rpc.JXAProcessRPC(source, digest, NONCE, DIGEST, launcher=launch, stager=self.explicit_stager())
         self.assertEqual(json.loads(native(request(), 2, 2048))["sequence"], 0)
         self.assertFalse(paths[0].exists())
         self.assert_reaped()
@@ -255,12 +288,13 @@ context.run([]);
         digest = hashlib.sha256(source).hexdigest()
         def launch(*args, **kwargs):
             raise OSError("synthetic launch failed")
-        native = rpc.JXAProcessRPC(source, digest, NONCE, DIGEST, launcher=launch)
-        original = tempfile.TemporaryDirectory.cleanup
-        def cleanup(directory):
-            original(directory)
+        stager = self.explicit_stager()
+        native = rpc.JXAProcessRPC(source, digest, NONCE, DIGEST, launcher=launch, stager=stager)
+        original = stager.clean
+        def cleanup(sequence, deadline):
+            original(sequence, deadline)
             raise OSError("synthetic source cleanup failed")
-        with patch.object(tempfile.TemporaryDirectory, "cleanup", cleanup):
+        with patch.object(stager, "clean", cleanup):
             with self.assertRaisesRegex(ValueError, "launch failed.*source cleanup failed"):
                 native(request(), 2, 2048)
 

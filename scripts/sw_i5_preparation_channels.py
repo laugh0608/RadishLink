@@ -361,7 +361,8 @@ def serve_preparation(control_fd, output_fd, ack_fd, *, work, boundary, guard, n
 
 def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_SECONDS,
                   silence=supervision.LEASE_SECONDS, cleanup_seconds=25, recovery_seconds=120,
-                  registration_fd=None, admission_fd=None, absolute_deadline=None, reap_seconds=2, defer_recovery=False):
+                  registration_fd=None, admission_fd=None, absolute_deadline=None, reap_seconds=2, defer_recovery=False,
+                  transport_fds=()):
     """Return PID, caller lease writer, report reader and renewal ACK reader.
 
     transport(guest_control_read_fd, result_write_fd, guest_ack_write_fd) runs
@@ -386,6 +387,8 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
     apt.require(type(defer_recovery) is bool and (not defer_recovery or (attached and recover is None)),
                 "deferred recovery requires attached lifecycle owner and no callback")
     extra_fds = (registration_fd, admission_fd) if attached else ()
+    apt.require(type(transport_fds) is tuple and len(transport_fds) <= 1 and
+                all(type(fd) is int and fd >= 3 and fd not in extra_fds for fd in transport_fds), "explicit staging descriptor whitelist")
     apt.require(0 < cleanup_seconds <= 25, "transport cleanup deadline")
     apt.require(0 < recovery_seconds <= 120, "recovery deadline")
     supervision.Lease(nonce, manifest_sha256, started=0, total=total, silence=silence, side="host")
@@ -398,7 +401,7 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
         for fd in (control_read, control_write, report_read, report_write, ack_read, ack_write): os.close(fd)
         raise
     if pid == 0:
-        close_except((control_read, report_write, ack_write) + extra_fds)
+        close_except((control_read, report_write, ack_write) + extra_fds + transport_fds)
         os.setsid()
         child, guest_write, stream_read, guest_ack_read = None, None, None, None
         interrupted = []
@@ -429,7 +432,7 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
             child = os.fork()
             if child == 0:
                 try:
-                    close_except((guest_read, stream_write, guest_ack_write) + extra_fds)
+                    close_except((guest_read, stream_write, guest_ack_write) + extra_fds + transport_fds)
                     watchdog_parent = os.getppid()
                     os.setsid()
                     signal.signal(signal.SIGTERM, signal.SIG_DFL)
@@ -463,6 +466,7 @@ def fork_watchdog(transport, recover, nonce, manifest_sha256, *, total=apt.HOST_
             os.close(stream_write)
             os.close(guest_ack_write)
             for fd in extra_fds: os.close(fd)
+            for fd in transport_fds: os.close(fd)
             guest_lease = supervision.Lease(nonce, manifest_sha256, started=time.monotonic())
             guest_closed = False
             def relay():

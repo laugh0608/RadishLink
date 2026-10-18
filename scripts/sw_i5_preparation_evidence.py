@@ -117,6 +117,64 @@ def validate_lifecycle(value, nonce, manifest_sha256, host_passed):
     return value
 
 
+def validate_initialization(value, nonce, manifest_sha256, lifecycle):
+    apt.fields(value, "schema_version scope kind uuid nonce manifest_sha256 plan_sha256 ledger_sha256 source_sha256 "
+               "host_ready guest_ready guest_cleanup host_cleanup objects registry_sha256 registrations pending pending_objects "
+               "authorized install_authorized physical_verified i5_ready")
+    apt.require(type(value["schema_version"]) is int and value["schema_version"] == 1 and
+                value["scope"] == "i5-synthetic-initialization" and value["kind"] == "synthetic" and
+                value["uuid"] == apt.UUID and value["nonce"] == nonce and value["manifest_sha256"] == manifest_sha256 and
+                all(value[name] is False for name in ("authorized", "install_authorized", "physical_verified", "i5_ready")) and
+                all(apt.digest(value[name]) for name in ("plan_sha256", "ledger_sha256", "source_sha256", "registry_sha256")),
+                "synthetic initialization binding/STOP flags")
+    apt.require(all(type(value[name]) is bool for name in ("host_ready", "guest_ready")) and
+                all(value[name] in ("not-attempted", "complete", "failed", "unconfirmed") for name in ("guest_cleanup", "host_cleanup")) and
+                type(value["registrations"]) is int and 0 <= value["registrations"] < 2 ** 53 and
+                type(value["pending"]) is int and 0 <= value["pending"] <= 11 and value["pending"] <= value["registrations"],
+                "initialization state/counters")
+    host = {"host_jxa_root", "host_evidence_parent", "host_attempt"}
+    guest = {"guest_root", "work", "result", "cgroup_parent", "cgroup_supervisor", "cgroup_worker", "control", "lease", "ack", "readonly_input"}
+    objects = value["objects"]
+    apt.require(type(objects) is dict and set(objects) <= host | guest and all(type(ident) is list and len(ident) == 2 and
+                all(type(n) is int and n > 0 for n in ident) for ident in objects.values()), "initialization actual object identities")
+    pending = value["pending_objects"]
+    apt.require(type(pending) is dict and len(pending) == value["pending"] and
+                set(pending) <= (host | guest | {"source"}) - {"host_evidence_parent", "host_attempt", "readonly_input"},
+                "initialization pending role set")
+    for role, row in pending.items():
+        apt.require(type(row) is list and len(row) == 4 and row[0] in ("intent", "bound") and
+                    type(row[2]) is int and 0 <= row[2] <= 1024 * 1024 and
+                    (type(row[3]) is int and 0 <= row[3] < 2 ** 53 if role == "source" else row[3] is None) and
+                    (row[1] is None if row[0] == "intent" else type(row[1]) is list and len(row[1]) == 2 and
+                     all(type(n) is int and n > 0 for n in row[1])), "initialization pending identity/state")
+        apt.require((row[2] > 0 if role == "source" else row[2] == (1024 if role in ("lease", "ack") else 0)) and
+                    (role == "source" or row[0] != "intent" or role not in objects),
+                    "initialization pending size/binding contradiction")
+        if row[0] == "bound" and role != "source":
+            apt.require(objects.get(role) == row[1], "initialization pending object identity mismatch")
+    apt.require((value["guest_cleanup"] != "complete" or not set(pending) & guest) and
+                (value["host_cleanup"] != "complete" or not set(pending) & {"host_jxa_root", "source"}),
+                "completed realm cleanup retains pending objects")
+    for roles in (host, guest):
+        identities = [tuple(objects[role]) for role in roles if role in objects]
+        apt.require(len(set(identities)) == len(identities), "initialization object identity aliases")
+    apt.require((not value["host_ready"] or host <= set(objects)) and
+                (not value["guest_ready"] or value["host_ready"] and set(objects) == host | guest) and
+                (not value["guest_ready"] or lifecycle["start"] is not None and lifecycle["readiness"] is not None) and
+                (not lifecycle["start_attempted"] or value["host_ready"]) and
+                (not lifecycle["transport_registered"] or value["guest_ready"]) and
+                (not lifecycle["passed"] or value["host_ready"] and value["guest_ready"] and value["pending"] == 0 and
+                 value["guest_cleanup"] == value["host_cleanup"] == "complete"), "initialization ordering/cleanup contradiction")
+    apt.require(value["guest_cleanup"] != "complete" or value["host_cleanup"] != "complete" or value["pending"] == 0,
+                "completed initialization cleanup has pending objects")
+    minimum = 2 * (len(set(objects) - {"host_evidence_parent", "host_attempt", "readonly_input"}))
+    apt.require(value["registrations"] >= minimum and
+                (value["registrations"] != 0 or value["registry_sha256"] == hashlib.sha256(b"").hexdigest()),
+                "initialization registration/object contradiction")
+    apt.require(len(channels.encode(value)) <= 2500, "initialization evidence byte limit")
+    return value
+
+
 def read_file(fd, info, name, limit):
     stream = os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
     try:
@@ -141,20 +199,30 @@ def read_file(fd, info, name, limit):
 
 def validate_attempt(raw, nonce, manifest_sha256):
     value = apt.decode(raw, RECEIPT_LIMIT)
-    apt.require(value == {"schema_version": 1, "scope": "i5-preparation-evidence-attempt", "nonce": nonce,
-                "uuid": apt.UUID, "manifest_sha256": manifest_sha256, "i5_ready": False} and
-                type(value["schema_version"]) is int, "evidence attempt binding")
+    apt.require(type(value) is dict and type(value.get("schema_version")) is int and value["schema_version"] in (1, 2),
+                "evidence attempt version")
+    expected = {"schema_version": value["schema_version"], "scope": "i5-preparation-evidence-attempt", "nonce": nonce,
+                "uuid": apt.UUID, "manifest_sha256": manifest_sha256, "i5_ready": False}
+    if value["schema_version"] == 2:
+        apt.fields(value.get("initialization_binding"), "plan_sha256 ledger_sha256 source_sha256")
+        apt.require(value.get("i5_ready") is False and all(apt.digest(v) for v in value["initialization_binding"].values()) and
+                    type(value.get("expected_receipt_version")) is int and value["expected_receipt_version"] == 3,
+                    "initialization attempt source/version binding")
+        expected.update(expected_receipt_version=3, initialization_binding=value["initialization_binding"])
+    apt.require(value == expected, "evidence attempt binding")
+    return value
 
 
 
 class EvidenceStore:
-    def __init__(self, parent, nonce, manifest_sha256):
+    def __init__(self, parent, nonce, manifest_sha256, *, initialization_binding=None):
         channels.supervision.Lease(nonce, manifest_sha256, started=0)
         parent = Path(parent)
         apt.require(parent.is_absolute() and parent.resolve(strict=True) == parent, "canonical evidence parent required")
         parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         self.fd, self.written, self.consumed = None, 0, False
         self.nonce, self.manifest_sha256 = nonce, manifest_sha256
+        self.initialization_binding = initialization_binding
         self.path = parent / nonce
         try:
             info = os.fstat(parent_fd)
@@ -163,8 +231,12 @@ class EvidenceStore:
             os.fsync(parent_fd)
             self.fd = os.open(nonce, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent_fd)
             self.identity = (os.fstat(self.fd).st_dev, os.fstat(self.fd).st_ino)
-            self.write("attempt.json", channels.encode({"schema_version": 1, "scope": "i5-preparation-evidence-attempt",
-                "nonce": nonce, "uuid": apt.UUID, "manifest_sha256": manifest_sha256, "i5_ready": False}))
+            attempt = {"schema_version": 1, "scope": "i5-preparation-evidence-attempt",
+                       "nonce": nonce, "uuid": apt.UUID, "manifest_sha256": manifest_sha256, "i5_ready": False}
+            if initialization_binding is not None:
+                attempt.update(schema_version=2, expected_receipt_version=3, initialization_binding=initialization_binding)
+            validate_attempt(channels.encode(attempt), nonce, manifest_sha256)
+            self.write("attempt.json", channels.encode(attempt))
         except BaseException:
             self.close()
             raise
@@ -212,10 +284,11 @@ class EvidenceStore:
     def verify_attempt(self):
         self.check()
         apt.require(set(os.listdir(self.fd)) == {"attempt.json"}, "interrupted attempt initialization")
-        validate_attempt(read_file(self.fd, os.fstat(self.fd), "attempt.json", RECEIPT_LIMIT), self.nonce, self.manifest_sha256)
+        attempt = validate_attempt(read_file(self.fd, os.fstat(self.fd), "attempt.json", RECEIPT_LIMIT), self.nonce, self.manifest_sha256)
+        apt.require(attempt.get("initialization_binding") == self.initialization_binding, "attempt initialization binding changed")
         self.check()
 
-    def persist(self, raw, process_exit, *, failure=None, lifecycle=None):
+    def persist(self, raw, process_exit, *, failure=None, lifecycle=None, initialization=None):
         apt.require(not self.consumed, "evidence attempt consumed")
         self.consumed = True
         apt.require(type(raw) is bytes and len(raw) <= channels.HOST_REPORT_LIMIT, "host evidence byte limit")
@@ -231,6 +304,12 @@ class EvidenceStore:
                 failure = str(exc)[:2048]
         if lifecycle is not None:
             validate_lifecycle(lifecycle, self.nonce, self.manifest_sha256, passed)
+        if initialization is not None:
+            apt.require(lifecycle is not None, "initialization requires lifecycle receipt")
+            validate_initialization(initialization, self.nonce, self.manifest_sha256, lifecycle)
+        apt.require((initialization is None) == (self.initialization_binding is None) and
+                    (initialization is None or all(initialization[key] == value for key, value in self.initialization_binding.items())),
+                    "attempt/receipt initialization source binding")
         self.write("host-report.bin", raw)
         receipt = {"schema_version": 1, "scope": "i5-preparation-evidence-receipt", "nonce": self.nonce,
                    "uuid": apt.UUID, "manifest_sha256": self.manifest_sha256, "i5_ready": False,
@@ -238,6 +317,8 @@ class EvidenceStore:
                    "process_exit": process_exit, "failure": failure, "payload": fingerprint(raw)}
         if lifecycle is not None:
             receipt.update(schema_version=2, lifecycle=lifecycle, passed=passed and lifecycle["passed"])
+        if initialization is not None:
+            receipt.update(schema_version=3, initialization=initialization)
         self.write("receipt.json", channels.encode(receipt))
         return read_evidence(self.path, self.nonce, self.manifest_sha256)
 
@@ -310,13 +391,15 @@ def read_evidence(path, nonce, manifest_sha256):
         apt.require(info.st_uid == os.getuid() and info.st_mode & 0o077 == 0, "private evidence directory required")
         apt.require(set(os.listdir(fd)) == {"attempt.json", "host-report.bin", "receipt.json"}, "interrupted or extra evidence files")
         def read(name, limit): return read_file(fd, info, name, limit)
-        validate_attempt(read("attempt.json", RECEIPT_LIMIT), nonce, manifest_sha256)
+        attempt = validate_attempt(read("attempt.json", RECEIPT_LIMIT), nonce, manifest_sha256)
         raw = read("host-report.bin", channels.HOST_REPORT_LIMIT)
         receipt = apt.decode(read("receipt.json", RECEIPT_LIMIT), RECEIPT_LIMIT)
         version = receipt.get("schema_version") if type(receipt) is dict else None
-        apt.require(type(version) is int and version in (1, 2), "evidence receipt version")
+        apt.require(type(version) is int and version in (1, 2, 3), "evidence receipt version")
+        apt.require((attempt["schema_version"] == 2 and version == 3) or (attempt["schema_version"] == 1 and version in (1, 2)),
+                    "attempt/receipt version mismatch; initialization downgrade rejected")
         apt.fields(receipt, "schema_version scope nonce uuid manifest_sha256 i5_ready evidence_kind accepted passed process_exit failure payload" +
-                   (" lifecycle" if version == 2 else ""))
+                   (" lifecycle" if version >= 2 else "") + (" initialization" if version == 3 else ""))
         apt.require(type(receipt["schema_version"]) is int and receipt["schema_version"] == version and
                     receipt["scope"] == "i5-preparation-evidence-receipt" and receipt["nonce"] == nonce and
                     receipt["uuid"] == apt.UUID and receipt["manifest_sha256"] == manifest_sha256 and
@@ -329,15 +412,19 @@ def read_evidence(path, nonce, manifest_sha256):
         if receipt["accepted"]:
             value = validate_host_report(raw, nonce, manifest_sha256)
             host_passed = value["passed"]
-            if version == 2: validate_lifecycle(receipt["lifecycle"], nonce, manifest_sha256, host_passed)
+            if version >= 2: validate_lifecycle(receipt["lifecycle"], nonce, manifest_sha256, host_passed)
             expected = host_passed if version == 1 else host_passed and receipt["lifecycle"]["passed"]
             apt.require(receipt["failure"] is None and receipt["passed"] == expected and
                         receipt["process_exit"] == (0 if value["passed"] else 2), "evidence acceptance mismatch")
         else:
             apt.require(receipt["passed"] is False and type(receipt["failure"]) is str and
                         0 < len(receipt["failure"]) <= 2048, "failed evidence cannot pass")
-        if version == 2:
+        if version >= 2:
             validate_lifecycle(receipt["lifecycle"], nonce, manifest_sha256, host_passed)
+        if version == 3:
+            validate_initialization(receipt["initialization"], nonce, manifest_sha256, receipt["lifecycle"])
+            apt.require(all(receipt["initialization"][key] == value for key, value in attempt["initialization_binding"].items()),
+                        "attempt/receipt initialization digest mismatch")
         current = path.lstat()
         apt.require(stat.S_ISDIR(current.st_mode) and path.resolve(strict=True) == path and
                     (current.st_dev, current.st_ino) == (info.st_dev, info.st_ino) and

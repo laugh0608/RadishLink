@@ -6,17 +6,20 @@ unkillable kernel work and descendants escaping known process groups still need
 external environment recovery; this internal chain is not that proof.
 """
 
+import hashlib
 import math
 import os
 from pathlib import Path
 import select
 import signal
+import socket
 import time
 
 import sw_i5_apt as apt
 import sw_i5_preparation_channels as channels
 import sw_i5_preparation_evidence as evidence
 import sw_i5_preparation_transport as transport
+import sw_i5_preparation_staging as staging
 
 CAPS = {"init": 6, "start": 60, "readiness": 60, "active": 600, "watchdog_cleanup": 25,
         "watchdog_report": 2, "shutdown": 120, "persist": 6, "output": 2, "reap": 2}
@@ -129,12 +132,17 @@ def _evidence_worker(parent, nonce, digest, command_fd, result_fd, absolute):
 
 
 class _Owner:
-    def __init__(self, cancel_fd, report_fd, parent, request, rpc, start, readiness, shutdown, budget, started):
+    def __init__(self, cancel_fd, report_fd, parent, request, rpc, start, readiness, shutdown, budget, started, initialization=None):
         self.cancel_fd, self.report_fd, self.parent, self.request, self.rpc = cancel_fd, report_fd, parent, request, rpc
         self.adapters, self.budget, self.absolute = {"start": start, "readiness": readiness, "shutdown": shutdown}, budget, started + budget.total
         self.nonce, self.digest = request["nonce"], request["manifest_sha256"]
         self.interrupted, self.frozen, self.host_raw, self.host_exit, self.host_passed = [], False, b"", None, False
         self.delivery_errors = []
+        self.initialization = initialization
+        self.init_facts = initialization.facts() if initialization is not None else None
+        self.registry, self.registry_hash = {}, hashlib.sha256()
+        self.stage_client_fd, self.stage_worker_fd = None, None
+        self.init_deadline = budget.deadline("init", started, self.absolute)
         self.facts = {"schema_version": 1, "scope": "i5-preparation-lifecycle", "uuid": apt.UUID,
             "nonce": self.nonce, "manifest_sha256": self.digest, "evidence_kind": "synthetic", "i5_ready": False,
             "total_seconds": budget.total, "attempt_ready": False, "start_attempted": False, "start": None,
@@ -175,6 +183,48 @@ class _Owner:
         deadline = self.budget.deadline(stage, time.monotonic(), self.absolute)
         apt.require(deadline > time.monotonic(), stage + " has no reserved work window")
         return deadline
+
+    def register(self, message, deadline):
+        apt.fields(message, "schema_version scope uuid nonce manifest_sha256 deadline registration")
+        apt.require(type(message["schema_version"]) is int and message["schema_version"] == 1 and
+                    message["scope"] == "i5-synthetic-registration" and message["uuid"] == apt.UUID and
+                    message["nonce"] == self.nonce and message["manifest_sha256"] == self.digest, "registration scope/identity")
+        apt.require(type(message["deadline"]) in (int, float) and math.isfinite(message["deadline"]), "registration absolute deadline")
+        deadline = min(deadline, message["deadline"])
+        value = message["registration"]
+        apt.fields(value, "role state identity bytes sequence")
+        role, state, ident, size = value["role"], value["state"], value["identity"], value["bytes"]
+        allowed = {"host_jxa_root", "guest_root", "work", "result", "control", "lease", "ack",
+                   "cgroup_parent", "cgroup_worker", "cgroup_supervisor", "source"}
+        apt.require(self.init_facts is not None and role in allowed and state in ("intent", "bound", "cleaned") and
+                    type(size) is int and 0 <= size <= self.initialization.source_limit and
+                    (ident is None if state == "intent" else type(ident) is list and len(ident) == 2 and
+                     all(type(n) is int and n > 0 for n in ident)) and
+                    (type(value["sequence"]) is int and 0 <= value["sequence"] < 2 ** 53 if role == "source" else value["sequence"] is None),
+                    "initialization registration fields")
+        if state == "intent": apt.require(role not in self.registry and len(self.registry) < 12, "registration duplicate/bound")
+        else:
+            apt.require(role in self.registry and (self.registry[role]["state"] == "intent" if state == "bound" else
+                        self.registry[role]["state"] == "bound" and self.registry[role]["identity"] == ident) and
+                        self.registry[role]["sequence"] == value["sequence"] and self.registry[role]["bytes"] == size,
+                        "registration identity/order")
+        if state == "cleaned": self.registry.pop(role)
+        else: self.registry[role] = value
+        if state == "bound" and role != "source": self.init_facts["objects"][role] = ident
+        self.registry_hash.update(channels.encode(value))
+        self.init_facts.update(registry_sha256=self.registry_hash.hexdigest(), registrations=self.init_facts["registrations"] + 1,
+                               pending=len(self.registry), pending_objects={key: [row["state"], row["identity"], row["bytes"], row["sequence"]]
+                                                                           for key, row in self.registry.items()})
+        # Register before ACK: response loss can never grant an unrecorded write.
+        staging.send(self.command_fd, channels.encode({"registered": value}), deadline)
+
+    def initialization_command(self, operation, deadline):
+        staging.send(self.command_fd, channels.encode(dict(operation=operation, deadline=deadline)), deadline)
+        message = self.message(self.result_fd, deadline, abort=operation == "guest")
+        apt.fields(message, "operation result error")
+        apt.require(message["operation"] == operation and message["error"] is None,
+                    operation + ": " + str(message["error"]))
+        return message["result"]
 
     def finish(self, pid, code, label, *, kill=False):
         deadline = min(self.absolute, time.monotonic() + self.budget.caps["reap"])
@@ -252,13 +302,20 @@ class _Owner:
             if b"\n" in raw:
                 line, extra = bytes(raw).split(b"\n", 1)
                 apt.require(not extra, "multiple lifecycle responses")
-                return apt.decode(line, evidence.RECEIPT_LIMIT)
+                message = apt.decode(line, evidence.RECEIPT_LIMIT)
+                if self.init_facts is not None and type(message) is dict and "registration" in message:
+                    self.register(message, deadline)
+                    raw.clear()
+                    continue
+                apt.require(time.monotonic() < deadline, "late lifecycle response")
+                return message
 
-    def action(self, action, mode="work"):
-        request, deadline = action_request(self.nonce, self.digest, action, mode), self.until(action)
+    def action(self, action, mode="work", *, deadline=None):
+        request, deadline = action_request(self.nonce, self.digest, action, mode), self.until(action) if deadline is None else deadline
         reader, writer = os.pipe()
         pid, code = None, None
         try:
+            apt.require(time.monotonic() < deadline, action + " deadline before fork")
             pid = os.fork()
             if pid == 0:
                 try:
@@ -266,6 +323,7 @@ class _Owner:
                     os.setsid()
                     signal.signal(signal.SIGTERM, signal.SIG_DFL)
                     signal.signal(signal.SIGINT, signal.SIG_DFL)
+                    apt.require(time.monotonic() < deadline, action + " deadline before callback")
                     result = self.adapters[action](request)
                     raw = channels.encode({"result": result, "error": None})
                     apt.require(len(raw) <= evidence.RECEIPT_LIMIT, "action reply limit")
@@ -299,17 +357,40 @@ class _Owner:
     def evidence_start(self):
         command_read, command_write = os.pipe()
         result_read, result_write = os.pipe()
+        if self.initialization is not None:
+            client, worker = socket.socketpair()
+            self.stage_client_fd, self.stage_worker_fd = client.detach(), worker.detach()
         try:
             pid = os.fork()
         except BaseException:
             for fd in (command_read, command_write, result_read, result_write): os.close(fd)
             raise
         if pid == 0:
-            try: _evidence_worker(self.parent, self.nonce, self.digest, command_read, result_write, self.absolute)
+            try:
+                if self.initialization is None:
+                    _evidence_worker(self.parent, self.nonce, self.digest, command_read, result_write, self.absolute)
+                else:
+                    from sw_i5_preparation_initialization import worker_main
+                    worker_main(self.parent, self.nonce, self.digest, command_read, result_write, self.stage_worker_fd,
+                                self.initialization, self.init_deadline, self.absolute)
             finally: os._exit(2)
         os.close(command_read); os.close(result_write)
         self.evidence_pid, self.command_fd, self.result_fd = pid, command_write, result_read
-        message = self.message(result_read, self.until("init"))
+        if self.stage_worker_fd is not None:
+            os.close(self.stage_worker_fd); self.stage_worker_fd = None
+        message = self.message(result_read, self.init_deadline)
+        if self.initialization is not None:
+            apt.fields(message, "ready attempt_ready error")
+            apt.require(type(message["attempt_ready"]) is bool and type(message["ready"]) is dict, "initialization ready fields")
+            self.facts["attempt_ready"] = message["attempt_ready"]
+            apt.require(message["error"] is None, "initialization: " + str(message["error"]))
+            apt.require(set(message["ready"]) == {"host_jxa_root", "host_evidence_parent", "host_attempt"} and
+                        message["ready"]["host_jxa_root"] == self.registry["host_jxa_root"]["identity"], "host initialization readback binding")
+            self.init_facts["objects"].update(message["ready"])
+            self.init_facts["host_ready"] = True
+            self.rpc = self.rpc.with_stager(staging.StagingClient(self.stage_client_fd,
+                self.initialization.value["host_jxa_root"], message["ready"]["host_jxa_root"], self.initialization.source_limit, self.nonce, self.digest))
+            return
         apt.fields(message, "ready error")
         apt.require(message["error"] is None and message["ready"] == {"schema_version": 1,
             "scope": "i5-preparation-evidence-ready", "uuid": apt.UUID, "nonce": self.nonce, "manifest_sha256": self.digest} and
@@ -337,7 +418,10 @@ class _Owner:
                 total=min(self.budget.caps["active"], active_until - time.monotonic()), silence=self.budget.silence,
                 cleanup_seconds=self.budget.caps["watchdog_cleanup"], recovery_seconds=min(120, self.budget.caps["shutdown"]),
                 registration_fd=reg_write, admission_fd=admit_read, absolute_deadline=phase_until,
-                reap_seconds=self.budget.caps["reap"], defer_recovery=True)
+                reap_seconds=self.budget.caps["reap"], defer_recovery=True,
+                transport_fds=() if self.stage_client_fd is None else (self.stage_client_fd,))
+            if self.stage_client_fd is not None:
+                os.close(self.stage_client_fd); self.stage_client_fd = None
             os.close(reg_write); reg_write = None
             os.close(admit_read); admit_read = None
             for fd in (reg_read, report_read, ack_read): os.set_blocking(fd, False)
@@ -365,9 +449,25 @@ class _Owner:
                     next_renew = time.monotonic() + min(5, self.budget.silence / 3)
                 fds = ([] if reg_eof else [reg_read]) + ([] if report_eof else [report_read])
                 if ack_read is not None: fds.append(ack_read)
+                if self.init_facts is not None: fds.append(self.result_fd)
                 ready, _, _ = select.select(fds, [], [], 0.01)
                 for fd in ready:
-                    if fd == reg_read:
+                    if self.init_facts is not None and fd == self.result_fd:
+                        # Registration frames are bounded and acknowledged only
+                        # after this independent owner records their identity.
+                        registration_until = min(active_until, time.monotonic() + 2)
+                        frame = bytearray()
+                        while not frame.endswith(b"\n"):
+                            self.checkpoint()
+                            apt.require(time.monotonic() < registration_until, "registration read deadline")
+                            readable, _, _ = select.select([fd], [], [], 0.01)
+                            if not readable: continue
+                            data = os.read(fd, 1)
+                            apt.require(data and len(frame) < staging.HEADER_LIMIT, "registration EOF/limit")
+                            frame.extend(data)
+                        value = apt.decode(bytes(frame), staging.HEADER_LIMIT)
+                        self.register(value, registration_until)
+                    elif fd == reg_read:
                         data = os.read(fd, channels.supervision.MAX_FRAME - len(registration) + 1)
                         if not data:
                             reg_eof = True
@@ -449,8 +549,9 @@ class _Owner:
 
     def commit(self):
         deadline = self.until("persist")
-        raw = channels.encode({"report_bytes": len(self.host_raw), "process_exit": self.host_exit,
-                               "lifecycle": self.facts}) + self.host_raw
+        header = {"report_bytes": len(self.host_raw), "process_exit": self.host_exit, "lifecycle": self.facts}
+        if self.init_facts is not None: header.update(initialization=self.init_facts, deadline=deadline)
+        raw = channels.encode(header) + self.host_raw
         os.set_blocking(self.command_fd, False)
         offset = 0
         while offset < len(raw):
@@ -478,21 +579,51 @@ class _Owner:
             self.facts["start_attempted"] = True  # Includes fork failure/lost return; never restart.
             self.facts["start"] = self.action("start")
             self.checkpoint()
-            self.facts["readiness"] = self.action("readiness")
+            ready_until = self.until("readiness")
+            ready = self.action("readiness", deadline=ready_until)
+            if self.init_facts is not None:
+                objects = self.initialization_command("guest", ready_until)
+                apt.require(type(objects) is dict and set(objects) == set(self.initialization.value["objects"]) -
+                            {"host_jxa_root", "host_evidence_parent", "host_attempt"}, "guest initialized object set")
+                apt.require(all(objects[role] == self.registry[role]["identity"] for role in objects if role != "readonly_input"),
+                            "guest independent readback registry mismatch")
+                self.init_facts["objects"].update(objects)
+                self.init_facts["guest_ready"] = True
+            self.facts["readiness"] = ready
             self.checkpoint()
             self.host()
         except Exception as exc:
             self.fail(type(exc).__name__ + ": " + str(exc))
         finally:
+            shutdown_until = self.budget.deadline("shutdown", time.monotonic(), self.absolute)
+            if shutdown_until <= time.monotonic(): self.fail("shutdown has no reserved work window")
+            reserve = min(2, self.budget.caps["shutdown"] / 4) if self.init_facts is not None else 0
+            sessions_safe = self.facts["sessions_reaped"]
+            def cleanup(realm, deadline):
+                key = realm + "_cleanup"
+                self.init_facts[key] = "unconfirmed"
+                try:
+                    apt.require(sessions_safe, "transport sessions unconfirmed; preserve initialized objects")
+                    errors = self.initialization_command(realm + "-cleanup", deadline)
+                    apt.require(type(errors) is list and len(errors) <= 12 and all(type(e) is str for e in errors), "cleanup result fields")
+                    self.init_facts[key] = "failed" if errors else "complete"
+                    for error in errors: self.cleanup_error(realm + " cleanup: " + error)
+                except Exception as exc:
+                    self.cleanup_error(realm + " cleanup: " + str(exc))
+            if self.init_facts is not None and self.evidence_pid is not None:
+                cleanup("guest", min(time.monotonic() + reserve, shutdown_until - 2 * reserve))
             if self.facts["start_attempted"]:
                 self.facts["shutdown_attempted"] = True
                 mode = "normal" if self.host_passed and self.facts["first_failure"] is None and not self.facts["cleanup_errors"] else "recovery"
                 try:
-                    self.facts["shutdown"] = self.action("shutdown", mode)
+                    self.facts["shutdown"] = self.action("shutdown", mode,
+                        deadline=shutdown_until - reserve - (self.budget.caps["reap"] if self.init_facts is not None else 0))
                     if self.facts["shutdown"]["forced_stop"]: self.fail("forced shutdown cannot pass")
                 except Exception as exc:
                     self.fail("shutdown: " + str(exc))
                     self.cleanup_error("shutdown: " + str(exc))
+            if self.init_facts is not None and self.evidence_pid is not None:
+                cleanup("host", shutdown_until)
             # This is the cancellation cut: stop has finished, final facts are
             # checked once more, then frozen. Delivery failure cannot redo work.
             try: self.checkpoint(abort=False)
@@ -507,18 +638,19 @@ class _Owner:
                     evidence_code = self.finish(self.evidence_pid, None, "evidence persist")
                     evidence_finished = True
                     apt.require(evidence_code == 0 and not self.delivery_errors, "evidence process exit/reap failed: " + repr(self.delivery_errors))
-                    apt.require(receipt.get("schema_version") == 2 and receipt.get("lifecycle") == self.facts and
+                    apt.require(receipt.get("schema_version") == (3 if self.init_facts is not None else 2) and receipt.get("lifecycle") == self.facts and
                                 receipt.get("passed") == self.facts["passed"], "persisted lifecycle receipt mismatch")
                 except Exception as exc:
                     persistence_error = bounded_text(exc, evidence.FIRST_ERROR_BYTES)[0]
             if self.evidence_pid is not None and not evidence_finished:
                 evidence_code = self.finish(self.evidence_pid, evidence_code, "evidence aborted", kill=True)
-            for fd in (self.command_fd, self.result_fd):
+            for fd in (self.command_fd, self.result_fd, self.stage_client_fd, self.stage_worker_fd):
                 if fd is not None: os.close(fd)
             packet = {"schema_version": 1, "scope": "i5-preparation-lifecycle-result", "uuid": apt.UUID,
                 "nonce": self.nonce, "manifest_sha256": self.digest, "evidence_kind": "synthetic", "i5_ready": False,
                 "passed": bool(receipt and receipt["passed"] and persistence_error is None and evidence_code == 0),
                 "lifecycle": self.facts, "receipt": receipt, "persistence_error": persistence_error, "delivery_errors": self.delivery_errors}
+            if self.init_facts is not None: packet["initialization"] = self.init_facts
             try:
                 raw = channels.encode(packet)
                 apt.require(len(raw) <= 2 * evidence.RECEIPT_LIMIT, "lifecycle result byte limit")
@@ -528,7 +660,7 @@ class _Owner:
             os._exit(0 if packet["passed"] else 2)
 
 
-def fork_lifecycle(evidence_parent, request, *, rpc, start, readiness, shutdown, budget=None):
+def fork_lifecycle(evidence_parent, request, *, rpc, start, readiness, shutdown, budget=None, initialization=None):
     """Return owner PID, exclusive caller liveness/cancel writer, result reader.
 
     Keeping the writer open grants liveness, not a timer or queued lease. Any
@@ -546,6 +678,19 @@ def fork_lifecycle(evidence_parent, request, *, rpc, start, readiness, shutdown,
     apt.require(type(request) is dict, "lifecycle transport request")
     program = transport.unbase64(request.get("program_base64"), 48 * 1024)
     apt.require(type(request.get("schema_version")) is int and request == transport.transport_request(request["nonce"], request["manifest_sha256"], program), "lifecycle request binding")
+    if initialization is not None:
+        from sw_i5_preparation_initialization import SyntheticInitialization
+        apt.require(type(initialization) is SyntheticInitialization, "explicit synthetic initialization")
+        initialization = initialization.snapshot()
+        apt.require(initialization.value["nonce"] == request["nonce"] and initialization.value["manifest_sha256"] == request["manifest_sha256"] and
+                    initialization.value["host_evidence_parent"] == str(evidence_parent), "initialization lifecycle binding")
+        from sw_i5_preparation_rpc import JXAProcessRPC
+        apt.require(type(rpc) is JXAProcessRPC and rpc.source == initialization.jxa_source and
+                    rpc.source_sha256 == initialization.value["jxa_source"]["sha256"] and rpc.nonce == request["nonce"] and
+                    rpc.digest == request["manifest_sha256"] and callable(rpc.launcher) and callable(rpc.cancelled),
+                    "initialization RPC source identity/explicit launcher")
+        rpc = JXAProcessRPC(initialization.jxa_source, initialization.value["jxa_source"]["sha256"], request["nonce"],
+                            request["manifest_sha256"], launcher=rpc.launcher, cancelled=rpc.cancelled)
     cancel_read, cancel_write = os.pipe()
     report_read, report_write = os.pipe()
     try:
@@ -558,7 +703,7 @@ def fork_lifecycle(evidence_parent, request, *, rpc, start, readiness, shutdown,
         try:
             channels.close_except((cancel_read, report_write))
             os.setsid()
-            owner = _Owner(cancel_read, report_write, evidence_parent, request, rpc, start, readiness, shutdown, budget, started)
+            owner = _Owner(cancel_read, report_write, evidence_parent, request, rpc, start, readiness, shutdown, budget, started, initialization)
             for number in (signal.SIGTERM, signal.SIGINT):
                 signal.signal(number, lambda number, frame: owner.interrupted.append(number))
             owner.run()
