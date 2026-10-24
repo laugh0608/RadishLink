@@ -26,7 +26,7 @@
 | I4/I5 profile、validator 与 evidence | 故障分类、预期/禁止结果、证据消费经验 | 原 schema、profile 和历史证据不改；服务测试记录独立版本，后续需要正式接入时显式映射 |
 | `tools/spikes/sw-g2-mls-rs/` | 固定候选和依赖基线 | `main.rs` 仍以退出码 2 拒绝 Phase B；不修改或把它包装成产品加密组件 |
 
-当前仓库没有正式 Node 服务。新产品代码目录建议为 `node/`，首期一个 Cargo package，包含库模块、`radishlink-node` 服务和 `radishlinkctl` 本机诊断入口；不预建多个空 crate 或插件系统。现有 `tools/` 保留验证职责。模块真正需要跨进程或被原生客户端复用时再拆分。
+方案提出时仓库没有正式 Node 服务。首批已在 `node/` 建立一个 Cargo package，包含库模块、`radishlink-node` 与 `radishlinkctl` 入口；当前只有离线服务/事务基础，生产入口拒绝运行，详见[实施记录](../testing/node-service-foundation.md)。不预建多个空 crate 或插件系统。现有 `tools/` 保留验证职责。模块真正需要跨进程或被原生客户端复用时再拆分。
 
 ## 关键选型比较
 

@@ -1,0 +1,379 @@
+use super::*;
+
+impl Store {
+    fn update_security(&self, u: &SecurityUpdate) -> Result<()> {
+        u.validate()?;
+        let revision: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT revision FROM security_states WHERE session=?1",
+                [&u.session],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if revision.unwrap_or(0) != u.expected_revision {
+            return Err(Error::new(Code::Conflict, "security revision"));
+        }
+        self.conn.execute("INSERT INTO security_states VALUES(?1,?2,?3) ON CONFLICT(session) DO UPDATE SET revision=excluded.revision,state=excluded.state",params![u.session,u.expected_revision+1,u.state])?;
+        #[cfg(test)]
+        if self.fault == Some(TestFault::AfterSecurity) {
+            return Err(Error::new(
+                Code::StoreUnavailable,
+                "test after security write",
+            ));
+        }
+        Ok(())
+    }
+    fn insert_message(
+        &self,
+        m: &Message,
+        role: Role,
+        hops: u8,
+        source: Option<&str>,
+    ) -> Result<()> {
+        let state = match role {
+            Role::Origin => "queued",
+            Role::Relay => "stored",
+            Role::Destination => "committed",
+        };
+        self.conn.execute("INSERT INTO messages(key,core,role,state,payload,deadline,retain_until,hops,origin_ref,source_neighbor) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![m.key,m.core_binding,role.as_str(),state,m.payload,m.deadline_ms,m.retain_until_ms,hops,m.origin_ref,source])?;
+        Ok(())
+    }
+    fn insert_history(&self, key: &str, body: &[u8]) -> Result<()> {
+        check_text(body)?;
+        let expiry = self
+            .clock
+            .trusted_unix_ms
+            .and_then(|t| t.checked_add(HISTORY_MS))
+            .ok_or_else(|| Error::new(Code::TimeUncertain, "history expiry"))?;
+        self.conn.execute(
+            "INSERT INTO history(message_key,body,expires) VALUES(?1,?2,?3)",
+            params![key, body, expiry],
+        )?;
+        Ok(())
+    }
+    fn insert_queue(
+        &self,
+        key: &str,
+        kind: &str,
+        neighbor: &str,
+        hops: u8,
+        body: &[u8],
+        deadline: i64,
+    ) -> Result<()> {
+        check_ref(neighbor)?;
+        if body.len() > MAX_CONTROL {
+            return Err(Error::new(Code::InvalidInput, "control size"));
+        }
+        let retry = RetryState::new(self.clock.monotonic_ms, deadline, Link::Up)?;
+        let encoded = serde_json::to_string(&retry)
+            .map_err(|e| Error::source_error(Code::InvalidInput, "retry encoding", e))?;
+        self.conn.execute(
+            "INSERT INTO queues VALUES(?1,?2,?3,?4,?5,?6)",
+            params![key, kind, neighbor, hops, body, encoded],
+        )?;
+        Ok(())
+    }
+    fn matching_message(&self, m: &Message, role: Role) -> Result<Option<MessageView>> {
+        let saved: Option<(Vec<u8>, i64, i64, String, String)> = self
+            .conn
+            .query_row(
+                "SELECT core,deadline,retain_until,role,origin_ref FROM messages WHERE key=?1",
+                [&m.key],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .optional()?;
+        if let Some((core, deadline, retain, saved_role, origin)) = saved {
+            if saved_role != role.as_str()
+                || core != m.core_binding
+                || origin != m.origin_ref
+                || m.deadline_ms > deadline
+                || m.retain_until_ms > retain
+            {
+                return Err(Error::new(Code::Conflict, "message core or lifetime"));
+            }
+            return self.message(&m.key);
+        }
+        Ok(None)
+    }
+    /// T-A persistence only. Authentication and encryption are a future caller prerequisite.
+    pub fn submit(&mut self, send: Send) -> Result<MessageView> {
+        self.writable()?;
+        send.action.validate()?;
+        self.check_generation(&send.action.scope, send.action.generation)?;
+        let prior:Option<(Vec<u8>,String)>=self.conn.query_row("SELECT binding,message_key FROM actions WHERE scope=?1 AND generation=?2 AND reference=?3",params![send.action.scope,send.action.generation,send.action.reference],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+        if let Some((binding, key)) = prior {
+            if binding != send.action.binding {
+                return Err(Error::new(Code::Conflict, "action contents"));
+            }
+            return self
+                .message(&key)?
+                .ok_or_else(|| Error::new(Code::StoreCorrupt, "action target"));
+        }
+        send.message.validate(self.clock.monotonic_ms)?;
+        check_text(&send.text)?;
+        check_ref(&send.neighbor)?;
+        send.security.validate()?;
+        if self.message(&send.message.key)?.is_some() {
+            return Err(Error::new(Code::Conflict, "message key already assigned"));
+        }
+        self.atomic(|s| {
+            s.update_security(&send.security)?;
+            s.insert_message(&send.message, Role::Origin, send.remaining_hops, None)?;
+            s.insert_history(&send.message.key, &send.text)?;
+            s.insert_queue(
+                &send.message.key,
+                "data",
+                &send.neighbor,
+                send.remaining_hops,
+                &[],
+                send.message.deadline_ms,
+            )?;
+            s.conn.execute(
+                "INSERT INTO actions VALUES(?1,?2,?3,?4,?5)",
+                params![
+                    send.action.scope,
+                    send.action.generation,
+                    send.action.reference,
+                    send.action.binding,
+                    send.message.key
+                ],
+            )?;
+            Ok(())
+        })?;
+        self.message(&send.message.key)?
+            .ok_or_else(|| Error::new(Code::StoreCorrupt, "submitted message"))
+    }
+    /// T-B / T-C. Relay never accepts plaintext or security state for an endpoint.
+    pub fn receive(&mut self, receive: Receive) -> Result<MessageView> {
+        self.writable()?;
+        receive.message.validate(self.clock.monotonic_ms)?;
+        check_ref(&receive.neighbor)?;
+        if receive.role == Role::Origin {
+            return Err(Error::new(Code::InvalidInput, "receive role"));
+        }
+        if let Some(view) = self.matching_message(&receive.message, receive.role)? {
+            return Ok(view);
+        }
+        match receive.role {
+            Role::Relay => {
+                if receive.security.is_some()
+                    || receive.text.is_some()
+                    || receive.evidence.is_some()
+                    || receive.remaining_hops == 0
+                {
+                    return Err(Error::new(Code::InvalidInput, "relay admission"));
+                }
+            }
+            Role::Destination => {
+                receive
+                    .security
+                    .as_ref()
+                    .ok_or_else(|| Error::new(Code::InvalidInput, "receive security state"))?
+                    .validate()?;
+                check_text(
+                    receive
+                        .text
+                        .as_deref()
+                        .ok_or_else(|| Error::new(Code::InvalidInput, "receive text"))?,
+                )?;
+                let evidence = receive
+                    .evidence
+                    .as_ref()
+                    .ok_or_else(|| Error::new(Code::InvalidInput, "delivery evidence"))?;
+                if evidence.is_empty() || evidence.len() > MAX_CONTROL {
+                    return Err(Error::new(Code::InvalidInput, "delivery evidence size"));
+                }
+            }
+            Role::Origin => unreachable!(),
+        }
+        self.atomic(|s| {
+            if let Some(u) = &receive.security {
+                s.update_security(u)?;
+            }
+            s.insert_message(
+                &receive.message,
+                receive.role,
+                receive.remaining_hops,
+                Some(&receive.neighbor),
+            )?;
+            if let Some(body) = &receive.text {
+                s.insert_history(&receive.message.key, body)?;
+            }
+            if let Some(evidence) = &receive.evidence {
+                s.insert_queue(
+                    &receive.message.key,
+                    "evidence",
+                    &receive.neighbor,
+                    0,
+                    evidence,
+                    receive.message.retain_until_ms,
+                )?;
+            }
+            Ok(())
+        })?;
+        self.message(&receive.message.key)?
+            .ok_or_else(|| Error::new(Code::StoreCorrupt, "received message"))
+    }
+    /// Schedules a relay's next-hop copy once. A duplicate cannot replenish hop/retry budget.
+    pub fn schedule_forward(&mut self, key: &str, neighbor: &str) -> Result<()> {
+        check_ref(key)?;
+        check_ref(neighbor)?;
+        self.atomic(|s| {
+            let (role, state, deadline, incoming_hops): (String, String, i64, u8) =
+                s.conn.query_row(
+                    "SELECT role,state,deadline,hops FROM messages WHERE key=?1",
+                    [key],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )?;
+            if incoming_hops == 0
+                || role != "relay"
+                || state != "stored"
+                || deadline <= s.clock.monotonic_ms
+            {
+                return Err(Error::new(Code::Conflict, "relay forwarding state"));
+            }
+            let exists: bool = s.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM queues WHERE message_key=?1 AND kind='data')",
+                [key],
+                |r| r.get(0),
+            )?;
+            if exists {
+                return Err(Error::new(Code::Conflict, "relay copy already scheduled"));
+            }
+            s.insert_queue(key, "data", neighbor, incoming_hops - 1, &[], deadline)
+        })
+    }
+    /// Custody pauses data retries but never deletes payload or reports destination delivery.
+    pub fn observe_custody(&mut self, key: &str, neighbor: &str) -> Result<()> {
+        check_ref(key)?;
+        check_ref(neighbor)?;
+        self.atomic(|s|{
+            let state:Option<String>=s.conn.query_row("SELECT retry FROM queues WHERE message_key=?1 AND kind='data' AND neighbor=?2",params![key,neighbor],|r|r.get(0)).optional()?;
+            if let Some(state)=state {
+                let retry:RetryState=serde_json::from_str(&state).map_err(|e|Error::source_error(Code::StoreCorrupt,"retry state",e))?;
+                let (next,_)=retry.advance(Batch{now_ms:s.clock.monotonic_ms,link:crate::retry::LinkEvent::Unchanged,signal:crate::retry::Signal::Pause,admission:crate::retry::Admission::Allow})?;
+                s.conn.execute("UPDATE queues SET retry=?3 WHERE message_key=?1 AND kind='data' AND neighbor=?2",params![key,neighbor,serde_json::to_string(&next).map_err(|e|Error::source_error(Code::InvalidInput,"retry encoding",e))?])?;
+                s.conn.execute("UPDATE messages SET custody=1 WHERE key=?1",[key])?;
+            } else {return Err(Error::new(Code::Conflict,"custody target"));}
+            Ok(())
+        })
+    }
+    /// T-D: verified proof is a caller prerequisite. Stores return responsibility before cleanup.
+    pub fn finish_delivery(
+        &mut self,
+        key: &str,
+        core: &[u8],
+        return_evidence: Option<(&str, &[u8])>,
+    ) -> Result<()> {
+        check_ref(key)?;
+        self.atomic(|s| {
+            let (saved, role, state, retain, source): (
+                Vec<u8>,
+                String,
+                String,
+                i64,
+                Option<String>,
+            ) = s.conn.query_row(
+                "SELECT core,role,state,retain_until,source_neighbor FROM messages WHERE key=?1",
+                [key],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )?;
+            if saved != core {
+                return Err(Error::new(Code::Conflict, "delivery core"));
+            }
+            if state == "delivered" {
+                return Ok(());
+            }
+            if state == "expired" || retain <= s.clock.monotonic_ms {
+                return Err(Error::new(Code::Expired, "delivery retention"));
+            }
+            if role == "relay" {
+                let (neighbor, evidence) = return_evidence
+                    .ok_or_else(|| Error::new(Code::InvalidInput, "relay return responsibility"))?;
+                if evidence.is_empty() {
+                    return Err(Error::new(Code::InvalidInput, "empty delivery evidence"));
+                }
+                if source.as_deref() != Some(neighbor) {
+                    return Err(Error::new(Code::Conflict, "delivery return neighbor"));
+                }
+                s.insert_queue(key, "evidence", neighbor, 0, evidence, retain)?;
+            } else if role != "origin" || return_evidence.is_some() {
+                return Err(Error::new(Code::InvalidInput, "delivery role"));
+            }
+            s.conn.execute(
+                "UPDATE messages SET state='delivered',payload=NULL WHERE key=?1",
+                [key],
+            )?;
+            s.conn.execute(
+                "DELETE FROM queues WHERE message_key=?1 AND kind='data'",
+                [key],
+            )?;
+            Ok(())
+        })
+    }
+    pub fn expire_payload(&mut self, key: &str) -> Result<()> {
+        check_ref(key)?;
+        self.atomic(|s| {
+            let (deadline, state): (i64, String) = s.conn.query_row(
+                "SELECT deadline,state FROM messages WHERE key=?1",
+                [key],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?;
+            if state == "delivered" || state == "expired" {
+                return Ok(());
+            }
+            if deadline > s.clock.monotonic_ms {
+                return Err(Error::new(Code::Conflict, "payload not expired"));
+            }
+            s.conn.execute(
+                "UPDATE messages SET state='expired',payload=NULL WHERE key=?1",
+                [key],
+            )?;
+            s.conn.execute(
+                "DELETE FROM queues WHERE message_key=?1 AND kind='data'",
+                [key],
+            )?;
+            Ok(())
+        })
+    }
+    /// Returns the scheduling decision only after durable budget consumption.
+    /// There is no network sender in this batch.
+    pub fn advance_queue(
+        &mut self,
+        key: &str,
+        kind: &str,
+        neighbor: &str,
+        batch: Batch,
+    ) -> Result<Decision> {
+        check_ref(key)?;
+        check_ref(neighbor)?;
+        if !["data", "evidence"].contains(&kind) || batch.now_ms != self.clock.monotonic_ms {
+            return Err(Error::new(Code::InvalidInput, "queue event coordinate"));
+        }
+        self.atomic(|s| {
+            let encoded: String = s.conn.query_row(
+                "SELECT retry FROM queues WHERE message_key=?1 AND kind=?2 AND neighbor=?3",
+                params![key, kind, neighbor],
+                |r| r.get(0),
+            )?;
+            let retry: RetryState = serde_json::from_str(&encoded)
+                .map_err(|e| Error::source_error(Code::StoreCorrupt, "retry record", e))?;
+            let (next, decision) = retry.advance(batch)?;
+            s.conn.execute(
+                "UPDATE queues SET retry=?4 WHERE message_key=?1 AND kind=?2 AND neighbor=?3",
+                params![
+                    key,
+                    kind,
+                    neighbor,
+                    serde_json::to_string(&next).map_err(|e| Error::source_error(
+                        Code::InvalidInput,
+                        "retry encoding",
+                        e
+                    ))?
+                ],
+            )?;
+            Ok(decision)
+        })
+    }
+}

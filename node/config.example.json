@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "data_directory": "/var/lib/radishlink",
+  "limits": {
+    "payload_count": 2048,
+    "payload_bytes": 16777216,
+    "history_count": 10000,
+    "history_bytes": 67108864,
+    "control_count": 4096,
+    "control_bytes": 8388608,
+    "record_count": 16384
+  }
+}
