@@ -20,7 +20,7 @@
 - ESP32-S3 只作为 UI、电源、按键、唤醒和看门狗辅助 MCU，不承载完整消息、E2EE、存储转发或媒体主栈；
 - 在 `HW1` 通过前不买三块 MCU，不做自定义 PCB；在法规门完成前不买 HaLow 套件。
 
-2026-10-24 已补齐[三节点全新增 BOM 项目表](poc-purchase-list.md#三节点全新增-bom-评审2026-10-24)、公开价格观察与下列 BSP 预检；具体配件 SKU、可供三台的完整到手报价和测试 manifest 仍缺，HW-G0/G1 不据此标为通过。整套目标 2000–3000 元、累计硬上限 3000 元；首轮有线台架新增支出评审上限 1000 元保持不变。进入 P1 时给两个通话端补音频输入输出，单台交互 Demo 不替代双端语音验证。
+2026-10-24 已补齐[三节点全新增 BOM 项目表](poc-purchase-list.md#三节点全新增-bom-评审2026-10-24)、公开价格观察与下列 BSP 预检；部分配件已绑定 SKU/人民币参考价，镜像与驱动已有下述版本证据；可供三台的完整到手报价和测试 manifest 仍缺，HW-G0/G1 不据此标为通过。整套目标 2000–3000 元、累计硬上限 3000 元；首轮有线台架新增支出评审上限 1000 元保持不变。进入 P1 时给两个通话端补音频输入输出，单台交互 Demo 不替代双端语音验证。
 
 ## 明确非目标
 
@@ -137,15 +137,45 @@ Linux A ── Ethernet/USB ── Linux B ── Ethernet/USB ── Linux C
 
 | 预检项 | 已有文档依据 | 尚缺与验收边界 |
 | --- | --- | --- |
-| SKU / revision / 存储 | `RS109-D2E0H1` 是带排针 2GB 的商店 variant；[官方资源](https://docs.radxa.com/en/zero/zero3/download)列出 3E V1.2 硬件资料 | 卖家实际 PCB revision、三台一致性、microSD SKU 待确认；不把可下载原理图当交付版本证明 |
-| OS / BSP | 官方下载页列出 `radxa-zero3_bookworm_kde_b1` / 6.1 kernel，以及 Bullseye / 5.10 旧候选 | 先评审 Bookworm b1；精确资产、构建配置、内核 patch、U-Boot、DTB、摘要/来源验签及更新路径未冻结；桌面镜像不能直接称 headless 生产镜像，不把摘要当签名 |
-| 系统许可与维护 | 官方文档提供镜像及底层开发入口 | kernel、bootloader、固件和镜像包清单的版本/许可证/归属及维护期限待核对；整个镜像不能只写“Linux 开源” |
-| B 双接口 | 官方列出独立板载 Ethernet、USB-C Host 与供电 OTG 口；B 网卡候选为 RTL8153 | 目标内核的驱动/config、实际 USB VID/PID、网口命名、热插拔/掉电枚举和同时供电待验证；厂商 Linux 声明不足以通过 |
+| SKU / revision / 存储 | `RS109-D2E0H1` 是带排针 2GB 的商店 variant；[官方资源](https://docs.radxa.com/en/zero/zero3/download)列出 3E V1.2 硬件资料；BOM 已列高耐久 microSD 候选型号 | 卖家实际 PCB revision、三台一致性、microSD 实际交付 SKU 待确认；不把可下载原理图当交付版本证明 |
+| OS / BSP | 下节已定位 Bookworm KDE b1 的精确资产、配置/包表、内核和 U-Boot；配置与包表摘要已核对 | 镜像本体未下载/校验，来源签名、实际 DTB/模块与维护差量仍待核对；桌面镜像不是 headless 生产镜像 |
+| 系统许可与维护 | 已取得包清单；[厂商产品简报](https://dl.radxa.com/zero3/docs/hw/3e/radxa_zero_3e_product_brief.pdf)承诺至少供应至 2030 年 9 月 | 供货承诺不等于当前库存或 BSP 安全维护期；kernel、bootloader、固件及包图的许可/归属、更新评审仍缺 |
+| B 双接口 | 目标版本的 config/源码包含 RTL8153 支持，3E DTS 启用 gmac1，共享 DTSI 启用 USB Host，见下节 | 镜像内模块、实际 USB VID/PID、网口命名、热插拔/掉电枚举和同时供电待验证；源码支持不等于实机通过 |
 | 初次配置 / headless | 官方有[UART 调试入口](https://docs.radxa.com/en/zero/zero3/hardware-design/hardware-interface)及[microSD 安装流程](https://docs.radxa.com/en/zero/zero3/getting-started/install-os)；[BOM](poc-purchase-list.md#公开来源与价格证据)已列 CH343 type A / 21442 与读卡器 FIT0548 候选 | CH343 厂商规格覆盖 3.3 V 与 1.5 Mbaud 所需范围，但 Mac 版本/驱动/工具和实际串口速率仍待验；默认控制台与权限、无外网配置、默认凭据/重复身份清理、镜像更新范围待 HW-G3 固定 |
 | 恢复 / 持久化 | 可移除 microSD 与串口提供候选诊断路径 | 逐台首次启动、关机、掉电、只读/满盘与故障原卡留存需精确 manifest；能重写启动盘不代表消息、安全状态或升级恢复通过 |
 | USB / 功耗扩展 | HW1 的 B Host 被网卡占用，A/C Host 可留作后续接口评审 | P1 音频、近距与长距无线若争用 Host，需有供电与 hub 成本预算；HW1 的 5 V 供电规格不是产品功耗实测 |
 
 本表是设计/资料评审输入，不新增正式测试参数。HW-G1 关闭时应把“可先用资料确认的条件”和“HW-G3 授权后才可执行的验收项”分开，避免要求未买板先出实测，也避免有文档就宣称硬件通过。2GB 节点用于 HW1；它不满足 I5 路线 A 的既有宿主证据要求，HW1 设备到位也不能直接重开 I5。
+
+### 镜像与接口版本证据（2026-10-24）
+
+[官方下载页](https://docs.radxa.com/en/zero/zero3/download)推荐 Bookworm KDE b1。[发布页](https://github.com/radxa-build/radxa-zero3/releases/tag/rsdk-b1)与[发布 API](https://api.github.com/repos/radxa-build/radxa-zero3/releases/tags/rsdk-b1)本轮对应 `rsdk-b1`，发布日期为 2025-07-15；“当前推荐/最新 Release”不等于包版本最新或安全更新齐全。本次只读取元数据、配置、包表及源码，没有下载镜像、deb 或执行安装。
+
+| 对象 | 固定候选与核对结果 |
+| --- | --- |
+| 镜像资产 | `radxa-zero3_bookworm_kde_b1.output_512.img.xz`，资产 ID `272946966`，压缩大小 1454086428 bytes；arm64 / Debian Bookworm / KDE |
+| 发布者给出的镜像 SHA-256 | `47b70ec81377f618505951fc9b4c40784e983c7fdff9706fdf79c13b6cd20730`；仅记录 API 值，未对镜像本体复算，不是签名验证 |
+| [构建配置](https://github.com/radxa-build/radxa-zero3/releases/download/rsdk-b1/radxa-zero3_bookworm_kde_b1.config.yaml) | SHA-256 `1c3610dd16c9c0222ca18c74098517f24697d73f7d2837e5b6c9e7bc28828cab`；本次读取正文复算与 API 一致；`rsdk_rev` 为空，不能据此宣称已绑定完整 RSDK 构建源码 |
+| [镜像包清单](https://github.com/radxa-build/radxa-zero3/releases/download/rsdk-b1/radxa-zero3_bookworm_kde_b1.manifest) | SHA-256 `637199a067990e9f93375eb9b87edca3298939e9ae0f1133cd7f3a07c995e7e1`，本次正文复算一致；它是发布者清单，不是挂载镜像后的独立盘点 |
+| 内核 / 引导 | `linux-image-6.1.84-10-rk2410-nocsf` 与 `linux-image-radxa-zero3` 均为 `6.1.84-10`；`u-boot-radxa-zero3=2017.09-51-4db083c`，`u-boot-rk2410=2017.09-51-f7a5177` |
+| 相关系统包 | `radxa-bootutils=0.2.5`、`radxa-firmware=0.2.22`、`firmware-realtek=20241210-1`、`radxa-system-config=0.6.16`、`rsetup=0.4.16`；包表含 `kernel-cmdline-ttyfiq0` 配置包，实际控制台与登录行为仍需验证 |
+
+源码路径核对：
+
+- [内核打包 tag 6.1.84-10](https://github.com/radxa-pkg/linux-rk2410-nocsf/tree/6.1.84-10)定位到打包 commit `317ea1500020f5c3e7ecdebc77a672146a968ace`，`src` 指向 Radxa kernel commit `e6d12a77c8bc0ea6decbd3e4604ec131d4032c30`。打包采用 `defconfig radxa.config`；[Radxa 配置补丁](https://github.com/radxa-pkg/linux-rk2410-nocsf/blob/317ea1500020f5c3e7ecdebc77a672146a968ace/debian/patches/linux/0001-feat-Radxa-common-kernel-config.patch)列 `CONFIG_USB_RTL8152=m`、DWC3/XHCI 平台支持。
+- 该 commit 的 [r8152.c](https://github.com/radxa/kernel/blob/e6d12a77c8bc0ea6decbd3e4604ec131d4032c30/drivers/net/usb/r8152.c)包含 RTL8153 及 Realtek `0x8153` 设备项；[3E DTS](https://github.com/radxa/kernel/blob/e6d12a77c8bc0ea6decbd3e4604ec131d4032c30/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3e.dts)启用 `gmac1` / `rgmii_phy1`，[共享 DTSI](https://github.com/radxa/kernel/blob/e6d12a77c8bc0ea6decbd3e4604ec131d4032c30/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero3.dtsi)启用 USB Host。由此可保留“双接口驱动具备源码依据”的候选判断；尚未证明发布镜像加载了对应 DTB/模块，也未证明所购网卡就是这些 USB ID。
+- [当前 Radxa APT 包索引](https://github.com/radxa-repo/rk3566-bookworm/blob/main/pkgs.json)本次已列 `linux-rk2410-nocsf 6.1.84-18`、`u-boot-rk2410 2017.09-62` 与 `rsetup 0.4.27`，不同于 b1。首次隔离启动拟保留可追溯基线；接入外网或处理真实数据前另审更新差量、来源与安全维护，不自动执行全量升级，也不把旧基线称为安全充分。
+
+### 首次配置与评审收口
+
+以下是后续操作包应覆盖的顺序，不是刷写/启动命令或已获授权的实验参数：
+
+1. 采购前确定三台 PCB revision、microSD/电源/网卡交付型号；关闭镜像来源信任、镜像及固件许可/维护记录、Mac UART 工具和 1.5 Mbaud 支持的纸面缺口。供应商资料可支持预检，实际吞吐、热和掉电结果留待到货后，不要求未购设备先出实测。
+2. HW-G3 包解析实际可覆盖的卡和节点、镜像下载/核验/写入命令、时长和恢复目标；逐台离线串口配置。核对 pin 8 TX、pin 10 RX、pin 6 GND 与 3.3 V TTL，禁止 VCC 双重供电；实际镜像登录路径未验证，不能假定默认 SSH 已可用。
+3. 分别处理三台唯一机器身份、SSH host key、默认凭据及独立地址；不将克隆镜像身份当产品身份。移除 Mac 配置连接后再形成 A—B—C，回收实际 kernel/DTB、驱动、USB ID、接口与路由证据，验证 A/C 无旁路。
+4. 依次安排干净关机、单节点故障、接口重枚举与原卡保留/备卡恢复，先冻结合成数据、样本数、时限、磁盘和日志边界。重写能启动只证明启动恢复；消息/密钥恢复必须依对应软件合同另验。
+
+当前收口判断：板型接口、镜像版本、驱动源码和基本救援路径已有可审资料；完整报价、来源/许可维护、Mac 串口方案及精确 manifest 仍未关闭。详细 HW-G0/G1 尚未接受，不据本次资料核对放行 HW-G2/G3；I5 资源门、SW-G2 和 RF-R0 均不变。
 
 ## Gate 与授权
 
