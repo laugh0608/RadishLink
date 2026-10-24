@@ -4,6 +4,8 @@
 
 本文定义从随身设备、手机到无线承载的稳定分层。它不冻结具体 SoC、UI 框架或密码实现库。
 
+首期文字服务的工程选择见 [Node 服务架构与关键选型方案](node-service-design.md)；其中 D1—D5 已由所有者接受并形成 [ADR 0004](../adr/0004-node-service-foundation.md)，其他候选机制仍待验证，不改变本页分层。
+
 ## 总体结构
 
 ```mermaid

@@ -13,6 +13,7 @@
 ## 架构与协议
 
 - [系统架构](architecture/system-architecture.md)
+- [Node 服务架构与关键选型方案](architecture/node-service-design.md)：已接受 D1—D5 的服务基线及事务恢复、接口、部署和剩余评审。
 - [最小文字闭环实现前设计](architecture/minimal-text-slice.md)：待评审的用户路径、事务边界与失败矩阵。
 - [网络与路由](architecture/network-and-routing.md)
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
@@ -70,6 +71,7 @@
 - [ADR 0001：主机、长距无线与近距接入基线](adr/0001-radio-and-host-baseline.md)
 - [ADR 0002：分离无线承载层与 RadishLink 覆盖层](adr/0002-underlay-overlay-separation.md)
 - [ADR 0003：分支、PR 与 Ruleset 治理](adr/0003-branch-pr-and-ruleset-governance.md)
+- [ADR 0004：Node 服务、事务与本地数据基线](adr/0004-node-service-foundation.md)
 
 ## 协作与治理
 
