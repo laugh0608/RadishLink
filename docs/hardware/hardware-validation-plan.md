@@ -141,7 +141,7 @@ Linux A ── Ethernet/USB ── Linux B ── Ethernet/USB ── Linux C
 | OS / BSP | 官方下载页列出 `radxa-zero3_bookworm_kde_b1` / 6.1 kernel，以及 Bullseye / 5.10 旧候选 | 先评审 Bookworm b1；精确资产、构建配置、内核 patch、U-Boot、DTB、摘要/来源验签及更新路径未冻结；桌面镜像不能直接称 headless 生产镜像，不把摘要当签名 |
 | 系统许可与维护 | 官方文档提供镜像及底层开发入口 | kernel、bootloader、固件和镜像包清单的版本/许可证/归属及维护期限待核对；整个镜像不能只写“Linux 开源” |
 | B 双接口 | 官方列出独立板载 Ethernet、USB-C Host 与供电 OTG 口；B 网卡候选为 RTL8153 | 目标内核的驱动/config、实际 USB VID/PID、网口命名、热插拔/掉电枚举和同时供电待验证；厂商 Linux 声明不足以通过 |
-| 初次配置 / headless | 官方有[UART 调试入口](https://docs.radxa.com/en/zero/zero3/hardware-design/hardware-interface)及[microSD 安装流程](https://docs.radxa.com/en/zero/zero3/getting-started/install-os) | Mac 串口适配器/工具、默认控制台与权限、无外网配置方法、移除默认凭据/重复身份、镜像更新范围待 HW-G3 固定；不把板卡默认密码或共享克隆身份用于产品 |
+| 初次配置 / headless | 官方有[UART 调试入口](https://docs.radxa.com/en/zero/zero3/hardware-design/hardware-interface)及[microSD 安装流程](https://docs.radxa.com/en/zero/zero3/getting-started/install-os)；[BOM](poc-purchase-list.md#公开来源与价格证据)已列 CH343 type A / 21442 与读卡器 FIT0548 候选 | CH343 厂商规格覆盖 3.3 V 与 1.5 Mbaud 所需范围，但 Mac 版本/驱动/工具和实际串口速率仍待验；默认控制台与权限、无外网配置、默认凭据/重复身份清理、镜像更新范围待 HW-G3 固定 |
 | 恢复 / 持久化 | 可移除 microSD 与串口提供候选诊断路径 | 逐台首次启动、关机、掉电、只读/满盘与故障原卡留存需精确 manifest；能重写启动盘不代表消息、安全状态或升级恢复通过 |
 | USB / 功耗扩展 | HW1 的 B Host 被网卡占用，A/C Host 可留作后续接口评审 | P1 音频、近距与长距无线若争用 Host，需有供电与 hub 成本预算；HW1 的 5 V 供电规格不是产品功耗实测 |
 

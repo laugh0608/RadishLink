@@ -61,11 +61,11 @@
 | 供电线 | 3 | 与电源匹配、足额电流、节点端 USB-C | 待报价 | 电源套装若含线须核销重复，不漏计压降核验 |
 | 系统 microSD | 3 | 同型号 32 GB 高耐久候选，可追溯来源 | 待报价 | 精确 SKU、真实容量、写入耐久与镜像兼容待核对 |
 | 恢复用 microSD | 1 | 与系统卡同型号；逐台恢复共用 | 待报价 | 保留故障原卡，不能以覆盖旧卡节省恢复物料 |
-| microSD 读卡器 | 1 | 支持所选卡及 Mac；USB-A 型可共用下述 Mac 转接 | 待报价 | 不假定 Mac 已有可用读卡器 |
-| B 第二网口 | 1 | Waveshare `20162` / USB 3.2 Gen1 TO Gigabit ETH（RTL8153）候选 | 待报价 | 厂商称支持 Linux；目标镜像、实际 USB ID/芯片 revision 和枚举恢复仍待证 |
+| microSD 读卡器 | 1 | 川宇 C289 / DFRobot `FIT0548`，USB 2.0，支持 microSDHC/XC；共用下述 Mac 转接 | 人民币 8.00 元/只 | 页面库存字段为 13；税运、当前 Mac 和所选卡的实际兼容待确认 |
+| B 第二网口 | 1 | Waveshare `20162` / USB 3.2 Gen1 TO Gigabit ETH（RTL8153）候选 | 人民币 78.78 元/只，页面默认含普票、不含运费 | 基础价 78.00 × 页面系数 1.01；未返回可供数量，目标镜像、USB ID/revision 和枚举恢复仍待证 |
 | USB-C 公头转 USB-A 母口数据转接 | 2 | 一只留给 B 网卡，一只供 Mac 配置/读卡共用；B 端需 USB 3 数据能力 | 待报价 | 不用充电转接头替代数据转接；Mac 实际端口仍待核对 |
 | Ethernet 网线 | 2 | 短 Cat5e 或以上、完整四对线 | 待报价 | 两条独立点到点链路，长度/接头与摆放核对 |
-| USB UART 与线材 | 1 套 | 3.3 V TTL、1.5 Mbaud、兼容 Mac；含 USB 数据线及 TX/RX/GND 线 | 待报价 | 型号与驱动未定；不是 RS-232，也不承诺免安装 |
+| USB UART 与线材 | 1 套 | Waveshare `21442` / CH343 USB UART Board (type A)，3.3 V TTL 候选；自带 USB-A 插头及 6PIN 散头线 | 人民币 18.18 元/套，页面默认含普票、不含运费 | 基础价 18.00 × 页面系数 1.01；厂商列 50 bps–6 Mbps/Mac 支持，当前 Mac 的 1.5 Mbaud 和驱动仍待验；不另计不存在的 USB 数据线 |
 | 散热片 | 3 | Radxa 5519A `AE015A` 或经尺寸核对的等效件 | Arace USD 2.50/只，三只 USD 7.50 | 公开页面缺货；导热垫/安装件是否包含待核对，散热效果未测 |
 | 绝缘支撑与固定件 | 3 套 | 防裸板短路，避让散热片、卡槽、网口和排针 | 待报价 | 不预购产品外壳；每节点单列重量 |
 | 多位插座 | 1 | 可容纳三只独立电源及测量设备的本地合规规格 | 待报价 | 无可复用设备口径下不得默认已有 |
@@ -85,9 +85,18 @@
 | [ALLNET ZERO 3E](https://shop.allnetchina.cn/products/radxa-zero-3e)及[商品 JSON](https://shop.allnetchina.cn/products/radxa-zero-3e.js) | 2GB H0/H1 均为 USD 68.99，均缺货；税运在结算计算 | 搜索索引曾显示 USD 55.99，本次页面/JSON 为 68.99；均不能证明上海可买到三台或约定交期 |
 | [Arace PD30W](https://arace.tech/products/radxa-power-pd-30w)及[商品 JSON](https://arace.tech/products/radxa-power-pd-30w.js) | `AP002` 电源本体 USD 7.90，显示有货；USD 0.40 是独立插头附件 | 不用 USD 0.40 计整只电源；国内认证与线材/插头仍缺 |
 | [Arace 5519A](https://arace.tech/products/heatsink-5519a-for-radxa-zero-3w-radxa-zero-3e) | `AE015A` USD 2.50，缺货 | 只有标价，不构成交付承诺 |
-| [Waveshare 国内商品页](https://www.waveshare.net/shop/USB-3.2-Gen1-TO-Gigabit-ETH.htm)、[厂商规格](https://www.waveshare.com/usb-3.2-gen1-to-gigabit-eth.htm) | 国内页可识别 SKU 20162，但价格未返回可读数值；厂商搜索索引提供 RTL8153/Linux 声明，国际页直接读取为 403 | 可保留技术候选，不能填写人民币报价或宣称本板即插即用；驱动需在目标镜像核验 |
+| [Waveshare 网卡商品页](https://www.waveshare.net/shop/USB-3.2-Gen1-TO-Gigabit-ETH.htm)、[公开商品数据](https://api.waveshare.net/api/v1/goods/1379)及[发票选项](https://api.waveshare.net/api/v1/agent/tax/list?goods_id=1379) | SKU 20162，单件基础价 78.00 元；默认“含普票”系数 1.01，对应 78.78 元；`sku_status=0`、`is_limit=false`，无库存数量 | 初次 HTML 未含价格，后续只读 GET 补齐；状态字段不证明足量现货或交期，驱动仍需目标镜像核验 |
+| [Waveshare UART 商品页](https://www.waveshare.net/shop/CH343-USB-UART-Board-type-A.htm)、[公开商品数据](https://api.waveshare.net/api/v1/goods/1545)及[发票选项](https://api.waveshare.net/api/v1/agent/tax/list?goods_id=1545) | SKU 21442，单件基础价 18.00 元；默认含普票系数 1.01，对应 18.18 元；列一块 type A 板及一条 6PIN 散头线，无库存数量 | 厂商列 3.3 V/5 V 电平及 50 bps–6 Mbps；仅支持技术候选，不证明 Mac 驱动免安装或 1.5 Mbaud 实测通过 |
+| [DFRobot 读卡器](https://www.dfrobot.com.cn/goods-1605.html) | `FIT0548` / 川宇 C289，8.00 元，HTML `data-stock=13`；USB 2.0，microSDHC/XC，厂商列 Mac 支持 | 可列人民币挂牌价；税费口径、运费、库存时效和当前 Mac 兼容待确认，不将 USB 480 Mbps 当读卡吞吐 |
+| [Radxa 官网产品入口](https://radxa.com/products/zeros/zero3e/)指向的[淘宝商品](https://item.taobao.com/item.htm?id=763867803082)与[京东商品](https://ic-item.jd.com/10123797922360.html) | 官网产品数据关联上述国内渠道；京东落地是 4GB 单板，另列[2GB 单板](https://i-item.jd.com/10123797922358.html)与[2GB + PD30W + 散热片套装](https://i-item.jd.com/10161115673568.html) | 京东未返回板卡金额/库存，淘宝本次无法读取；仅固定后续询价入口，不能把 4GB 页当 2GB 报价。京东页面无关电容的 163.52 元不属于板卡 |
 
-上述商品 JSON 的 price 字段按商品页 USD 币种以分表示，本次只读取价格/variant/库存字段，没有保存或执行网页脚本。Arace 退换条件需按[当前售后政策](https://arace.tech/pages/refund-return-policy)复核；不要把商品页通用“30 天”文字当作拆封、刷写、国内往返运费均已获保障。ALLNET、国内来源的实际售后条款、同 revision 三台库存及含税运输均未关闭。没有采用优惠聚合页、过期活动或没有绑定 SKU 的低价作为报价。
+Arace/ALLNET 商品 JSON 的 price 字段按商品页 USD 币种以分表示；本次只读商品资料及页面所用公开数据，没有执行网页脚本。Arace 退换条件需按[当前售后政策](https://arace.tech/pages/refund-return-policy)复核；不要把商品页通用“30 天”文字当作拆封、刷写、国内往返运费均已获保障。ALLNET、国内来源的实际售后条款、同 revision 三台库存及含税运输均未关闭。没有采用优惠聚合页、过期活动或没有绑定 SKU 的低价作为报价。
+
+美元商店 JSON 与微雪接口的单位不同：前者以 USD 分表示，后者以人民币元表示。微雪金额按页面展示算法和默认发票选项计算；`1.01` 是该商店返回的价格乘数，不是对法定税率的判断。两件微雪物料合计 `78.78 + 18.18 = 96.96` 元；加读卡器标价后，三项**不完整参考小计为 104.96 元**。尚缺读卡器税费确认和全部运费，不能称完整含税到手小计；也不能套用两件同 SKU 的阶梯价，因为这里是两个不同 SKU。
+
+UART 候选使用 Mac 侧 C-to-A 数据转接，板上电平按 3.3 V 核对，只连 TX/RX/GND、VCC 留空；电平跳线与接线须进入后续操作 manifest。type A 已有 USB 插头，本行不再增加一条 USB 线；若实际机械位置需要延长线，再列明原因和费用。其余存储、电源、数据转接、网线、支撑、插座和功率计仍待具体 SKU 与报价，未用普通 microSD 或地区适用性未知的电源代替。
+
+国内渠道后续询价内容已收敛为：三台 `RS109-D2E0H1` 的实际 revision、已焊排针、现货数量/交期、含税单价及上海运费；同时比较单板与“2GB + PD30W + 散热片”套装，确认电源精确型号、本地适用认证、插头、线材和导热/安装件，以及拆封、写卡后的退换范围。只在上述内容齐备后替换美元占位并核销重复配件。本轮未发送询价，后续对外联系仍须明确授权；公开页面读取受限不推导为缺货。
 
 ### 两级预算判断
 
