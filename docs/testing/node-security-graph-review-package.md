@@ -12,7 +12,7 @@
 
 ## 唯一候选 manifest 输入
 
-以下内容是待执行工作区的 `input/Cargo.toml` 精确文本，当前只保存在文档中。它是为审查“Node 现有依赖 + D14 候选”的一次性输入，不是第二个产品配置入口。实施准备工具时须逐项对照上述基线并生成/核对，不能长期独立漂移。没有 root features、dev/build dependencies、patch、replace、git/path dependency 或额外 registry。
+以下内容是待执行工作区的 `input/Cargo.toml` 精确文本，由本文作为输入真相源，G0 工具逐字导出并核验。它是为审查“Node 现有依赖 + D14 候选”的一次性输入，不是第二个产品配置入口。准备工具逐项对照上述基线并生成/核对，不能长期独立漂移。没有 root features、dev/build dependencies、patch、replace、git/path dependency 或额外 registry。
 
 ```toml
 [package]
@@ -156,8 +156,16 @@ G2 输出只允许 `EVIDENCE_COMPLETE`、`STOP` 或 `INVALID`，不输出“Phas
 
 成功/失败均报告实际耗时、工作区与网络/进程终止状态。运行后的锁不会自动复制回 Node；产品 manifest/lock 提升、候选构建/签验、真实 trait 接入、ARM64 运行、任何远程写入均不属于 G1/G2。
 
+## G0 离线输入准备
+
+`scripts/node_security_graph_inputs.py` 已实现 `check`、`prepare <bundle-id>`、`verify <bundle-id>`，只使用 Python 3.11+ 标准库；固定设计 revision 为接受 D15/D16 的 `fdefa3bbf4f8936935f747b8e5f1f79345283f19`。它从本文读取两个 TOML block，核验固定摘要、Node 三项依赖及四个既有 manifest/lock，复制根 LICENSE，生成八条**仅供审阅、不执行**的 argv 和缺口清单。
+
+输出限定为 `artifacts/node-security-graph-inputs/<bundle-id>` 下两个目录、七个文件，内容总上限 128 KiB，包含最后写入的 `complete.json`。来源、父目录和输出项拒绝 symlink，文件拒绝 hardlink/非普通文件；已有 bundle 拒绝覆盖，写入失败保留未完成目录。verify 从已审阅输入重建预期字节，不能靠改摘要或把 `execution_ready` 改为 true 绕过。详细拒绝测试、实际产物与边界见[实施记录](node-framing-and-graph-inputs.md)。
+
+G0 不调用 Cargo、网络或子进程，不生成 lock、不获取候选源码，不产生执行资格；输入包不是 G1/G2 的运行根。实际运行前仍须在专属硬限额域建立新根并重新验证全部输入，不能直接在仓库 artifacts 目录执行上述命令。工具返回 `execution_ready: false`，既不证明 supervisor/环境已实现，也不抵抗同用户/root 的任意并发篡改。
+
 ## 本轮已完成与仍需输入
 
-已完成：精确候选 manifest/config、两单元命令/输出/来源/资源/错误合同、基线差异与审查清单；对文档内 TOML 做标准库语法及固定依赖检查，读取已有工具版本并核对本机源码的 feature/re-export 入口。没有调用 generate-lockfile/fetch/metadata/tree，没有生成新锁、下载归档、安装或运行候选。
+已完成：精确候选 manifest/config、两单元命令/输出/来源/资源/错误合同、基线差异与审查清单，以及 G0 离线输入导出/核验；对文档内 TOML 做标准库语法及固定依赖检查，读取已有工具版本并核对本机源码的 feature/re-export 入口。没有调用 generate-lockfile/fetch/metadata/tree，没有生成新锁、下载归档、安装或运行候选。
 
 需要的真实输入是：环境硬边界验证与 launcher 实施证据、最终 clean revision/input hash、G1 单次明确授权；G1 产生真实 lock 后才能固定 G2 的 evidence ID/hash 和单次授权。专业审查者及材料移交范围另行落实，不能通过“接受 D14”替代。当前不请求立即运行尚未就绪的命令，也不重复请求已接受的候选方向。

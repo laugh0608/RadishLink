@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod error;
+pub mod framing;
 pub mod model;
 pub mod retry;
 pub mod service;

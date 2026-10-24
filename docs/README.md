@@ -39,6 +39,7 @@
 - [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、schema 迁移、控制容量预留、周期维护及安全接入核对。
 - [Node 证明生命周期与恢复边界](testing/node-receipt-lifecycle.md)：提交后证明意图、schema v3、原消息截止时间与离线故障验证。
 - [Node 安全候选新图精确评审包](testing/node-security-graph-review-package.md)：固定输入、G1/G2 命令与来源/资源/证据合同，非执行授权。
+- [Node 帧边界与新图离线输入验证](testing/node-framing-and-graph-inputs.md)：D15 接收缓存/超时实现、G0 输入准备与尚未满足的真实运行前置。
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A / Phase B 合同与历史结果。
 - [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：候选静态门与停止条件。

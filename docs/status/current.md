@@ -52,9 +52,9 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
-2026-10-24 所有者接受 D11—D14 后，已固化 [ADR 0006](../adr/0006-node-identity-and-control-profile.md) 并提交为 `5d2ebfc`。接续完成[数据 envelope](../protocol/node-data-envelope.md)、[控制传播预算](../protocol/node-control-propagation.md)与[新依赖图精确评审包](../testing/node-security-graph-review-package.md)；所有者随后接受 D15 的一小时寿命/解析边界及 D16 的活动/资源取舍，已固化 [ADR 0007](../adr/0007-node-envelope-and-control-budget.md)，见[接受记录](project-execution-plan.md#node-d15d16-接受记录2026-10-24)。新图命令与输入已明确，但真实硬资源/网络监督环境未验证，G1/G2 未执行。未修改产品代码或 lock，全部停止线不变。
+2026-10-24 所有者接受 D11—D14 后，已固化 [ADR 0006](../adr/0006-node-identity-and-control-profile.md) 并提交为 `5d2ebfc`；随后接受 D15/D16，固化 [ADR 0007](../adr/0007-node-envelope-and-control-budget.md) 并提交为 `fdefa3b`，见[接受记录](project-execution-plan.md#node-d15d16-接受记录2026-10-24)。接续完成[帧边界与新图离线输入开发](../testing/node-framing-and-graph-inputs.md)：4 邻居/64 KiB/10 秒组装边界，Node 75 项测试及 Python 19 项测试通过；G0 实际生成并核验 7957-byte 审阅输入。framing 未接入 transport/Service，CBOR/MLS/D16 尚未实施；[新图](../testing/node-security-graph-review-package.md)真实硬资源/网络监督环境未验证，G1/G2 未执行。现有 manifest/lock/schema 不变，全部停止线保留。
 
-2026-10-24 按所有者要求提交证明生命周期与安全接入基线（`a5ef086`），随后完成[身份绑定、撤销和 COSE profile](../security/node-identity-control-profile.md)及[依赖评审准备](../security/node-control-dependency-review.md)。所有者随后已接受 [ADR 0006 D11—D14](../adr/0006-node-identity-and-control-profile.md)：活动内逐对绑定、严格 Ed25519 控制 profile、自身退出权限与候选依赖方向。已核对标准/公开 API 及既有固定源码，尚未解析新图、安装或运行密码候选；数据 envelope、控制传播预算、许可证/R2 和独立复核仍未关闭。全部既有停止线不变。
+2026-10-24 按所有者要求提交证明生命周期与安全接入基线（`a5ef086`），随后完成[身份绑定、撤销和 COSE profile](../security/node-identity-control-profile.md)及[依赖评审准备](../security/node-control-dependency-review.md)。所有者随后已接受 [ADR 0006 D11—D14](../adr/0006-node-identity-and-control-profile.md)：活动内逐对绑定、严格 Ed25519 控制 profile、自身退出权限与候选依赖方向。已核对标准/公开 API 及既有固定源码，尚未解析新图、安装或运行密码候选；完整 envelope/控制传播实现、许可证/R2 和独立复核仍未关闭。全部既有停止线不变。
 
 2026-10-24 所有者进一步接受 [ADR 0005 D6—D10](../adr/0005-node-security-integration.md)，固化[安全接入设计](../security/node-security-integration.md)：正式 storage traits、两端 MLS 与独立证明、分层撤销、冷启动隔离及证明原 deadline。授权先推进不受停止线阻塞的 Node 自有持久边界与离线验证；实际候选、许可证/R2/Phase B、平台与网络操作未放行。同批已完成[证明生命周期开发](../testing/node-receipt-lifecycle.md)：T-C 意图与提交后转换、schema v3 显式迁移、原 deadline 与有界控制清理；63 项本机离线测试通过，真实签验与可信恢复仍未通过。
 

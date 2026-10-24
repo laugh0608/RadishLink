@@ -22,6 +22,7 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 
 - `config`：配置 v1、16 KiB 输入上限、显式容量与路径校验。
 - `model`、`retry`：进程内记录及 I1 重试规则移植，不是产品 wire 或认证结果。
+- `framing`：ADR 0007 的 u32be 前缀、每邻居一个 ≤64 KiB frame、最多四邻居和固定 10 秒组装期限；仅内部缓冲边界，尚未接入 transport/Service，详见[离线验证记录](../docs/testing/node-framing-and-graph-inputs.md)。
 - `store`：schema v3、显式 v1/v2 迁移、单拥有者、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与事件批调度。
 - `service`：容量 32 的命令队列、可克隆 Client、专属状态线程；支持平台时钟源周期维护，查询已提交事实；关闭接纳后排空已接纳命令并 Join，业务发送仍拒绝。
 - `error`：稳定错误分类与受控诊断原因；默认 Display/Debug 不回显底层输入。

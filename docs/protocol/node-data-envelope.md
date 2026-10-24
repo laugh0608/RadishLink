@@ -1,6 +1,6 @@
 # Node 数据 envelope
 
-日期：2026-10-24。状态：**D15 已由 [ADR 0007](../adr/0007-node-envelope-and-control-budget.md) 接受；实现与运行仍待验证**。面向协议与安全实现评审，补齐 [ADR 0006 D12](../adr/0006-node-identity-and-control-profile.md) 的数据核心、MLS AAD 和 receipt 摘要输入。本文不修改 SW-G1、历史 harness/profile、Node schema 或密码依赖，不宣告完整通信协议通过。
+日期：2026-10-24。状态：**D15 已由 [ADR 0007](../adr/0007-node-envelope-and-control-budget.md) 接受；完整实现与运行仍待验证**。面向协议与安全实现评审，补齐 [ADR 0006 D12](../adr/0006-node-identity-and-control-profile.md) 的数据核心、MLS AAD 和 receipt 摘要输入。本文不修改 SW-G1、历史 harness/profile、Node schema 或密码依赖，不宣告完整通信协议通过。
 
 ## 范围与已接受约束
 
@@ -107,7 +107,9 @@ D12 receipt 的 `message_binding` 使用上面的唯一摘要。证明重试复�
 
 发生撤销/到期后不继续写出未提交给 OS 的剩余 bytes；部分输出无法撤回，必要时关闭流使对端丢弃不完整 frame。接收端依然独立检查完整帧到达及提交时的授权/期限。
 
-## 待执行验证
+## 实施状态与待执行验证
+
+2026-10-24 已实施 Node `framing::Ingress` 的前缀长度、分片/合并输入、四邻居缓存及 10 秒组装期限，12 项合成边界测试通过，见[离线记录](../testing/node-framing-and-graph-inputs.md)。模块不解码 CBOR/MLS，也没有接入真实承载或 Service；不证明以下完整协议矩阵通过。
 
 | 输入 / 故障 | 预期结果 |
 | --- | --- |
@@ -120,4 +122,4 @@ D12 receipt 的 `message_binding` 使用上面的唯一摘要。证明重试复�
 | T-A/T-C 库状态推进后失败、撤销与部分输出交错 | 回滚并废弃内存对象；不提前产生外部成功，不续发旧权限 |
 | 30 分钟断连后恢复、冷启动、旧库回放 | 同 boot 合格时间内只用剩余额度；冷启动/回放不自动恢复 |
 
-本轮只核对字段、标准关系和静态大小，未生成密码向量、编译候选或运行网络。完整协议采用仍需逐跳安全、MLS 握手传输、prior_epoch 资源及可信时间输入的独立精确包。
+字段、标准关系和静态大小已核对，外层 framing 已做上述有限离线实现；未生成密码向量、编译候选或运行网络。完整协议采用仍需逐跳安全、MLS 握手传输、prior_epoch 资源及可信时间输入的独立精确包。
