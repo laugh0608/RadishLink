@@ -177,6 +177,21 @@ Linux A ── Ethernet/USB ── Linux B ── Ethernet/USB ── Linux C
 
 当前收口判断：板型接口、镜像版本、驱动源码和基本救援路径已有可审资料；完整报价、来源/许可维护、Mac 串口方案及精确 manifest 仍未关闭。详细 HW-G0/G1 尚未接受，不据本次资料核对放行 HW-G2/G3；I5 资源门、SW-G2 和 RF-R0 均不变。
 
+### Mac 串口准备候选（2026-10-24）
+
+本轮只读查询宿主版本、终端工具路径和公开源码：当前 Mac 为 ARM64、macOS 27.0.1（26A434），`screen -v` 返回 4.00.03；当前 PATH 未找到 `picocom` / `tio`，本次检查的辅助 Python 环境未找到 pySerial。这不是全盘软件盘点或驱动枚举，不能据此断言机器未安装任何串口驱动。没有连接、打开或发送数据到串口，没有安装依赖或修改系统。
+
+| 层次 | 可审候选 / 依据 | 当前判断 |
+| --- | --- | --- |
+| 电气与板端 | [Radxa 接口文档](https://docs.radxa.com/en/zero/zero3/hardware-design/hardware-interface)规定 UART2_M0、pin 8 TX / pin 10 RX、1500000n8；GPIO 为 3.3 V | 保留 CH343 / 21442 候选，适配器 RX 接板 TX、适配器 TX 接板 RX，GND 共地；VCC、RTS/CTS 等其余线不接。UART2 保留调试用途，不启用普通 UART overlay |
+| Mac 驱动 | [WCH 官方说明的固定 revision](https://github.com/WCHSoftGroup/ch34xser_macos/blob/09629694b207cdce66861b6fe821b68993507be9/README.md)列 CH343 与 macOS 11 及以上，提供 dmg/pkg 两条安装路径 | 对未使用 Rosetta 的新系统，文档指向 dmg 中的驱动应用；不能由“11 及以上”推断当前 27.0.1 已实测。安装包未下载，签名、兼容性与实际驱动绑定待核对，不因第三方教程先安装 Rosetta 或修改启动安全策略 |
+| 现有终端 | [Apple 发布的 screen tty.c](https://github.com/apple-oss-distributions/screen/blob/727b822f02b9a625023e350276900911c0db04aa/screen/tty.c)通过固定 baud 表查找速率，没有 1500000 或 `IOSSIOSPEED` 路径；本机 Python 的 termios 也无 `B1500000` 常量 | 不将系统旧版 screen 作为 1.5 Mbaud 默认入口；公开源码未与本机二进制逐字绑定，这不是串口实测失败报告 |
+| 终端候选 | pySerial `3.5`，tag commit `0e7634747568547b8a7f9fd0c48ed74f16af4b23`；[Darwin 后端](https://github.com/pyserial/pyserial/blob/0e7634747568547b8a7f9fd0c48ed74f16af4b23/serial/serialposix.py)通过 `IOSSIOSPEED` 设置自定义速率，[许可证](https://github.com/pyserial/pyserial/blob/0e7634747568547b8a7f9fd0c48ed74f16af4b23/LICENSE.txt)为 BSD-3-Clause | 仅作独立配置工具候选，不加入产品依赖。使用隔离工具环境，来源/包摘要与 Python 兼容性须在安装包中冻结；本轮未安装、运行或声称硬件支持通过 |
+
+后续终端参数候选为 `serial.tools.miniterm`、实际唯一 `/dev/cu.*` 设备、1500000 baud、8N1、关闭硬件与软件流控；退出键为 `Ctrl+]`，见[工具文档](https://pyserial.readthedocs.io/en/latest/tools.html#module-serial.tools.miniterm)。设备路径必须绑定实际 USB VID/PID 和插拔对应关系，不使用通配符批量打开、不把 Linux 的 `/dev/ttyUSB0` 当 Mac 路径，也不使用网络串口 URL。终端显示的设定速率不是线速测量；后续需用适配器本地回环和板卡冷启动/交互共同验证，保留乱码、丢字或无法设置速率的原始失败。
+
+安装与设备操作仍属后续 HW-G3 包：先保存已有驱动/工具状态、核对精确安装产物与卸载方式，再明确系统扩展授权、是否需要重启、预计时长和可恢复边界；不照抄厂商文档中的宽泛删除命令。连接节点时先接收启动日志，待登录提示再输入，避免串口输入中断 U-Boot；实际凭据不得记录到终端日志或文档。若必须改变启动安全策略才能使用，则重新比较适配器/配置路径，不自动降低宿主保护。
+
 ## Gate 与授权
 
 ### HW-G0：目标与非目标
