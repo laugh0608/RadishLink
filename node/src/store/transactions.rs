@@ -52,7 +52,7 @@ impl Store {
         )?;
         Ok(())
     }
-    fn insert_queue(
+    pub(super) fn insert_queue(
         &self,
         key: &str,
         kind: &str,
@@ -159,7 +159,7 @@ impl Store {
             Role::Relay => {
                 if receive.security.is_some()
                     || receive.text.is_some()
-                    || receive.evidence.is_some()
+                    || receive.receipt_intent.is_some()
                     || receive.remaining_hops == 0
                 {
                     return Err(Error::new(Code::InvalidInput, "relay admission"));
@@ -177,12 +177,12 @@ impl Store {
                         .as_deref()
                         .ok_or_else(|| Error::new(Code::InvalidInput, "receive text"))?,
                 )?;
-                let evidence = receive
-                    .evidence
+                let intent = receive
+                    .receipt_intent
                     .as_ref()
-                    .ok_or_else(|| Error::new(Code::InvalidInput, "delivery evidence"))?;
-                if evidence.is_empty() || evidence.len() > MAX_CONTROL {
-                    return Err(Error::new(Code::InvalidInput, "delivery evidence size"));
+                    .ok_or_else(|| Error::new(Code::InvalidInput, "delivery intent"))?;
+                if intent.is_empty() || intent.len() > MAX_CONTROL {
+                    return Err(Error::new(Code::InvalidInput, "delivery intent size"));
                 }
             }
             Role::Origin => unreachable!(),
@@ -206,14 +206,10 @@ impl Store {
             if let Some(body) = &receive.text {
                 s.insert_history(&receive.message.key, body)?;
             }
-            if let Some(evidence) = &receive.evidence {
-                s.insert_queue(
-                    &receive.message.key,
-                    "evidence",
-                    &receive.neighbor,
-                    0,
-                    evidence,
-                    receive.message.retain_until_ms,
+            if let Some(intent) = &receive.receipt_intent {
+                s.conn.execute(
+                    "INSERT INTO receipt_intents VALUES(?1,?2)",
+                    params![receive.message.key, intent],
                 )?;
             }
             Ok(())
@@ -278,34 +274,35 @@ impl Store {
     ) -> Result<()> {
         check_ref(key)?;
         self.atomic(|s| {
-            let (saved, role, state, retain, source): (
+            let (saved, role, state, deadline, source): (
                 Vec<u8>,
                 String,
                 String,
                 i64,
                 Option<String>,
             ) = s.conn.query_row(
-                "SELECT core,role,state,retain_until,source_neighbor FROM messages WHERE key=?1",
+                "SELECT core,role,state,deadline,source_neighbor FROM messages WHERE key=?1",
                 [key],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )?;
             if saved != core {
                 return Err(Error::new(Code::Conflict, "delivery core"));
             }
-            if state == "delivered" {
-                return Ok(());
-            }
-            if state == "expired" || retain <= s.clock.monotonic_ms {
-                return Err(Error::new(Code::Expired, "delivery retention"));
+            if state == "expired" || deadline <= s.clock.monotonic_ms {
+                return Err(Error::new(Code::Expired, "delivery deadline"));
             }
             if role == "relay" {
                 let (neighbor, evidence) = return_evidence
                     .ok_or_else(|| Error::new(Code::InvalidInput, "relay return responsibility"))?;
-                if evidence.is_empty() {
-                    return Err(Error::new(Code::InvalidInput, "empty delivery evidence"));
+                if evidence.is_empty() || evidence.len() > MAX_CONTROL {
+                    return Err(Error::new(Code::InvalidInput, "delivery evidence size"));
                 }
                 if source.as_deref() != Some(neighbor) {
                     return Err(Error::new(Code::Conflict, "delivery return neighbor"));
+                }
+                if state == "delivered" {
+                    // Caller has verified semantic equivalence; never refill a returned queue.
+                    return Ok(());
                 }
                 let deleted = s.conn.execute(
                     "DELETE FROM control_reservations WHERE message_key=?1",
@@ -314,9 +311,11 @@ impl Store {
                 if deleted != 1 {
                     return Err(Error::new(Code::StoreCorrupt, "missing relay reservation"));
                 }
-                s.insert_queue(key, "evidence", neighbor, 0, evidence, retain)?;
+                s.insert_queue(key, "evidence", neighbor, 0, evidence, deadline)?;
             } else if role != "origin" || return_evidence.is_some() {
                 return Err(Error::new(Code::InvalidInput, "delivery role"));
+            } else if state == "delivered" {
+                return Ok(());
             }
             s.conn.execute(
                 "UPDATE messages SET state='delivered',payload=NULL WHERE key=?1",
@@ -344,7 +343,7 @@ impl Store {
                 return Err(Error::new(Code::Conflict, "payload not expired"));
             }
             s.conn.execute(
-                "UPDATE messages SET state='expired',payload=NULL WHERE key=?1",
+                "UPDATE messages SET state=CASE WHEN role='destination' THEN 'delivered' ELSE 'expired' END,payload=NULL WHERE key=?1",
                 [key],
             )?;
             s.conn.execute(

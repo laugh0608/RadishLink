@@ -118,6 +118,17 @@ impl Decision {
     }
 }
 impl RetryState {
+    pub(crate) fn deadline_ms(&self) -> i64 {
+        self.deadline_ms
+    }
+    /// Migration may shorten validity, never replenish any retry or change its origin.
+    pub(crate) fn constrain_deadline(&mut self, deadline_ms: i64) -> Result<()> {
+        if deadline_ms < 0 {
+            return Err(Error::new(Code::InvalidInput, "retry deadline bound"));
+        }
+        self.deadline_ms = self.deadline_ms.min(deadline_ms);
+        self.validate()
+    }
     pub fn new(start_ms: i64, deadline_ms: i64, link: Link) -> Result<Self> {
         let s = Self {
             version: 1,

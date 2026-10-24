@@ -84,7 +84,7 @@ pub(crate) fn relay(key: &str) -> Receive {
         remaining_hops: 1,
         security: None,
         text: None,
-        evidence: None,
+        receipt_intent: None,
     }
 }
 pub(crate) fn destination(key: &str, revision: i64) -> Receive {
@@ -95,7 +95,7 @@ pub(crate) fn destination(key: &str, revision: i64) -> Receive {
         remaining_hops: 0,
         security: Some(security(revision)),
         text: Some(b"synthetic text".to_vec()),
-        evidence: Some(b"synthetic evidence".to_vec()),
+        receipt_intent: Some(b"synthetic intent".to_vec()),
     }
 }
 fn state_revision(s: &Store) -> Option<i64> {
@@ -185,13 +185,13 @@ fn destination_duplicate_has_one_history_and_persistent_return_work() {
     assert_eq!(s.revision().unwrap(), revision);
     assert_eq!(s.history(0, 100).unwrap().len(), 1);
     assert_eq!(state_revision(&s), Some(1));
-    assert!(s.message("one").unwrap().unwrap().evidence_pending);
+    assert!(s.message("one").unwrap().unwrap().receipt_intent_pending);
     let mut conflict = destination("one", 1);
     conflict.message.core_binding = b"different".to_vec();
     assert!(s.receive(conflict).is_err());
     drop(s);
     let s = w.reopen(1);
-    assert!(s.message("one").unwrap().unwrap().evidence_pending);
+    assert!(s.message("one").unwrap().unwrap().receipt_intent_pending);
 }
 #[test]
 fn relay_delivery_keeps_return_work_after_payload_cleanup() {
@@ -490,6 +490,8 @@ fn three_independent_stores_preserve_endpoint_and_relay_responsibilities() {
     assert!(a.message("one").unwrap().unwrap().payload_present);
     c.receive(destination("one", 0)).unwrap();
     c.receive(destination("one", 0)).unwrap();
+    c.finalize_receipt("one", b"synthetic intent", b"proof")
+        .unwrap();
     b.finish_delivery("one", b"core-one", Some(("A", b"proof")))
         .unwrap();
     assert!(b.message("one").unwrap().unwrap().evidence_pending);

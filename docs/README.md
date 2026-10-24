@@ -18,6 +18,7 @@
 - [网络与路由](architecture/network-and-routing.md)
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
 - [安全架构](security/security-architecture.md)
+- [Node 安全接入设计](security/node-security-integration.md)：D6—D10 的联合事务、证明、撤销与跨 boot 边界。
 - [端到端加密候选评审](security/e2ee-candidate-review.md)
 - [`SW-G2` E2EE 与身份候选决策包](security/e2ee-sw-g2-decision-package.md)
 - [媒体与 QoS](protocol/media-and-qos.md)
@@ -32,6 +33,7 @@
 - [外场验证计划](testing/field-validation-plan.md)
 - [Node 第一批服务与事务基础](testing/node-service-foundation.md)：固定依赖、SQLite 联合事务、离线故障验证及生产接入边界。
 - [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、schema 迁移、控制容量预留、周期维护及安全接入核对。
+- [Node 证明生命周期与恢复边界](testing/node-receipt-lifecycle.md)：提交后证明意图、schema v3、原消息截止时间与离线故障验证。
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A / Phase B 合同与历史结果。
 - [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：候选静态门与停止条件。
@@ -74,6 +76,7 @@
 - [ADR 0002：分离无线承载层与 RadishLink 覆盖层](adr/0002-underlay-overlay-separation.md)
 - [ADR 0003：分支、PR 与 Ruleset 治理](adr/0003-branch-pr-and-ruleset-governance.md)
 - [ADR 0004：Node 服务、事务与本地数据基线](adr/0004-node-service-foundation.md)
+- [ADR 0005：Node 安全接入、撤销与证据寿命](adr/0005-node-security-integration.md)
 
 ## 协作与治理
 

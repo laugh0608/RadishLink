@@ -6,6 +6,8 @@ pub const MAINTENANCE_BATCH: i64 = 256;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MaintenanceReport {
     pub expired_payloads: usize,
+    pub expired_evidence: usize,
+    pub expired_receipt_intents: usize,
     pub deleted_history: usize,
     pub more_due: bool,
     pub history_time_available: bool,
@@ -38,6 +40,15 @@ impl Store {
                 "relay reservation invariant",
             ));
         }
+        let invalid: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.role!='destination' OR m.state NOT IN ('committed','delivered') OR EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence')) OR EXISTS(SELECT 1 FROM messages m WHERE m.role='destination' AND m.deadline>(SELECT monotonic_ms FROM meta WHERE id=1) AND NOT EXISTS(SELECT 1 FROM receipt_intents i WHERE i.message_key=m.key) AND NOT EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence'))",
+            [], |r| r.get(0))?;
+        if invalid {
+            return Err(Error::new(
+                Code::StoreCorrupt,
+                "destination receipt responsibility",
+            ));
+        }
         Ok(())
     }
 
@@ -57,12 +68,14 @@ impl Store {
             evidence_bytes: scalar(
                 "SELECT coalesce(sum(length(body)),0) FROM queues WHERE kind='evidence'",
             )?,
-            reserved_control_count: scalar("SELECT count(*) FROM control_reservations")?,
+            reserved_control_count: scalar(
+                "SELECT (SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
+            )?,
             reserved_control_bytes: scalar(
-                "SELECT coalesce(sum(bytes),0) FROM control_reservations",
+                "SELECT (SELECT coalesce(sum(bytes),0) FROM control_reservations)+(SELECT count(*)*4096 FROM receipt_intents)",
             )?,
             records: scalar(
-                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)",
+                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
             )?,
             database_bytes: scalar(
                 "SELECT page_count*page_size FROM pragma_page_count(),pragma_page_size()",
@@ -113,7 +126,7 @@ impl Store {
             .collect::<std::result::Result<_, _>>()?;
         for key in &keys {
             self.conn.execute(
-                "UPDATE messages SET state='expired',payload=NULL WHERE key=?1",
+                "UPDATE messages SET state=CASE WHEN role='destination' THEN 'delivered' ELSE 'expired' END,payload=NULL WHERE key=?1",
                 [key],
             )?;
             self.conn.execute(
@@ -125,13 +138,21 @@ impl Store {
                 [key],
             )?;
         }
+        let expired_evidence = self.conn.execute(
+            "DELETE FROM queues WHERE rowid IN (SELECT q.rowid FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.deadline<=?1 ORDER BY m.deadline,m.key,q.neighbor LIMIT ?2)",
+            params![clock.monotonic_ms, MAINTENANCE_BATCH])?;
+        let expired_receipt_intents = self.conn.execute(
+            "DELETE FROM receipt_intents WHERE message_key IN (SELECT i.message_key FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1 ORDER BY m.deadline,m.key LIMIT ?2)",
+            params![clock.monotonic_ms, MAINTENANCE_BATCH])?;
         let deleted_history = match clock.trusted_unix_ms {
             Some(wall) => self.conn.execute("DELETE FROM history WHERE sequence IN (SELECT sequence FROM history WHERE expires<=?1 ORDER BY expires,sequence LIMIT ?2)", params![wall, MAINTENANCE_BATCH])?,
             None => 0,
         };
-        let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2)", params![clock.monotonic_ms, clock.trusted_unix_ms], |r| r.get(0))?;
+        let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2) OR EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.deadline<=?1) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1)", params![clock.monotonic_ms, clock.trusted_unix_ms], |r| r.get(0))?;
         Ok(MaintenanceReport {
             expired_payloads: keys.len(),
+            expired_evidence,
+            expired_receipt_intents,
             deleted_history,
             more_due,
             history_time_available: clock.trusted_unix_ms.is_some(),

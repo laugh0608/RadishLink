@@ -302,3 +302,7 @@ cargo build --frozen --release --target aarch64-unknown-linux-gnu --manifest-pat
 - 同一 boot 的受信时间可驱动现有维护；跨 boot 需要可信停机上界与独立防回滚依据。现有 schema 中的单调截止点和墙钟下界不足以证明它们，因此继续隔离旧传输责任。新 boot 的时间锚、候选库状态恢复和迟到 proof 的处理需一起评审，本轮没有自动解除隔离或新加允许跳过检查的开关。
 
 这使后续工作具体落在 storage trait 联合事务、proof 认证映射和可信恢复三处。许可证处置、R2、Phase B、SW-G2 仍按既有顺序完成；本轮没有发送上游消息、联系专业方或新增密码依赖。
+
+## D6—D10 接受与工程接续（2026-10-24）
+
+所有者已接受 [ADR 0005](../adr/0005-node-security-integration.md)，上述只读核对中的路线选择已转为有限范围的设计决定；实际 API 适配与安全能力仍未验证。完整事务、proof、撤销、跨 boot 方案及剩余验收统一见[Node 安全接入设计](node-security-integration.md)。D10 只接受 Node 证据寿命规则，不整体接受 SW-G3 修订或改变旧实验合同。原 D2/R1/R2/Phase B 状态不变，新产品依赖图不得覆盖历史图。

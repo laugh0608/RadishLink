@@ -118,7 +118,18 @@ pub struct Receive {
     pub remaining_hops: u8,
     pub security: Option<SecurityUpdate>,
     pub text: Option<Vec<u8>>,
-    pub evidence: Option<Vec<u8>>,
+    /// Reconstructible unsigned intent. Never an already produced delivery proof.
+    pub receipt_intent: Option<Vec<u8>>,
+}
+
+/// Committed input for a future signer, not a signature or permission to send.
+/// Deliberately does not implement Debug: the application-defined body is private.
+pub struct ReceiptIntent {
+    pub key: String,
+    pub core_binding: Vec<u8>,
+    pub body: Vec<u8>,
+    pub neighbor: String,
+    pub deadline_ms: i64,
 }
 
 /// Does not contain plaintext or secret state, including in Debug output.
@@ -130,6 +141,7 @@ pub struct MessageView {
     pub payload_present: bool,
     pub custody_observed: bool,
     pub evidence_pending: bool,
+    pub receipt_intent_pending: bool,
 }
 pub struct HistoryItem {
     pub sequence: i64,

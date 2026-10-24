@@ -15,6 +15,9 @@ use std::{
 
 mod maintenance;
 #[cfg(test)]
+mod receipt_tests;
+mod receipts;
+#[cfg(test)]
 mod reliability_tests;
 mod scheduling;
 #[cfg(test)]
@@ -49,8 +52,11 @@ enum TestFault {
 enum OpenMode {
     Current,
     MigrateV1,
+    MigrateV2,
     #[cfg(test)]
     MigrateV1Fault(TestFault),
+    #[cfg(test)]
+    MigrateV2Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -132,6 +138,7 @@ impl Store {
         conn.execute_batch("BEGIN IMMEDIATE;")?;
         conn.execute_batch(include_str!("schema.sql"))?;
         conn.execute_batch(include_str!("migration_v2.sql"))?;
+        conn.execute_batch(include_str!("migration_v3.sql"))?;
         let encoded = limits_json(&limits)?;
         conn.execute(
             "INSERT INTO meta VALUES(1,0,?1,?2,?3,?4)",
@@ -165,13 +172,25 @@ impl Store {
     pub fn migrate_v1(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV1)
     }
+    /// Explicit v2 -> current migration; never accepted for a different source version.
+    pub fn migrate_v2(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV2)
+    }
     fn open_version(
         directory: &Path,
         limits: Limits,
         clock: Clock,
         mode: OpenMode,
     ) -> Result<Self> {
-        let migrate = !matches!(mode, OpenMode::Current);
+        let source_version = match mode {
+            OpenMode::Current => None,
+            OpenMode::MigrateV1 => Some(1),
+            OpenMode::MigrateV2 => Some(2),
+            #[cfg(test)]
+            OpenMode::MigrateV1Fault(_) => Some(1),
+            #[cfg(test)]
+            OpenMode::MigrateV2Fault(_) => Some(2),
+        };
         limits.validate()?;
         clock.validate()?;
         private_directory(directory)?;
@@ -193,14 +212,14 @@ impl Store {
         let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if ![1, 2].contains(&version) || app != APP_ID {
+        if ![1, 2, 3].contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version == 1 && !migrate {
-            return Err(Error::new(Code::MigrationRequired, "store schema v1"));
+        if version < 3 && source_version.is_none() {
+            return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
-        if version != 1 && migrate {
-            return Err(Error::new(Code::Conflict, "migration source must be v1"));
+        if source_version.is_some_and(|source| version != source) {
+            return Err(Error::new(Code::Conflict, "migration source version"));
         }
         configure(&conn)?;
         let check: String = conn.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
@@ -236,19 +255,21 @@ impl Store {
             #[cfg(test)]
             fault: match mode {
                 OpenMode::MigrateV1Fault(fault) => Some(fault),
+                OpenMode::MigrateV2Fault(fault) => Some(fault),
                 _ => None,
             },
         };
-        let mut stmt = s.conn.prepare("SELECT retry FROM queues")?;
-        for row in stmt.query_map([], |r| r.get::<_, String>(0))? {
-            let state: RetryState = serde_json::from_str(&row?)
-                .map_err(|e| Error::source_error(Code::StoreCorrupt, "retry record", e))?;
-            state.validate()?;
-        }
-        drop(stmt);
-        if migrate {
+        s.check_queue_deadlines(version < 3)?;
+        if source_version.is_some() {
             s.atomic(|store| {
-                store.conn.execute_batch(include_str!("migration_v2.sql"))?;
+                // Migration expiry and responsibility checks use the same committed coordinate.
+                store.write_clock(&store.clock)?;
+                if version == 1 {
+                    store.conn.execute_batch(include_str!("migration_v2.sql"))?;
+                }
+                store.conn.execute_batch(include_str!("migration_v3.sql"))?;
+                store.migrate_receipt_deadlines()?;
+                store.check_queue_deadlines(false)?;
                 Ok(())
             })?;
         }
@@ -367,15 +388,15 @@ impl Store {
                 self.limits.history_bytes as i64,
             ),
             (
-                "SELECT (SELECT count(*) FROM queues WHERE kind='evidence')+(SELECT count(*) FROM control_reservations)",
+                "SELECT (SELECT count(*) FROM queues WHERE kind='evidence')+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
                 self.limits.control_count as i64,
             ),
             (
-                "SELECT (SELECT coalesce(sum(length(body)),0) FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)",
+                "SELECT (SELECT coalesce(sum(length(body)),0) FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)+(SELECT count(*)*4096 FROM receipt_intents)",
                 self.limits.control_bytes as i64,
             ),
             (
-                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)",
+                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
                 self.limits.record_count as i64,
             ),
             (
@@ -406,7 +427,7 @@ impl Store {
     pub fn message(&self, key: &str) -> Result<Option<MessageView>> {
         self.readable()?;
         check_ref(key)?;
-        Ok(self.conn.query_row("SELECT key,state,payload IS NOT NULL,custody,EXISTS(SELECT 1 FROM queues WHERE message_key=messages.key AND kind='evidence'),source_neighbor FROM messages WHERE key=?1",[key],|r|Ok(MessageView{key:r.get(0)?,state:r.get(1)?,payload_present:r.get(2)?,custody_observed:r.get(3)?,evidence_pending:r.get(4)?,source_neighbor:r.get(5)?})).optional()?)
+        Ok(self.conn.query_row("SELECT key,state,payload IS NOT NULL,custody,EXISTS(SELECT 1 FROM queues WHERE message_key=messages.key AND kind='evidence'),source_neighbor,EXISTS(SELECT 1 FROM receipt_intents WHERE message_key=messages.key) FROM messages WHERE key=?1",[key],|r|Ok(MessageView{key:r.get(0)?,state:r.get(1)?,payload_present:r.get(2)?,custody_observed:r.get(3)?,evidence_pending:r.get(4)?,source_neighbor:r.get(5)?,receipt_intent_pending:r.get(6)?})).optional()?)
     }
     pub fn action(
         &self,

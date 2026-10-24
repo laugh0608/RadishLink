@@ -86,17 +86,24 @@ impl Store {
         neighbor: &str,
         batch: Batch,
     ) -> Result<Decision> {
-        let encoded: Option<String> = self
+        let record: Option<(String, i64)> = self
             .conn
             .query_row(
-                "SELECT retry FROM queues WHERE message_key=?1 AND kind=?2 AND neighbor=?3",
+                "SELECT q.retry,m.deadline FROM queues q JOIN messages m ON m.key=q.message_key WHERE message_key=?1 AND kind=?2 AND neighbor=?3",
                 params![key, kind, neighbor],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?;
-        let encoded = encoded.ok_or_else(|| Error::new(Code::Conflict, "queue target missing"))?;
+        let (encoded, deadline) =
+            record.ok_or_else(|| Error::new(Code::Conflict, "queue target missing"))?;
         let retry: RetryState = serde_json::from_str(&encoded)
             .map_err(|e| Error::source_error(Code::StoreCorrupt, "retry record", e))?;
+        if retry.deadline_ms() > deadline {
+            return Err(Error::new(
+                Code::StoreCorrupt,
+                "queue exceeds message deadline",
+            ));
+        }
         let (next, decision) = retry.advance(batch)?;
         self.conn.execute(
             "UPDATE queues SET retry=?4 WHERE message_key=?1 AND kind=?2 AND neighbor=?3",

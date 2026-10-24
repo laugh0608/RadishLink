@@ -98,7 +98,7 @@ flowchart TB
 
 目前公开的 `mls-rs-provider-sqlite 0.23.0` API 提供 group、KeyPackage、PSK 与 application storage；这些接口名称不足以证明与上述业务写入共同提交。[固定版本 API](https://docs.rs/mls-rs-provider-sqlite/0.23.0/mls_rs_provider_sqlite/struct.SqLiteDataStorageEngine.html)。方案提出时尚未核对其固定源码；后续[关键 API 只读核对](../security/e2ee-sw-g2-decision-package.md#node-联合事务接入源码核对2026-10-24)确认现成 provider 内部独立提交，不能直接承接 Node 联合事务。该核对不是完整审计，也未运行适配。
 
-接入前必须证明：库全部持久写入能由同一外部事务控制；包含 KeyPackage 消费、epoch/skipped-key 更新等旁路；调用失败后的内存会话能丢弃并从已提交状态重建；没有提前输出网络效果。如果现有 provider 不具备能力，优先评审使用库正式 storage trait 的事务适配，而不是改密码算法、fork 候选或用第二套提交日志补偿。该适配是待评审新范围，不能改动现有 spike 的 provider/feature/lockfile 来尝试绕过停止线。
+接入前必须证明：库全部持久写入能由同一外部事务控制；包含 KeyPackage 消费、epoch/skipped-key 更新等旁路；调用失败后的内存会话能丢弃并从已提交状态重建；没有提前输出网络效果。如果现有 provider 不具备能力，优先评审使用库正式 storage trait 的事务适配，而不是改密码算法、fork 候选或用第二套提交日志补偿。该路线已由 [ADR 0005 D6](../adr/0005-node-security-integration.md) 接受；实际候选适配仍须许可证/R2/Phase B 前置，不能改动现有 spike 的 provider/feature/lockfile 来尝试绕过停止线。
 
 一旦 COMMIT 返回结果不确定，停止相关状态的发送、展示和新安全操作，关闭不可信内存会话，通过数据库恢复后的提交代数及动作绑定判断结果；无法判断时保持 `QUARANTINED`，不自动重发、不创建空库。事务回滚也要丢弃可能已推进的内存安全对象，不能只回滚 SQL 后继续使用它。
 
@@ -223,3 +223,7 @@ TLS 1.3 的双向认证只确认当前邻居；目标身份、消息不可变核
 所有者已授权在方案和 ADR 提交后推进第一批服务与事务基础开发；实施范围与依赖差量另行记录。D3/D4 的实际平台操作留在后续部署批次；本次不授权依赖安装、候选 Phase B、采购、系统修改、网络实验或远程写入。
 
 仍需工程/专业证据、不能由所有者一句确认代替的事项：安全库联合事务与 relay-clear proof、许可证/R2、可信时间与抗旧镜像回滚、SQLite 物理掉电行为、各平台 HTTPS 首次信任及 ARM64 实测。这些事项已有明确归属和进入条件，不新增一套平行 gate。
+
+## D6—D10 接续决策（2026-10-24）
+
+所有者已接受 [ADR 0005](../adr/0005-node-security-integration.md)：Node 正式 storage trait 联合事务、两端 MLS 与独立签名证明、分层撤销、首期冷启动隔离和原消息 deadline 约束证明。其具体机制与验收边界统一见[安全接入设计](../security/node-security-integration.md)。本页未由 ADR 接受的具体机制继续按专题评审；D6—D10 接受不放行实际候选功能试验、依赖或平台操作。

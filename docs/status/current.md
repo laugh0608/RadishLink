@@ -32,7 +32,7 @@ I1–I5-I 已提交并通过有限离线验证；容量核验和受限双构建 
 | 证据轨 / gate | 当前结论 | 后续缺口与正式记录 |
 | --- | --- | --- |
 | `PLAN-G0 / SW-G0 / SW-G1` | 已接受计划、术语和消息交付语义 | [执行计划](project-execution-plan.md)、[软件计划](d0-t0-p0-plan.md)、[消息语义](../protocol/message-delivery-semantics.md) |
-| `SW-G3` | 1.0 设计已接受；修订已自审但未接受 | [修订评审包](../testing/sw-g3-revision-2-review.md)补齐证据返回责任与迟到调度规则；原参数和历史证据不变 |
+| `SW-G3` | 1.0 设计已接受；修订未整体接受，Node 证据寿命规则由 ADR 0005 D10 有限接受 | [修订评审包](../testing/sw-g3-revision-2-review.md)补齐证据返回责任与迟到调度规则；原参数和历史证据不变 |
 | `SW-G4 / SW-V0` | 已完成；四个 canonical profile 各三次通过且归一化一致 | 只证明 harness；[正式记录](../testing/sw-g4-sw-v0-harness-authorization.md)不授权重跑或扩展 |
 | 后续 `SW-G4 / I1` | 有限范围已接受，离线算法实施与验证通过 | [I1 记录](../testing/sw-g4-synthetic-i1-plan.md)覆盖重试与长度边界；全量回归先受沙盒缓存权限阻断，获准同命令复验通过；无正式场景结果 |
 | 后续 `SW-G4 / I2` | 有限范围已接受，实施与离线验证通过 | [I2 记录](../testing/sw-g4-synthetic-i2-plan.md)覆盖显式限额、V0 兼容和短写拒绝；全量 vet/test 首次受缓存权限阻断，同命令获准复验通过；[队列/事务接入](../architecture/minimal-text-slice.md#队列与事务的接入设计)仍为候选 |
@@ -52,6 +52,8 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
+2026-10-24 所有者进一步接受 [ADR 0005 D6—D10](../adr/0005-node-security-integration.md)，固化[安全接入设计](../security/node-security-integration.md)：正式 storage traits、两端 MLS 与独立证明、分层撤销、冷启动隔离及证明原 deadline。授权先推进不受停止线阻塞的 Node 自有持久边界与离线验证；实际候选、许可证/R2/Phase B、平台与网络操作未放行。同批已完成[证明生命周期开发](../testing/node-receipt-lifecycle.md)：T-C 意图与提交后转换、schema v3 显式迁移、原 deadline 与有界控制清理；63 项本机离线测试通过，真实签验与可信恢复仍未通过。
+
 2026-10-24 所有者要求先完成 Node 服务架构与关键选型，再集中确认。已形成 [Node 服务设计提案](../architecture/node-service-design.md)：推荐 Rust 单进程、串行状态提交、SQLite 单库事务，并细化数据保护、时间/崩溃恢复、设备与手机接口、ARM64 部署及四批实施验收。所有者随后明确接受 D1—D5，形成 [ADR 0004](../adr/0004-node-service-foundation.md)，并授权提交文档后推进第一批服务/事务基础开发。首批 `node/` 服务与事务基础已实施，28 项本机离线测试通过，见[实施与验证记录](../testing/node-service-foundation.md)。生产运行入口仍明确拒绝；真实密码、平台解锁、网络与 ARM64 未接入，依赖安装及原安全/运行停止线不变。
 
 同日首批实现提交为 `2936c6e`；随后完成[服务运行可靠性开发](../testing/node-service-reliability.md)，包括显式 schema v1→v2 迁移、中继返回证据容量预留、请求背压/停止协调、周期维护及事件批调度，47 项本机离线测试与静态/仓库检查通过。安全候选的[关键源码核对](../security/e2ee-sw-g2-decision-package.md#node-联合事务接入源码核对2026-10-24)确认现成 SQLite provider 不能直接参与 Node 联合事务，后续优先评审正式 storage trait 适配；真实安全、平台时钟、跨 boot 恢复和设备运行仍未通过。
@@ -66,7 +68,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
-1. 开发优先：按已接受的 [Node 服务架构与关键选型](../architecture/node-service-design.md#集中确认清单)及 ADR 0004 接续已完成的[运行可靠性开发](../testing/node-service-reliability.md)，依据固定源码核对收敛正式 storage trait 联合事务、proof/撤销映射和可信跨 boot 恢复；实际功能接入仍须满足许可证/R2/Phase B 前置。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
+1. 开发优先：按已接受的 [Node 服务架构与关键选型](../architecture/node-service-design.md#集中确认清单)及 ADR 0004 接续已完成的[运行可靠性开发](../testing/node-service-reliability.md)，按 ADR 0005 接续已完成的[证明生命周期与恢复拒绝验证](../testing/node-receipt-lifecycle.md)，继续准备正式 storage trait、身份/撤销 profile 和可信平台验收；实际功能接入仍须满足许可证/R2/Phase B 前置。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
 2. 基于已整理的内部 Linux ARM64 产物评审表，冻结实际复制/留存范围、评审者与下一精确包；分别处置 `debug_tree` 固定源码正文/归属与 `r-efi` 的 MIT alternative。专业意见、新证据与执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 在已选择的 Node 身份与手机界面职责下收敛首次信任、撤销、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
 4. I5 后续先满足[路线 A 宿主资源门](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)，不把当前 Mac/UTM 改名或增加 guest 配额当作达标。资源条件变化后复核完整准备预算、真实输入与可信基座，冻结真实 FD loader、非 UTM 控制面和新版执行合同，再另行授权实现、原生环境验收及验签/APT。安装、冷构建、daemon/store 计费和正式 21 样本 I5-R 仍各有前置；不直接创建满额四盘后安装，不在域外先构建。V0 历史合同与 SW-G2 安全门不变。
@@ -84,7 +86,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 ## 当前停止线
 
 - 既有七个 VM 相关单次操作包及一次宿主观察均已结束并消费，不能继承为再次启动/重跑授权。最新一次正常关机，不消除此前强制停止后的系统盘完整性未检查这一缺口。I5 shell preflight/run 与直接 Go synthetic-run 均因缺少整批资源隔离而停止；不绕过停止检查、先在域外构建或自动调整共享 daemon。环境准备需另行精确授权，离线拒绝回归不构成资源修复完成或 I5-R 放行。
-- 不采购 HaLow、不射频发射、不做量产 PCB；Node 语言/存储及本地数据基线已按 ADR 0004 接受，其余密码、线格式、依赖和硬件选择不自动冻结；`HW-G2` 前不采购，`HW-G3` 前不刷写或启动实体台架，无线操作另受 `RF-R*` 约束。
+- 不采购 HaLow、不射频发射、不做量产 PCB；Node 基线按 ADR 0004、安全接入方向按 ADR 0005 接受；精确密码算法/实现、线格式、依赖完整图和硬件选择不自动冻结；`HW-G2` 前不采购，`HW-G3` 前不刷写或启动实体台架，无线操作另受 `RF-R*` 约束。
 - OpenMLS 两个固定图的 Phase B 禁止；mls-rs D2 的 `PASS` 不授权 Phase B。许可证证据轨和 R2 未完成，`SW-G2` 未通过。
 - 不自动第四次运行 R1、不扩展 selector、不补写或重判 R1c evidence、不改 gate/allowlist/advisory ignore、版本、provider、source 或 lockfile；新证据与策略变更须另行明确范围。
 - `debug_tree` X/R 继续遵循[已冻结的精确澄清合同](../testing/sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)。公开账号和逐字消息须预审；发送、收集、回复接受性分别按合同处理，不自动监控、追问、编辑或关闭 Issue。
