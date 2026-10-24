@@ -17,6 +17,8 @@
 - [最小文字闭环实现前设计](architecture/minimal-text-slice.md)：待评审的用户路径、事务边界与失败矩阵。
 - [网络与路由](architecture/network-and-routing.md)
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
+- [Node 数据 envelope](protocol/node-data-envelope.md)：不可变核心、MLS AAD、保守时间与 D15 已接受参数。
+- [Node 控制传播预算](protocol/node-control-propagation.md)：退出/报告有界转发、逐跳确认与 D16 已接受容量取舍。
 - [安全架构](security/security-architecture.md)
 - [Node 安全接入设计](security/node-security-integration.md)：D6—D10 的联合事务、证明、撤销与跨 boot 边界。
 - [Node 身份与控制 profile](security/node-identity-control-profile.md)：活动绑定、撤销权限、COSE 精确约束与 D11—D14 已接受基线。
@@ -36,6 +38,7 @@
 - [Node 第一批服务与事务基础](testing/node-service-foundation.md)：固定依赖、SQLite 联合事务、离线故障验证及生产接入边界。
 - [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、schema 迁移、控制容量预留、周期维护及安全接入核对。
 - [Node 证明生命周期与恢复边界](testing/node-receipt-lifecycle.md)：提交后证明意图、schema v3、原消息截止时间与离线故障验证。
+- [Node 安全候选新图精确评审包](testing/node-security-graph-review-package.md)：固定输入、G1/G2 命令与来源/资源/证据合同，非执行授权。
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A / Phase B 合同与历史结果。
 - [`SW-EXP-003` mls-rs 0.56.0 静态门禁与执行授权包](testing/sw-g2-mls-rs-spike-authorization.md)：候选静态门与停止条件。
@@ -80,6 +83,7 @@
 - [ADR 0004：Node 服务、事务与本地数据基线](adr/0004-node-service-foundation.md)
 - [ADR 0005：Node 安全接入、撤销与证据寿命](adr/0005-node-security-integration.md)
 - [ADR 0006：Node 活动身份与控制证明 profile](adr/0006-node-identity-and-control-profile.md)
+- [ADR 0007：Node 数据 envelope 与控制传播预算](adr/0007-node-envelope-and-control-budget.md)
 
 ## 协作与治理
 

@@ -75,7 +75,7 @@ ReceiptV1 = [1, 1, activity_id, origin_id, origin_credential_ref,
 
 候选摘要输入为确定性 CBOR array `["RadishLink.MessageBinding.v1", 1, immutable_core_bytes, ciphertext_bytes]`，后两项是 bstr，`message_binding = SHA-256(该编码)`。长度封装避免拼接歧义。不可变核心必须覆盖版本、活动、双方身份/凭据、message_id、原始寿命与 hop 上限、业务类型/优先级、MLS group/epoch，并作为 MLS authenticated_data 绑定；密文为原始完整 MLS 加密消息 bytes。逐跳剩余 hop、邻居、各机 monotonic deadline 不进入不可变核心，避免转发修改破坏一致性。
 
-**仍未关闭的依赖：**完整数据 envelope 及 `immutable_core_bytes` 的逐字段编码尚未冻结；core 不能包含自身的 `message_binding`，避免循环。该数据 profile、MLS AAD 映射与真实互操作向量必须补齐后，才能把本节提升为可运行协议。现有 Node `Message.key` 字符串与 `core_binding` 是内部持久表示，不自动成为上述 wire 字段，也不在本轮迁移。
+**仍未关闭的依赖：**[数据 envelope 评审稿](../protocol/node-data-envelope.md)已补齐 `immutable_core_bytes` 的逐字段编码、MLS AAD 与非循环摘要顺序；D15 数值已由 ADR 0007 接受，真实互操作/平台输入仍未通过，不能将本节提升为可运行协议。core 不含自身的 `message_binding`。现有 Node `Message.key` 字符串与 `core_binding` 是内部持久表示，后续需按明确映射/迁移接入，不在本轮迁移。
 
 验证次序为：长度/严格解码 → 根据本机待办消息取预期目标 → 比对全部字段与摘要 → 按 receipt 用途取可信公钥及核对 kid → 标准验签 → 当前活动/授权/deadline 检查 → 同一状态事务 T-D 复核并接管返回责任。任何步骤失败均不清理 payload、不创建交付事实、不返还重试额度。没有对应责任的孤立证明不创建新消息。重复已接受证明语义幂等，不以原始签名字节的差异创建额外责任。
 
@@ -106,6 +106,8 @@ issuer/target/operation_id 为 16-byte bstr；活动与凭据引用为 32-byte b
 撤销事务更新授权修订、封禁映射和受影响责任的不可输出状态。业务入队、证明转换、界面响应及实际传输写入必须经过同一串行授权门；最终检查与把 bytes 交给传输的边界不得被撤销穿插。撤销提交后不再启动旧权限写入；提交前已交给 OS/对端的 bytes 无法召回。已提交的交付历史事实保留，未发证明/意图停止输出并按有界清理释放；不因清理改变过去已交付事实。
 
 自身退出的原始已验证控制对象是唯一必要例外：可在持久封禁其 issuer 后继续转发该对象，以便传播封禁；不得重新签署、修改或借该通路发送普通业务/receipt。对来源已封禁且此前未验证的对象不再开放通用接收权。转发重试、队列配额与活动关闭清理须在控制传输合同中完成，不沿用消息 deadline 为永久控制提供无限预算。
+
+接续的[控制传播预算稿](../protocol/node-control-propagation.md)已提出活动/代数、去重槽、速率与尝试次数，以及独立保留区和本机 Retiring 状态；其中 D16 容量取舍已由 ADR 0007 接受，不能回写为本节 D13 已实现事实。
 
 重新连通时，已收到且有权处理的退出/撤销先于待发业务应用；报告仅提示。分区中的未知撤销不能即时全队生效，不以本机 revision 作为全队时间戳或全局胜者。控制消息只属于当前活动；旧活动和冷启动隔离状态不自动恢复，不依赖墙上时间 `issued_at` 判定新鲜性。封禁记录保留至活动停用；活动停用后整个范围拒绝。
 

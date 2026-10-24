@@ -52,6 +52,8 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
+2026-10-24 所有者接受 D11—D14 后，已固化 [ADR 0006](../adr/0006-node-identity-and-control-profile.md) 并提交为 `5d2ebfc`。接续完成[数据 envelope](../protocol/node-data-envelope.md)、[控制传播预算](../protocol/node-control-propagation.md)与[新依赖图精确评审包](../testing/node-security-graph-review-package.md)；所有者随后接受 D15 的一小时寿命/解析边界及 D16 的活动/资源取舍，已固化 [ADR 0007](../adr/0007-node-envelope-and-control-budget.md)，见[接受记录](project-execution-plan.md#node-d15d16-接受记录2026-10-24)。新图命令与输入已明确，但真实硬资源/网络监督环境未验证，G1/G2 未执行。未修改产品代码或 lock，全部停止线不变。
+
 2026-10-24 按所有者要求提交证明生命周期与安全接入基线（`a5ef086`），随后完成[身份绑定、撤销和 COSE profile](../security/node-identity-control-profile.md)及[依赖评审准备](../security/node-control-dependency-review.md)。所有者随后已接受 [ADR 0006 D11—D14](../adr/0006-node-identity-and-control-profile.md)：活动内逐对绑定、严格 Ed25519 控制 profile、自身退出权限与候选依赖方向。已核对标准/公开 API 及既有固定源码，尚未解析新图、安装或运行密码候选；数据 envelope、控制传播预算、许可证/R2 和独立复核仍未关闭。全部既有停止线不变。
 
 2026-10-24 所有者进一步接受 [ADR 0005 D6—D10](../adr/0005-node-security-integration.md)，固化[安全接入设计](../security/node-security-integration.md)：正式 storage traits、两端 MLS 与独立证明、分层撤销、冷启动隔离及证明原 deadline。授权先推进不受停止线阻塞的 Node 自有持久边界与离线验证；实际候选、许可证/R2/Phase B、平台与网络操作未放行。同批已完成[证明生命周期开发](../testing/node-receipt-lifecycle.md)：T-C 意图与提交后转换、schema v3 显式迁移、原 deadline 与有界控制清理；63 项本机离线测试通过，真实签验与可信恢复仍未通过。
@@ -70,7 +72,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
-1. 开发优先：按已接受的 [Node 服务架构与关键选型](../architecture/node-service-design.md#集中确认清单)及 ADR 0004 接续已完成的[运行可靠性开发](../testing/node-service-reliability.md)，按 ADR 0005 接续已完成的[证明生命周期与恢复拒绝验证](../testing/node-receipt-lifecycle.md)，继续准备正式 storage trait、身份/撤销 profile 和可信平台验收；实际功能接入仍须满足许可证/R2/Phase B 前置。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
+1. 开发优先：接续 ADR 0004—0007 及已完成的[证明生命周期与恢复拒绝验证](../testing/node-receipt-lifecycle.md)，按已接受 D15/D16 推进 Node 自有离线边界，准备正式 storage trait、可信平台与新图执行环境；实际功能接入仍须满足许可证/R2/Phase B 前置。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
 2. 基于已整理的内部 Linux ARM64 产物评审表，冻结实际复制/留存范围、评审者与下一精确包；分别处置 `debug_tree` 固定源码正文/归属与 `r-efi` 的 MIT alternative。专业意见、新证据与执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 在已选择的 Node 身份与手机界面职责下收敛首次信任、撤销、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
 4. I5 后续先满足[路线 A 宿主资源门](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)，不把当前 Mac/UTM 改名或增加 guest 配额当作达标。资源条件变化后复核完整准备预算、真实输入与可信基座，冻结真实 FD loader、非 UTM 控制面和新版执行合同，再另行授权实现、原生环境验收及验签/APT。安装、冷构建、daemon/store 计费和正式 21 样本 I5-R 仍各有前置；不直接创建满额四盘后安装，不在域外先构建。V0 历史合同与 SW-G2 安全门不变。
