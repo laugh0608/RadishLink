@@ -72,6 +72,8 @@
 
 本轮接续已补 Mac ARM64 宿主版本、WCH 固定说明与 pySerial 3.5 自定义速率源码依据，系统旧版 screen 不作为默认 1.5 Mbaud 入口；驱动安装、真实串口与冷启动均未执行，详见[串口准备候选](../hardware/hardware-validation-plan.md#mac-串口准备候选2026-10-24)。所有者随后明确软硬件开发优先，报价由其自行在淘宝搜索并反馈；Agent 只提供[名称与数量](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)，不继续扩展询价流程。收到价格后统一核算，等待期间继续已授权的软件设计、离线开发及硬件接口准备，现行安全、采购和运行边界不变。
 
+所有者已反馈淘宝价格表，按给价项目合计 2024 元（供电线暂不另计），超过首轮上限 1024 元；按整套 3000 元核算名义余额 976 元。若电源只赠送三条线，测量用第四条另补；暂缓 200 元功率计时待购为 1824 元。查价工作收口，采购前再处理预算取舍，不因此延后独立软硬件开发；未采购、未修改预算上限。
+
 [内部 ARM64 评审输入](../security/e2ee-sw-g2-decision-package.md#内部-linux-arm64-实验评审输入2026-10-24)核对现有 manifest/lock/target 与 Phase B 拒绝入口，列出拟议产物、source/cache 范围和两包交接问题。当前仍缺专业意见、有效新证据与 R2；没有联系上游、构建候选、安装依赖或执行实验。I5 路线 A 资源事实未变化，继续暂停真实推进，不把 BOM 工作或使用量规划扩大为旧合同的修改。
 
 ## 总体依赖
@@ -161,7 +163,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 | 高 | [E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)及现有 R1d 处置 | 优先固定 mls-rs 0.56.0；10 月 24 日已整理内部 Linux ARM64 输入与拟议产物/命令，下一步冻结实际复制范围和复核责任，分别处理 debug_tree 与 r-efi，满足新证据轨/R2 条件 | 分渠道方向已接受，专业意见与新合同仍待完成；不放宽现行 gate，不进入 Phase B |
 | 高 | [手机身份](../mobile/companion-app.md)、[路由边界](../architecture/network-and-routing.md)与安全状态 | Node 身份/会话/历史及手机界面职责已选择；继续证明首次信任、撤销、hop 映射、事务和 relay-clear proof | 系统/安全评审；方向接受不等于密码实现或 SW-G2 通过 |
 | 高 | [文字闭环设计](../architecture/minimal-text-slice.md)、[SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与 [I5 三进程闭环包](../testing/sw-g4-synthetic-i5-plan.md) | I1–I5-I 已提交并通过各自离线验证；[资源隔离设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)保留整批 768 MiB，证据计费、容量探测及受限双构建 helper 离线通过；10 月 18 日 [RPC/生命周期内部接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#受监督-rpc-与单次生命周期离线接线2026-10-18)通过离线验收、提交为 `17a142e`，未 push；第一包新增[初始化合同与容量账本离线评审](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化合同与容量账本离线评审2026-10-18)，已提交为 `e6d50ff`，未 push；第二包已完成[合成初始化、受控暂存与收尾接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化受控暂存与收尾内部接线2026-10-18)，已提交为 `4281fb0`，未 push；第四包已完成[原生初始化与 bootstrap 离线实施](../testing/sw-g4-synthetic-i5-native-initialization.md)；第五包新增[宿主写入裁决与原生生命周期离线接入](../testing/sw-g4-synthetic-i5-host-delivery.md)，当前 Mac/UTM 全域写入仍阻塞；仍须补齐真实 FD loader、输入、Linux 父监督验收、运行合同的真实绑定和完整硬额度，再完成运行接入、daemon 隔离及环境验收后评审入口重开 | 当前 preflight/run 停止；测试文件存储不替代生产数据库/安全联合提交，不宣称正式 V1/V2/V3 通过 |
-| 中 | [HW0/BOM](../hardware/poc-purchase-list.md#三节点全新增-bom-评审2026-10-24)与[联合预算](../hardware/hardware-strategy.md#能量体积与成本联合预算) | 10 月 24 日已确认已支出 0 元，补六类物料参考小计、存储型号和 b1 版本/驱动证据；补齐可供货完整报价并核算首轮 ≤ 1000、累计 ≤ 3000 元 | 公开标价不等于到手价；具体配件、详细 HW-G0/G1 与预算可行性待评审，不启动或覆盖设备 |
+| 中 | [HW0/BOM](../hardware/poc-purchase-list.md#三节点全新增-bom-评审2026-10-24)与[联合预算](../hardware/hardware-strategy.md#能量体积与成本联合预算) | 10 月 24 日已确认已支出 0 元；所有者反馈 BOM 小计 2024 元，原首轮超预算，采购前决定取舍；b1 版本/驱动及接口准备继续 | 公开标价不等于到手价；具体配件、详细 HW-G0/G1 与预算可行性待评审，不启动或覆盖设备 |
 | 中 | [已有工具验证与 CI](../governance/repository-governance.md#已有工具的质量入口演进) | 将现有离线测试纳入拟实施清单，识别重复 runner/monitor/finalizer 的稳定职责 | 另案代码/CI 实施；I1 本轮未修改 CI，无已生效的新 job |
 
 审计与上游补证等待期间，可以继续已授权的范围设计、接口评审和只读资料整理。没有相应实现/运行授权时，不把“可以并行”解释为允许启动实验。项目进展按关闭的不确定性和验证的用户路径判断，不按 helper、提交或 gate 数量判断。
