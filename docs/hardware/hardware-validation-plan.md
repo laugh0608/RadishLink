@@ -1,7 +1,7 @@
 # RadishLink 低成本硬件验证计划
 
 - 状态：推进顺序已获所有者确认；详细验证计划仍为 Draft，待 HW-G0/G1 评审
-- 更新日期：2026-10-09
+- 更新日期：2026-10-24
 - 当前 gate：`HW-G0`
 - 目标读者：系统、硬件、嵌入式、测试与产品协作者
 
@@ -20,7 +20,7 @@
 - ESP32-S3 只作为 UI、电源、按键、唤醒和看门狗辅助 MCU，不承载完整消息、E2EE、存储转发或媒体主栈；
 - 在 `HW1` 通过前不买三块 MCU，不做自定义 PCB；在法规门完成前不买 HaLow 套件。
 
-本轮已确认无可复用设备及硬件路线，尚无完整采购候选清单、报价或测试 manifest，HW-G0/G1 不据此标为通过。整套目标 2000–3000 元、累计硬上限 3000 元；首轮有线台架新增支出评审上限 1000 元保持不变，具体核算见[采购清单](poc-purchase-list.md#hw0-设备盘点与增量成本输入)。进入 P1 时给两个通话端补音频输入输出，单台交互 Demo 不替代双端语音验证。
+2026-10-24 已补齐[三节点全新增 BOM 项目表](poc-purchase-list.md#三节点全新增-bom-评审2026-10-24)、公开价格观察与下列 BSP 预检；具体配件 SKU、可供三台的完整到手报价和测试 manifest 仍缺，HW-G0/G1 不据此标为通过。整套目标 2000–3000 元、累计硬上限 3000 元；首轮有线台架新增支出评审上限 1000 元保持不变。进入 P1 时给两个通话端补音频输入输出，单台交互 Demo 不替代双端语音验证。
 
 ## 明确非目标
 
@@ -112,7 +112,7 @@ Linux A ── Ethernet/USB ── Linux B ── Ethernet/USB ── Linux C
 | 已有 Linux 主机/SBC | 成本最低，最适合先验证独立电源、存储和部署 | 型号不一致时性能数据不可横向合并 |
 | Raspberry Pi Zero 2 W | 官方定位为 15 美元级 Linux 小板；64-bit Cortex-A53、512MB、2.4 GHz Wi-Fi、单 USB OTG，可做文字节点最低资源 smoke test | 512MB 和单接口余量很小，需要额外有线接口；不满足工程样机 2GB 起步候选门 |
 | Orange Pi Zero 3 2GB/4GB | Cortex-A53、Gigabit Ethernet、Wi-Fi 5、USB 2.0 和 Debian/Ubuntu 候选，纸面上适合低成本实体 Linux 台架 | 必须先验证 BSP、内核、接口并发、镜像更新和稳定性，不能只看参数采购 |
-| Radxa ZERO 3W/3E 2GB+ | Cortex-A55、1–8GB RAM、可选 eMMC；3W 有无线，3E 有 Gigabit Ethernet | 3W/3E 接口不同，严格 A—B—C 仍可能需要 USB Ethernet 或混合 SKU；先核对支持周期 |
+| Radxa ZERO 3W/3E 2GB+ | Cortex-A55、1–8GB RAM；3W 有无线及 eMMC 选项，3E 有 Gigabit Ethernet、使用 microSD | 不把系列 eMMC 配置套到 3E；三台 3E 仍需 B 的第二 USB Ethernet，先核对支持周期 |
 | ESP32-S3 开发板 | 按键、显示、I2S、USB、SD/MMC、低功耗控制、安全启动和看门狗实验 | 512KB 片上 SRAM、最高 16MB 模块 PSRAM、仅 2.4 GHz Wi-Fi/BLE；不作为 Linux Core 或 HaLow 证明 |
 
 主要官方资料：
@@ -123,6 +123,29 @@ Linux A ── Ethernet/USB ── Linux B ── Ethernet/USB ── Linux C
 - [ESP32-S3 官方规格](https://www.espressif.com/en/products/socs/esp32s3/docs)
 
 资料核对日期：2026-08-20。价格、可用 SKU 和本地供货在实际采购前重新核对。
+
+### 本轮候选与 BSP 预检（2026-10-24）
+
+本次只核对公开资料，没有下载/安装镜像或驱动、启动板卡、查询真实设备。厂商声明不等于 RadishLink 实测；未列出的旧候选沿用历史资料，不假装已经刷新。
+
+| 候选 | 本轮比较 | 判断 |
+| --- | --- | --- |
+| ZERO 3E 2GB，三台同 revision | 板载有线 + B USB Host 网卡可构成目标拓扑；无板载无线；完整 BOM 已计配置/救援工具。官方规格见[ZERO 3](https://docs.radxa.com/en/zero/zero3) | 保留首选评审顺位；库存、到手价、BSP 和实际恢复仍未关闭，不是采购决定 |
+| ZERO 3E 4GB，三台同 revision | 作为同板型内存更大备选；Arace 4GB 标价低于 2GB 但同样缺货，详见 BOM 的 variant 记录 | 只保留报价比较，不能把缺货低价当省钱方案；换 SKU 后仍须复核镜像/内存和预算 |
+| Orange Pi Zero 3 2GB | 仓库已有历史候选；本轮官方产品页读取超时，未取得可靠的当前报价、镜像和供货复核 | 暂不替换首选；板载无线须在首次启动前安排禁用与核验，不能先启动后再关闭以满足无射频边界 |
+| Raspberry Pi Zero 2 W | [官方规格](https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/)仍列 512MB、USB OTG 和无线；三节点有线需更多网卡/扩展 | 可作既有低资源 smoke 候选，不作为当前 2GB 同型号三节点方案的等价替代，不能只比较板价 |
+
+| 预检项 | 已有文档依据 | 尚缺与验收边界 |
+| --- | --- | --- |
+| SKU / revision / 存储 | `RS109-D2E0H1` 是带排针 2GB 的商店 variant；[官方资源](https://docs.radxa.com/en/zero/zero3/download)列出 3E V1.2 硬件资料 | 卖家实际 PCB revision、三台一致性、microSD SKU 待确认；不把可下载原理图当交付版本证明 |
+| OS / BSP | 官方下载页列出 `radxa-zero3_bookworm_kde_b1` / 6.1 kernel，以及 Bullseye / 5.10 旧候选 | 先评审 Bookworm b1；精确资产、构建配置、内核 patch、U-Boot、DTB、摘要/来源验签及更新路径未冻结；桌面镜像不能直接称 headless 生产镜像，不把摘要当签名 |
+| 系统许可与维护 | 官方文档提供镜像及底层开发入口 | kernel、bootloader、固件和镜像包清单的版本/许可证/归属及维护期限待核对；整个镜像不能只写“Linux 开源” |
+| B 双接口 | 官方列出独立板载 Ethernet、USB-C Host 与供电 OTG 口；B 网卡候选为 RTL8153 | 目标内核的驱动/config、实际 USB VID/PID、网口命名、热插拔/掉电枚举和同时供电待验证；厂商 Linux 声明不足以通过 |
+| 初次配置 / headless | 官方有[UART 调试入口](https://docs.radxa.com/en/zero/zero3/hardware-design/hardware-interface)及[microSD 安装流程](https://docs.radxa.com/en/zero/zero3/getting-started/install-os) | Mac 串口适配器/工具、默认控制台与权限、无外网配置方法、移除默认凭据/重复身份、镜像更新范围待 HW-G3 固定；不把板卡默认密码或共享克隆身份用于产品 |
+| 恢复 / 持久化 | 可移除 microSD 与串口提供候选诊断路径 | 逐台首次启动、关机、掉电、只读/满盘与故障原卡留存需精确 manifest；能重写启动盘不代表消息、安全状态或升级恢复通过 |
+| USB / 功耗扩展 | HW1 的 B Host 被网卡占用，A/C Host 可留作后续接口评审 | P1 音频、近距与长距无线若争用 Host，需有供电与 hub 成本预算；HW1 的 5 V 供电规格不是产品功耗实测 |
+
+本表是设计/资料评审输入，不新增正式测试参数。HW-G1 关闭时应把“可先用资料确认的条件”和“HW-G3 授权后才可执行的验收项”分开，避免要求未买板先出实测，也避免有文档就宣称硬件通过。2GB 节点用于 HW1；它不满足 I5 路线 A 的既有宿主证据要求，HW1 设备到位也不能直接重开 I5。
 
 ## Gate 与授权
 

@@ -216,3 +216,46 @@ RFC 9750 的 [AS/DS 架构与投递说明](https://www.rfc-editor.org/rfc/rfc975
 后续安全适配的首批验收仍按本包既有要求：A/C 通信的纯中继 B 不可解密；密码状态、队列与送达确认在崩溃恢复时一致；重放、身份变化、分区并发、撤销及 relay-clear proof 有明确成熟机制。B 在其他会话作为合法端点的角色不与纯中继负例混同。手机离开不退出 Node 会话，未来独立手机身份不能靠复制 Node 私钥或静默同步历史实现。
 
 近期可交接材料为固定对象证据索引、当前使用范围、两包各自的待判断问题和已冻结澄清全文；专业评审者、公开发送账号及精确执行包尚待指定。本次未联系上游或专业方、未安装依赖、未变更 lockfile/gate、未进入 R2/Phase B；不设自动监控或虚构回复期限。
+
+## 内部 Linux ARM64 实验评审输入（2026-10-24）
+
+状态：**输入整理完成，许可证、复核及候选运行仍未放行。** 本节面向后续工程/法律评审者，将可从现有代码确定的项与未来产物假设分开；不产生新的许可证意见，不重判 R1c-R/R1d-L，不修改固定执行合同或选择产品密码实现。
+
+### 已核对输入与拟议产物
+
+本次只读核对仓库 manifest、lockfile、stub 与 runner，没有执行 Cargo、Docker、依赖审计或历史 evidence 重验。以下代码链接是当前事实入口，历史证据身份继续引用原专题：
+
+| 输入 | 当前事实 / 本次提案 | 仍待关闭 |
+| --- | --- | --- |
+| 使用者与数据 | 沿用所有者控制、仅合成输入、暂不向其他人交付镜像/安装包的范围 | 未来操作包需指明执行人、环境与权限；不把协作者自动算作获准接收者，不使用真实通信或密钥 |
+| target | [现有 runner](../../scripts/run-sw-g2-mls-rs-spike.sh)已使用 `cargo fetch --locked --target aarch64-unknown-linux-gnu`；历史容器平台为 `linux/arm64` | 下轮内部原生候选构建建议沿用此 triple；ARM64 板名本身不证明 ABI、libc、toolchain 或运行环境匹配 |
+| manifest / feature | [Cargo.toml](../../tools/spikes/sw-g2-mls-rs/Cargo.toml)：`mls-rs =0.56.0`，关闭 defaults，显式 `std/private_message/out_of_order/prior_epoch/tree_index`；AWS-LC `=0.25.0/non-fips`，SQLite `=0.23.0/sqlite-bundled` | 其余依赖及传递 feature 以 manifest 和[固定基线](../testing/sw-g2-mls-rs-phase-a-authorization.md#固定基线)为准，不复制出第二套 allowlist，不变更版本/provider |
+| 固定依赖图 | 本次仓库 lockfile 计数 94；SHA-256 为 `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7`，与既有 D2 记录相符 | 这只复核当前文件，未重新验证 D2/R1 原始证据；目标裁剪后的编译图不等于跨目标 lock 中全部包都进入 binary |
+| 工具链 | 现行 Phase A 合同固定 `rust/cargo 1.96.1` 与 Bookworm image digest，详见原合同 | 下一构建包须重新确认供应链状态、链接工具、原生构建依赖及目标 libc；不把历史准备环境直接当 Phase B 执行授权或可用宿主 |
+| 当前代码能力 | [main.rs](../../tools/spikes/sw-g2-mls-rs/src/main.rs)始终退出 2；只有 manifest/lock/拒绝 stub | 当前没有候选 E2EE 测试程序。不能编译这个 stub 后报告密码构建/适配通过；Phase B 的具体实现和验收先单独评审 |
+| 未来最小产物候选 | 仅 Linux ARM64 内部实验 executable、合成测试 evidence、实际目标依赖清单、第三方材料清单与摘要；不制作产品镜像或对外安装包 | 是拟议范围，不是已生成产物。动态/静态链接组成、实际库文件、SBOM/包清单须以未来构建结果核对 |
+| source / archive / cache / vendor | 历史固定图准备涉及归档与解包源码；新环境若复制它们，均列为内部评审对象，不能因为不对外发包而忽略 | 下轮逐对象冻结输入、存放、复制、留存和移交范围。是否生成 vendor/build cache、是否留在交付容器或设备上尚未确定，未知不作排除 |
+| 评审材料移交 | 当前先交接文档索引和对象标识；不自动附带 `.crate`、完整 source/cache、二进制或镜像 | 若需向评审者复制第三方 payload，先明确接收人和具体材料范围；本次未发送材料 |
+
+为了让构建范围可以审阅，后续候选命令形态可限定为下式，**仅为设计文本，当前禁止执行**：
+
+```text
+cargo build --frozen --release --target aarch64-unknown-linux-gnu --manifest-path tools/spikes/sw-g2-mls-rs/Cargo.toml --bin radishlink-sw-g2-mls-rs-spike
+```
+
+该形态只提出目标、profile、bin 和固定图消费；运行前还必须有获审实现 revision、已准备且来源有效的依赖、独立 CARGO_HOME/target 路径、准确 artifact 清单、网络/资源/时间/清理边界及当前任务授权。`--frozen` 不负责准备工具或补齐来源；不可为命令成功自动 fetch、安装、联网或复用旧 `.work`。当前 stub 不是上述未来实验程序，命令本身不构成 Phase B 设计完成。
+
+### 两包分流的具体交接问题
+
+| 对象 | 固定证据入口 | 本轮整理出的待判断问题 | 下一步与完成条件 |
+| --- | --- | --- | --- |
+| `debug_tree 0.4.0` | [R1d-L](../testing/sw-g2-mls-rs-license-disposition-review.md#debug_tree-040-处置)、[已冻结上游澄清合同](../testing/sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md#冻结对象与已知缺口)；当前 std 配置使其进入 resolved graph | 缺适用于固定历史源码的完整 MIT notice/holder；Cargo 作者不直接当 copyright holder；不自行补模板 | 复用现有逐字消息与 helper，无需新写一套 Issue。所有者先指定公开账号并预审文本；另行授权 X 后发送，回复收集 R 与接受性再分别处理；本次均未执行 |
+| `r-efi 6.0.0` | [R1d-L](../testing/sw-g2-mls-rs-license-disposition-review.md#r-efi-600-处置)及原 R1c mapping；既有记录说明 AUTHORS 包含完整 MIT 文本，normal edge 有 UEFI 条件 | 对本节内部使用及实际复制的 archive/source/cache，是否接受选择 MIT alternative，需保留的完整 AUTHORS/归属及具体条件是什么；目标 binary 排除与材料复制应分别判断 | 所有者指定合格且独立的法律评审者并确认材料范围；意见有效后才设计 R1d-G/R1d-D 或其他新证据轨。不能由 `aarch64-unknown-linux-gnu` 单独推出整包不适用 |
+
+交接应包含本节范围表、固定 manifest/lock 标识、R1c-R/R1d-L 的原证据索引、两包各自的问题与已有澄清合同；评审结论须绑定具体对象、渠道、假设和限制。R2 仍要求新证据轨有效完整通过及所有者指定符合条件的非实现者，不用本次输入整理代替专业意见或 R2。
+
+### 安全设计的后续审阅顺位
+
+继续沿现有[文字闭环事务与验收矩阵](../architecture/minimal-text-slice.md#最小验收矩阵)，下一轮先审三个用户结果：首次配对能识别身份并拒绝未授权界面；手机离开或被撤销后 Node 会话及权限表现明确；提交中崩溃后安全状态、消息队列和送达/清理责任一致。每项都需映射到成熟机制、候选库实际 API、持久提交点和负例，无法映射时明确回到 SW-G1/SW-G2 评审，不自行拼装密码协议。
+
+本次没有改变首次信任、撤销、事务或 proof 的安全决定，没有发送上游消息、接收回复、创建新 R1 evidence、安装/构建候选或联系专业方。输入已更具体，但 R2、Phase B 和 SW-G2 仍为未通过状态。
