@@ -60,7 +60,7 @@ coset 与 ciborium 上游声明 Apache-2.0；aws-lc-rs 1.16.3 manifest 为 `ISC 
 2. 在固定图证据齐备后完成来源、advisory、许可证/NOTICE 与独立复核；原 mls-rs R2/Phase B 条件不变。不能为取得新图方便修改现有 gate 或 allowlist。
 3. 另行准备真实候选编译/签验/正式 trait 验收包，列出合成测试向量、负例、资源与清理合同；前置满足并获精确授权后才执行。
 
-接续的[新图精确评审包](../testing/node-security-graph-review-package.md)已列出八个直接依赖的完整 manifest、config/input hash、G1 单次解析和 G2 固定锁来源取证命令，以及资源/网络/证据合同。真实写入域和监督环境尚未验证，G1/G2 未授权或执行；不能把命令表当作可直接运行的入口。D14 只接受评审方向。专业评审人选、材料交接范围、许可证处置和实际运行资格仍须真实输入，不能以“接受推荐”替代。
+接续的[新图精确评审包](../testing/node-security-graph-review-package.md)已列出八个直接依赖的完整 manifest、config/input hash、G1 单次解析和 G2 固定锁来源取证命令，以及资源/网络/证据合同。G0 已完成精确输入导出/核验，见[离线记录](../testing/node-framing-and-graph-inputs.md)；真实写入域和监督环境尚未验证，G1/G2 未授权或执行；不能把命令表当作可直接运行的入口。D14 只接受评审方向。专业评审人选、材料交接范围、许可证处置和实际运行资格仍须真实输入，不能以“接受推荐”替代。
 
 ## 本轮静态预算复核
 

@@ -1,10 +1,10 @@
 # Node 服务架构与关键选型方案
 
-- 状态：D1—D5 已于 2026-10-24 获所有者接受；对应 ADR 0004，其他具体机制仍按专题评审
+- 状态：D1—D16 已按 ADR 0004—0007 在各自范围内接受；自有服务/事务与帧边界已有限实施，真实安全、平台和通信接入未通过
 - 更新日期：2026-10-24
 - 目标读者：所有者、Node 实现、安全与验证协作者
 - 范围：首期一对一文字、Node 身份与历史、设备独立入口、本地 Web、Linux ARM64 有线台架接入
-- 非目标：本轮实现服务、冻结密码构造或无线器件、修改既有实验合同、采购和部署
+- 非目标：以架构文档代替实现验收、冻结未评审的密码构造或无线器件、修改既有实验合同、采购和部署
 
 ## 推荐结论与适用范围
 
@@ -38,7 +38,7 @@
 | SQLite 日志 | 首期 `journal_mode=DELETE`、`synchronous=EXTRA`，启动读回检查 | WAL + FULL 是可选演进方向，但需管理 checkpoint、长读者及 WAL 容量。首期短文字和串行访问优先降低协调复杂度，不把性能假设当实测 |
 | I/O 与本地 API | Tokio；HTTP 路由候选 Axum；JSON 请求/响应与 WebSocket 状态通知 | 标准库适合纯算法，但手写 HTTP/TLS 不合适；不引入 gRPC、消息 broker 或独立 Web 后端 |
 | 节点传输 | 有线阶段 TCP + TLS 1.3 双向邻居认证；TLS 实现候选 rustls | QUIC/UDP 留给移动链路和媒体证据驱动的选择；TCP 成功写入不产生 custody 或 delivery。邻居 TLS 不替代消息 E2EE |
-| 产品信封编码 | 候选为有界长度前缀 + 版本化 CBOR；密码载荷保持库输出的原始字节 | JSON 保留给本地 API 和诊断。CBOR 的字段分配、确定性子集和认证绑定须随 SW-G2/协议评审完成，不在本轮冻结字节格式 |
+| 产品信封编码 | ADR 0006/0007 已接受严格 CBOR/COSE 与有界前缀；密码载荷保持库输出的原始字节 | 精确格式以[数据 envelope](../protocol/node-data-envelope.md)和[控制 profile](../security/node-identity-control-profile.md)为准；当前只实现外层 framing，严格解码和实际认证尚未接入 |
 | Linux 交付 | ARM64 GNU target、普通非 root 服务、systemd 监督；macOS 用于离线开发 | 不把容器作为实体设备的运行依赖，不从开发机可编译推导 ARM64 可运行；不新增 UTM 或修改 I5 环境 |
 
 SQLite 官方说明 EXTRA 在 DELETE 模式额外同步 journal 删除后的目录；这是选择依据，实际耐久性仍依赖 VFS、文件系统、卡及供电行为。[SQLite PRAGMA](https://sqlite.org/pragma.html#pragma_synchronous)。WAL 的单写者、checkpoint 和附加文件要求见[官方 WAL 文档](https://sqlite.org/wal.html)。
@@ -81,7 +81,7 @@ flowchart TB
 
 ## 数据模型与联合事务
 
-下表是逻辑记录建议，SQL 名称与 migration 1 在实施批次内定稿；所有关联数据进入同一数据库，不通过 `ATTACH` 或另一个 provider 数据库制造表面统一。
+下表是逻辑记录职责；Node 自有存储已实现 schema v3 与显式 v1/v2 迁移，身份/实际安全状态字段仍待适配；所有关联数据进入同一数据库，不通过 `ATTACH` 或另一个 provider 数据库制造表面统一。
 
 | 记录 | 唯一性 / 约束 | 内容与生命周期 |
 | --- | --- | --- |
@@ -94,7 +94,7 @@ flowchart TB
 | 去重与终态 | message key + 原始认证引用 | tombstone、保留边界及终态；容量压力不能提前删除 |
 | schema / 提交元数据 | 单调提交代数、显式版本 | 迁移、提交结果查询与恢复校验；数据库内代数不充当抗整盘回滚的可信计数 |
 
-**提交顺序选择：同一数据库、同一事务、一个提交者。** T-A 同时保存安全发送状态、动作绑定、消息与 outbox；T-B 保存中继 payload、去重和责任后才 custody；T-C 保存接收安全状态、历史、去重、证据及回程责任后才展示/确认；T-D 保存验证终态、tombstone 和尚需转发的证据责任后才回收 payload。详细不变量以[事务表](minimal-text-slice.md#从动作到恢复的事务表)为准。
+**提交顺序选择：同一数据库、同一事务、一个提交者。** T-A 同时保存安全发送状态、动作绑定、消息与 outbox；T-B 保存中继 payload、去重和责任后才 custody；T-C 保存接收安全状态、历史、去重及未签署证明意图/返回容量预留后才展示；提交后才签署并原子转换为回程证明队列，详见[证明生命周期](../testing/node-receipt-lifecycle.md)；T-D 保存验证终态、tombstone 和尚需转发的证据责任后才回收 payload。详细不变量以[事务表](minimal-text-slice.md#从动作到恢复的事务表)为准。
 
 目前公开的 `mls-rs-provider-sqlite 0.23.0` API 提供 group、KeyPackage、PSK 与 application storage；这些接口名称不足以证明与上述业务写入共同提交。[固定版本 API](https://docs.rs/mls-rs-provider-sqlite/0.23.0/mls_rs_provider_sqlite/struct.SqLiteDataStorageEngine.html)。方案提出时尚未核对其固定源码；后续[关键 API 只读核对](../security/e2ee-sw-g2-decision-package.md#node-联合事务接入源码核对2026-10-24)确认现成 provider 内部独立提交，不能直接承接 Node 联合事务。该核对不是完整审计，也未运行适配。
 
@@ -156,9 +156,9 @@ flowchart TB
 
 TLS 1.3 的双向认证只确认当前邻居；目标身份、消息不可变核心、E2EE receipt 与 relay-clear proof 仍由 SW-G2 证明。推荐关闭 0-RTT，明确握手/证书轮换/撤销策略；IP 变更不改变身份，身份变更不能自动覆盖。rustls 支持 TLS 1.3，并有独立密码 provider 选择，最终依赖图须重新审查，不能直接继承旧 spike 许可结论。[rustls 官方 API](https://docs.rs/rustls/0.23.46/rustls/)。
 
-候选 wire profile 使用长度前缀在分配前拒绝超长 frame；CBOR 限定深度、项数与整数范围，拒绝重复键、未知 critical 字段和不允许的编码形式，认证相关原始字节保持不变。未知可忽略扩展只在可保留原字节且符合 SW-G1 时转发。CBOR 的确定性编码规则来自 [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html#section-4.2)，不是新的密码构造；密码库自己的编码不重写为 CBOR。字节布局及认证绑定未定稿前不发布产品网络互通声明。
+已接受的 D12/D15 v1 使用长度前缀在分配前拒绝超长 frame；严格 CBOR 限定深度、项数、类型及整数范围，拒绝未知字段、重复键和尾随数据，保留认证相关原始字节。v1 不提供可忽略扩展入口，后续扩展须显式评审版本策略。确定性编码依据 [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html#section-4.2)，精确规则以对应协议专题为准；密码库自己的编码不重写为 CBOR。当前仅外层 framing 已实施，严格解码、认证和实际互操作未通过，不发布网络互通声明。
 
-以下为实施容量测试的**起始建议**，不是已接受的正式 profile、性能承诺或运行预算：
+以下是初始容量设计表；已有 Node 自有实现的具体上限见[首批记录](../testing/node-service-foundation.md)。ADR 0007 后接受的 frame/time 和控制预留以 [D15](../protocol/node-data-envelope.md) / [D16](../protocol/node-control-propagation.md)为准，D16 尚未写入现有 schema/config。各项不是性能承诺或已验证的物理运行预算：
 
 | 项目 | 建议起点 | 调整依据 |
 | --- | --- | --- |
@@ -169,7 +169,7 @@ TLS 1.3 的双向认证只确认当前邻居；目标身份、消息不可变核
 | 查询 | 每页最多 100 条，单响应字节另限 | 禁止一次读取全部历史或无限订阅缓存 |
 | 资源账本 | payload、控制、tombstone、安全状态、journal、索引、迁移临时副本与日志分别核算 | SQLite 文件大小不等于全部磁盘占用；`journal_size_limit` 不能充当进行中事务的硬额度 |
 
-发送数量不是磁盘上限证明。schema、密码状态大小及维护动作确定后，必须在第一批存储实施中给出各项明确上限、写前预留和满额拒绝测试；控制/去重空间未能预留时不接受 custody 或 endpoint delivery。量测前不承诺常驻内存、耗电或吞吐。以上产品容量提案与 I5 的 768 MiB 全批运行额度没有替代关系。
+发送数量不是磁盘上限证明。自有存储的明确上限、提交前逻辑预留和满额拒绝已有离线验证；完整密码状态、D16 预留及物理写前硬额度仍须后续证明，控制/去重空间未能预留时不接受 custody 或 endpoint delivery。量测前不承诺常驻内存、耗电或吞吐。以上产品容量提案与 I5 的 768 MiB 全批运行额度没有替代关系。
 
 ## 版本、迁移、构建与部署
 
@@ -186,18 +186,18 @@ TLS 1.3 的双向认证只确认当前邻居；目标身份、消息不可变核
 | --- | --- | --- |
 | Rust 标准库 | 纯算法、错误、同步和基础类型优先使用 | 固定 toolchain；不用 nightly 作为默认 |
 | Tokio / Axum / rustls | 官方能力与上述执行/API/传输方案相符 | 冻结精确版本、features、native provider 和完整图；审查许可、维护与 advisory，先不安装 |
-| rusqlite / SQLite | 现有候选 lock 已含 rusqlite 0.37.0、libsqlite3-sys 0.35.0 | 仅作为兼容比较基线，非批准在新产品直接沿用旧版；确定 bundled SQLite 版本、编译选项及更新责任 |
-| serde / JSON、CBOR 实现 | JSON 方向已有候选使用；CBOR 有标准依据 | 复用可用版本；CBOR parser 要有拒绝重复键/深度限制能力，选包前不预设成熟度结论 |
+| rusqlite / SQLite | Node 当前固定 rusqlite 0.40.2、libsqlite3-sys 0.38.2 / SQLite 3.53.2；旧安全 spike 版本不同 | Node 来源与更新责任见 [THIRD_PARTY](../../node/THIRD_PARTY.md)；新安全图仍须重新核对 native links/features，不沿用旧 provider 的独立事务 |
+| serde / JSON、CBOR 实现 | Node 已固定 serde 1.0.229 / serde_json 1.0.151；coset/ciborium 为 D14 评审候选 | Node JSON 与未来 CBOR 分开；候选尚未引入，严格解码资源、完整图与许可仍需验证 |
 | mls-rs / provider | 现有固定图与 SW-G2 决策包 | 维持原 STOP；任何新 storage 适配、功能构建或 feature 变化均先说明差量并评审 |
 | cryptsetup / 平台服务 | Linux 本地数据保护与生命周期方向 | 核对 BSP 包版本、许可证、内核能力与实际部署资源；不自动安装或格式化 |
 
-不引入 ORM、独立数据库服务器、消息中间件或自动更新器。上述第三方路线未经过本轮完整供应链审计；依赖精确版本会在获准实施前集中列清，不把动态 `latest` 文档当成版本锁。Axum 的 Tokio/Hyper 关系见[官方 API](https://docs.rs/axum/0.8.9/axum/)。
+不引入 ORM、独立数据库服务器、消息中间件或自动更新器。上述第三方路线未经过本轮完整供应链审计；已实施的 Node 精确版本见 THIRD_PARTY，其他候选在获准实施前集中列清，不把动态 `latest` 文档当成版本锁。Axum 的 Tokio/Hyper 关系见[官方 API](https://docs.rs/axum/0.8.9/axum/)。
 
 ## 实施节奏与验收
 
 | 批次 | 连贯交付 | 完成标准与限制 |
 | --- | --- | --- |
-| 1. 服务与事务基础 | `node/` 工程、配置/错误/生命周期、纯消息模型与调度、SQLite schema/事务/恢复、应用命令和查询、离线故障测试 | 精确依赖和范围获准后实施；生产入口在安全缺失时明确拒绝业务发送。测试替身只用于单元测试，不制造可用聊天演示 |
+| 1. 服务与事务基础 | `node/` 工程、配置/错误/生命周期、纯消息模型与调度、SQLite schema/事务/恢复、应用命令和查询、离线故障测试 | 已完成有限离线基础、schema v3 与恢复/证明责任验证；当前 Node 全量 75 项含后续 framing 测试。生产入口仍拒绝，实际密码/平台/网络未接入，详见[日终回顾](../status/2026-10-24-progress.md) |
 | 2. 安全会话与持久状态接入 | 首次信任、发送/接收联合提交、证据验证、撤销与恢复映射 | 先满足许可证/R2 和候选功能试验前置；证明 storage trait 能力、每个故障点及 proof；不适配就报告并重评，不用补偿式双写掩盖 |
 | 3. 本机与手机入口、有线传输 | 同一应用入口的设备控制/API、可信 HTTPS、界面撤销、邻居 TLS、路由与背压 | 先离线解析/授权/幂等验收，再按新的精确环境合同接入；不重开旧 I5 入口或复用其运行授权 |
 | 4. ARM64 三节点验证 | 构建部署记录、A—B—C 文字、断链、回执丢失、重启/掉电、容量及设备独立操作 | HW 与安全门满足后才实测；分别记录软件离线、Linux 进程、有线实体和物理掉电证据，不互相替代 |

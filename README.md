@@ -48,7 +48,7 @@ Windows PowerShell：
 pwsh ./scripts/check-repo.ps1
 ```
 
-当前仓库处于定义与可行性验证阶段，尚未冻结量产硬件、射频区域版本、应用开发栈或兼容性承诺。GitHub `master` Ruleset 和 `PR Checks` 的启用情况见既有核对记录，本轮未实时复核远程设置；当前结论与治理规则分别见[当前状态](docs/status/current.md)和[仓库治理](docs/governance/repository-governance.md)。
+当前仓库处于定义与可行性验证阶段，Node 的 Rust/SQLite 服务基础已按 [ADR 0004](docs/adr/0004-node-service-foundation.md)选定并完成有限离线实现；量产硬件、射频区域版本、完整通信栈和兼容性承诺仍未冻结。GitHub `master` Ruleset 和 `PR Checks` 的启用情况见既有核对记录，本轮未实时复核远程设置；当前结论与治理规则分别见[当前状态](docs/status/current.md)和[仓库治理](docs/governance/repository-governance.md)。
 
 ## 许可
 
