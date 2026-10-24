@@ -37,6 +37,8 @@ A 与 C 的私聊只让 A/C 持内容密钥；B 不因参与活动而成为这�
 
 COSE_Sign1 是标准封装方向，采用成熟实现；应用仍须验证签名键与主体授权，kid 只是查找提示。[RFC 9052 §3.1](https://www.rfc-editor.org/rfc/rfc9052.html#section-3.1)、[§4.4](https://www.rfc-editor.org/rfc/rfc9052.html#section-4.4)。具体算法与编码 profile 未冻结。
 
+2026-10-24 已形成[身份绑定、撤销与 COSE 精确 profile](node-identity-control-profile.md)及[依赖评审准备](node-control-dependency-review.md)。D11—D14 随后已由 [ADR 0006](../adr/0006-node-identity-and-control-profile.md) 接受为设计与评审基线；真实候选接入仍受原停止线约束。
+
 拟议签名负载绑定协议版本、receipt 类型、活动/重放范围、message key、不可变认证核心与密文摘要、目标凭据引用及其代数。使用活动内标识减少跨活动关联，不公开低熵正文摘要。签名类型必须区分 custody、destination delivery 与可选 read receipt；custody 不能代替终点交付。
 
 验证使用存储消息的预期目标及本地可信键映射，检查所有绑定、长度、算法 allowlist、关键字段与授权状态。拒绝未知必需字段、歧义编码、跨活动/跨消息重放和自带替换键；不把单纯签名有效当作有权清理。

@@ -19,6 +19,8 @@
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
 - [安全架构](security/security-architecture.md)
 - [Node 安全接入设计](security/node-security-integration.md)：D6—D10 的联合事务、证明、撤销与跨 boot 边界。
+- [Node 身份与控制 profile](security/node-identity-control-profile.md)：活动绑定、撤销权限、COSE 精确约束与 D11—D14 已接受基线。
+- [Node 控制证明依赖评审准备](security/node-control-dependency-review.md)：候选版本、固定源码证据、完整图与采用前缺口。
 - [端到端加密候选评审](security/e2ee-candidate-review.md)
 - [`SW-G2` E2EE 与身份候选决策包](security/e2ee-sw-g2-decision-package.md)
 - [媒体与 QoS](protocol/media-and-qos.md)
@@ -77,6 +79,7 @@
 - [ADR 0003：分支、PR 与 Ruleset 治理](adr/0003-branch-pr-and-ruleset-governance.md)
 - [ADR 0004：Node 服务、事务与本地数据基线](adr/0004-node-service-foundation.md)
 - [ADR 0005：Node 安全接入、撤销与证据寿命](adr/0005-node-security-integration.md)
+- [ADR 0006：Node 活动身份与控制证明 profile](adr/0006-node-identity-and-control-profile.md)
 
 ## 协作与治理
 
