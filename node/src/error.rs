@@ -4,6 +4,7 @@ use std::{error::Error as StdError, fmt};
 pub enum Code {
     InvalidInput,
     UnsupportedVersion,
+    MigrationRequired,
     Conflict,
     Quota,
     Expired,

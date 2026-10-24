@@ -197,6 +197,12 @@ impl Store {
                 receive.remaining_hops,
                 Some(&receive.neighbor),
             )?;
+            if receive.role == Role::Relay {
+                s.conn.execute(
+                    "INSERT INTO control_reservations VALUES(?1,4096)",
+                    [&receive.message.key],
+                )?;
+            }
             if let Some(body) = &receive.text {
                 s.insert_history(&receive.message.key, body)?;
             }
@@ -248,14 +254,18 @@ impl Store {
     pub fn observe_custody(&mut self, key: &str, neighbor: &str) -> Result<()> {
         check_ref(key)?;
         check_ref(neighbor)?;
-        self.atomic(|s|{
-            let state:Option<String>=s.conn.query_row("SELECT retry FROM queues WHERE message_key=?1 AND kind='data' AND neighbor=?2",params![key,neighbor],|r|r.get(0)).optional()?;
-            if let Some(state)=state {
-                let retry:RetryState=serde_json::from_str(&state).map_err(|e|Error::source_error(Code::StoreCorrupt,"retry state",e))?;
-                let (next,_)=retry.advance(Batch{now_ms:s.clock.monotonic_ms,link:crate::retry::LinkEvent::Unchanged,signal:crate::retry::Signal::Pause,admission:crate::retry::Admission::Allow})?;
-                s.conn.execute("UPDATE queues SET retry=?3 WHERE message_key=?1 AND kind='data' AND neighbor=?2",params![key,neighbor,serde_json::to_string(&next).map_err(|e|Error::source_error(Code::InvalidInput,"retry encoding",e))?])?;
-                s.conn.execute("UPDATE messages SET custody=1 WHERE key=?1",[key])?;
-            } else {return Err(Error::new(Code::Conflict,"custody target"));}
+        self.atomic(|s| {
+            s.advance_queue_in_transaction(
+                key,
+                "data",
+                neighbor,
+                Batch {
+                    now_ms: s.clock.monotonic_ms,
+                    link: crate::retry::LinkEvent::Unchanged,
+                    signal: crate::retry::Signal::Pause,
+                    admission: crate::retry::Admission::Allow,
+                },
+            )?;
             Ok(())
         })
     }
@@ -297,6 +307,13 @@ impl Store {
                 if source.as_deref() != Some(neighbor) {
                     return Err(Error::new(Code::Conflict, "delivery return neighbor"));
                 }
+                let deleted = s.conn.execute(
+                    "DELETE FROM control_reservations WHERE message_key=?1",
+                    [key],
+                )?;
+                if deleted != 1 {
+                    return Err(Error::new(Code::StoreCorrupt, "missing relay reservation"));
+                }
                 s.insert_queue(key, "evidence", neighbor, 0, evidence, retain)?;
             } else if role != "origin" || return_evidence.is_some() {
                 return Err(Error::new(Code::InvalidInput, "delivery role"));
@@ -334,6 +351,10 @@ impl Store {
                 "DELETE FROM queues WHERE message_key=?1 AND kind='data'",
                 [key],
             )?;
+            s.conn.execute(
+                "DELETE FROM control_reservations WHERE message_key=?1",
+                [key],
+            )?;
             Ok(())
         })
     }
@@ -351,29 +372,6 @@ impl Store {
         if !["data", "evidence"].contains(&kind) || batch.now_ms != self.clock.monotonic_ms {
             return Err(Error::new(Code::InvalidInput, "queue event coordinate"));
         }
-        self.atomic(|s| {
-            let encoded: String = s.conn.query_row(
-                "SELECT retry FROM queues WHERE message_key=?1 AND kind=?2 AND neighbor=?3",
-                params![key, kind, neighbor],
-                |r| r.get(0),
-            )?;
-            let retry: RetryState = serde_json::from_str(&encoded)
-                .map_err(|e| Error::source_error(Code::StoreCorrupt, "retry record", e))?;
-            let (next, decision) = retry.advance(batch)?;
-            s.conn.execute(
-                "UPDATE queues SET retry=?4 WHERE message_key=?1 AND kind=?2 AND neighbor=?3",
-                params![
-                    key,
-                    kind,
-                    neighbor,
-                    serde_json::to_string(&next).map_err(|e| Error::source_error(
-                        Code::InvalidInput,
-                        "retry encoding",
-                        e
-                    ))?
-                ],
-            )?;
-            Ok(decision)
-        })
+        self.atomic(|s| s.advance_queue_in_transaction(key, kind, neighbor, batch))
     }
 }

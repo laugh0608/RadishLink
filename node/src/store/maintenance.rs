@@ -1,0 +1,140 @@
+use super::*;
+
+/// Work per transaction, so maintenance cannot monopolize the state owner.
+pub const MAINTENANCE_BATCH: i64 = 256;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MaintenanceReport {
+    pub expired_payloads: usize,
+    pub deleted_history: usize,
+    pub more_due: bool,
+    pub history_time_available: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Usage {
+    pub payload_count: u64,
+    pub payload_bytes: u64,
+    pub history_count: u64,
+    pub history_bytes: u64,
+    pub evidence_count: u64,
+    pub evidence_bytes: u64,
+    pub reserved_control_count: u64,
+    pub reserved_control_bytes: u64,
+    pub records: u64,
+    /// Only the main SQLite file; excludes journal, filesystem and process memory.
+    pub database_bytes: u64,
+}
+
+impl Store {
+    pub(super) fn check_reservations(&self) -> Result<()> {
+        let invalid: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM messages m LEFT JOIN control_reservations r ON r.message_key=m.key
+             WHERE (m.role='relay' AND m.state='stored') != (r.message_key IS NOT NULL))",
+            [], |r| r.get(0))?;
+        if invalid {
+            return Err(Error::new(
+                Code::StoreCorrupt,
+                "relay reservation invariant",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn usage(&self) -> Result<Usage> {
+        self.readable()?;
+        let scalar = |sql: &str| -> Result<u64> {
+            let value: i64 = self.conn.query_row(sql, [], |r| r.get(0))?;
+            u64::try_from(value)
+                .map_err(|e| Error::source_error(Code::StoreCorrupt, "negative usage", e))
+        };
+        Ok(Usage {
+            payload_count: scalar("SELECT count(*) FROM messages WHERE payload IS NOT NULL")?,
+            payload_bytes: scalar("SELECT coalesce(sum(length(payload)),0) FROM messages")?,
+            history_count: scalar("SELECT count(*) FROM history")?,
+            history_bytes: scalar("SELECT coalesce(sum(length(body)),0) FROM history")?,
+            evidence_count: scalar("SELECT count(*) FROM queues WHERE kind='evidence'")?,
+            evidence_bytes: scalar(
+                "SELECT coalesce(sum(length(body)),0) FROM queues WHERE kind='evidence'",
+            )?,
+            reserved_control_count: scalar("SELECT count(*) FROM control_reservations")?,
+            reserved_control_bytes: scalar(
+                "SELECT coalesce(sum(bytes),0) FROM control_reservations",
+            )?,
+            records: scalar(
+                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)",
+            )?,
+            database_bytes: scalar(
+                "SELECT page_count*page_size FROM pragma_page_count(),pragma_page_size()",
+            )?,
+        })
+    }
+
+    pub(super) fn validate_clock_advance(&mut self, clock: &Clock) -> Result<()> {
+        self.writable()?;
+        clock.validate()?;
+        if clock.boot != self.clock.boot
+            || clock.monotonic_ms < self.clock.monotonic_ms
+            || self
+                .clock
+                .trusted_unix_ms
+                .is_some_and(|w| clock.trusted_unix_ms.is_none_or(|n| n < w))
+        {
+            self.time_uncertain = true;
+            return Err(Error::new(Code::TimeUncertain, "clock regression"));
+        }
+        Ok(())
+    }
+
+    pub(super) fn write_clock(&self, clock: &Clock) -> Result<()> {
+        self.conn.execute(
+            "UPDATE meta SET monotonic_ms=?1,unix_ms=?2 WHERE id=1",
+            params![clock.monotonic_ms, clock.trusted_unix_ms],
+        )?;
+        Ok(())
+    }
+
+    /// Caller supplies an already trusted boot/time coordinate, never a UI or peer timestamp.
+    /// Clock advancement and bounded cleanup commit together, including on failure/reopen.
+    pub fn maintain(&mut self, clock: Clock) -> Result<MaintenanceReport> {
+        self.validate_clock_advance(&clock)?;
+        let report = self.atomic(|s| {
+            s.write_clock(&clock)?;
+            s.cleanup_due(&clock)
+        })?;
+        self.clock = clock;
+        Ok(report)
+    }
+
+    pub(super) fn cleanup_due(&self, clock: &Clock) -> Result<MaintenanceReport> {
+        let mut statement = self.conn.prepare("SELECT key FROM messages WHERE payload IS NOT NULL AND deadline<=?1 ORDER BY deadline,key LIMIT ?2")?;
+        let keys: Vec<String> = statement
+            .query_map(params![clock.monotonic_ms, MAINTENANCE_BATCH], |r| r.get(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        for key in &keys {
+            self.conn.execute(
+                "UPDATE messages SET state='expired',payload=NULL WHERE key=?1",
+                [key],
+            )?;
+            self.conn.execute(
+                "DELETE FROM queues WHERE message_key=?1 AND kind='data'",
+                [key],
+            )?;
+            self.conn.execute(
+                "DELETE FROM control_reservations WHERE message_key=?1",
+                [key],
+            )?;
+        }
+        let deleted_history = match clock.trusted_unix_ms {
+            Some(wall) => self.conn.execute("DELETE FROM history WHERE sequence IN (SELECT sequence FROM history WHERE expires<=?1 ORDER BY expires,sequence LIMIT ?2)", params![wall, MAINTENANCE_BATCH])?,
+            None => 0,
+        };
+        let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2)", params![clock.monotonic_ms, clock.trusted_unix_ms], |r| r.get(0))?;
+        Ok(MaintenanceReport {
+            expired_payloads: keys.len(),
+            deleted_history,
+            more_due,
+            history_time_available: clock.trusted_unix_ms.is_some(),
+        })
+    }
+}

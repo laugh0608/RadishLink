@@ -85,6 +85,10 @@ git diff --check
 
 最终结果：上述五条检查全部退出 0；Rust 26 个库测试和 2 个 CLI 测试通过，Clippy `--all-targets -D warnings` 无告警，格式检查通过，仓库检查覆盖 252 个文件，`git diff --check` 通过。受控 71/72 和 CLI 2 是断言要求的负向退出，不是漏报的验证失败。本轮未出现失败后靠重跑掩盖的测试结果。
 
+## 后续实施
+
+首批已提交为 `2936c6e`。随后实施的 schema v2、控制责任预留、生命周期、周期维护和批量调度见[服务运行可靠性记录](node-service-reliability.md)；本页的 schema v1、28 项测试与尚无定时驱动等表述保留为首批时点结果。
+
 ## 下一批前置
 
 首批离线基础不替代 R2、SW-G2、安全候选 Phase B 或 I5-R。后续应先证明安全库 storage 接口能加入同一个 SQLite 事务、proof 与撤销/重放边界及可信时间恢复；本机/手机 API、有线 TLS、加密卷/锁屏、systemd 和 ARM64 实测仍按后续批次推进。

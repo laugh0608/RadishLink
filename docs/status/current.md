@@ -54,6 +54,8 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 2026-10-24 所有者要求先完成 Node 服务架构与关键选型，再集中确认。已形成 [Node 服务设计提案](../architecture/node-service-design.md)：推荐 Rust 单进程、串行状态提交、SQLite 单库事务，并细化数据保护、时间/崩溃恢复、设备与手机接口、ARM64 部署及四批实施验收。所有者随后明确接受 D1—D5，形成 [ADR 0004](../adr/0004-node-service-foundation.md)，并授权提交文档后推进第一批服务/事务基础开发。首批 `node/` 服务与事务基础已实施，28 项本机离线测试通过，见[实施与验证记录](../testing/node-service-foundation.md)。生产运行入口仍明确拒绝；真实密码、平台解锁、网络与 ARM64 未接入，依赖安装及原安全/运行停止线不变。
 
+同日首批实现提交为 `2936c6e`；随后完成[服务运行可靠性开发](../testing/node-service-reliability.md)，包括显式 schema v1→v2 迁移、中继返回证据容量预留、请求背压/停止协调、周期维护及事件批调度，47 项本机离线测试与静态/仓库检查通过。安全候选的[关键源码核对](../security/e2ee-sw-g2-decision-package.md#node-联合事务接入源码核对2026-10-24)确认现成 SQLite provider 不能直接参与 Node 联合事务，后续优先评审正式 storage trait 适配；真实安全、平台时钟、跨 boot 恢复和设备运行仍未通过。
+
 2026-10-24 完成[三节点 BOM 纸面评审](../hardware/poc-purchase-list.md#三节点全新增-bom-评审2026-10-24)及[内部 ARM64 安全评审输入](../security/e2ee-sw-g2-decision-package.md#内部-linux-arm64-实验评审输入2026-10-24)。板卡、供电、存储、双接口、首次配置/恢复、测量及税运均已列项；已查两家境外商店的 2GB variant 缺货，国内完整人民币到手价仍未知，不能判定首轮或整套预算可行。固定 mls-rs manifest、target 和 94-package lock 已只读核对，未来产物/命令只是评审提案，专业评审与运行前置仍缺。使用量、断连容忍、重量/体积已有可调整规划值，并形成基于目标功率的能量敏感性计算；没有新实测，阶段与全部 STOP 不变。
 
 同日公开资料核对已定位 b1 资产、配置/包表摘要、内核/U-Boot 和 RTL8153/板载 Ethernet 源码依据；镜像本体与设备未验证。所有者随后提供[淘宝查价表](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)：暂不另计赠送供电线，合计 2024 元；若仅赠送三条，第四条测量线另补。当前组合超原首轮上限 1024 元，按整套 3000 元核算名义余额 976 元，尚未覆盖后续硬件增量；暂缓功率计时为 1824 元。价格核算到此收口，继续软件开发与硬件接口准备，不再扩展询价。未采购，累计已支出仍为 0 元，预算上限未自动调整。
@@ -64,7 +66,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
-1. 开发优先：按已接受的 [Node 服务架构与关键选型](../architecture/node-service-design.md#集中确认清单)及 ADR 0004 接续已完成的[首批服务/事务离线基础](../testing/node-service-foundation.md)，优先收敛安全库联合事务及可信时间恢复前置；精确依赖、文件范围和验证已记录。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
+1. 开发优先：按已接受的 [Node 服务架构与关键选型](../architecture/node-service-design.md#集中确认清单)及 ADR 0004 接续已完成的[运行可靠性开发](../testing/node-service-reliability.md)，依据固定源码核对收敛正式 storage trait 联合事务、proof/撤销映射和可信跨 boot 恢复；实际功能接入仍须满足许可证/R2/Phase B 前置。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
 2. 基于已整理的内部 Linux ARM64 产物评审表，冻结实际复制/留存范围、评审者与下一精确包；分别处置 `debug_tree` 固定源码正文/归属与 `r-efi` 的 MIT alternative。专业意见、新证据与执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 在已选择的 Node 身份与手机界面职责下收敛首次信任、撤销、物理与覆盖层路由边界，以及安全状态、应用事务、relay-clear proof 的候选映射。
 4. I5 后续先满足[路线 A 宿主资源门](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)，不把当前 Mac/UTM 改名或增加 guest 配额当作达标。资源条件变化后复核完整准备预算、真实输入与可信基座，冻结真实 FD loader、非 UTM 控制面和新版执行合同，再另行授权实现、原生环境验收及验签/APT。安装、冷构建、daemon/store 计费和正式 21 样本 I5-R 仍各有前置；不直接创建满额四盘后安装，不在域外先构建。V0 历史合同与 SW-G2 安全门不变。

@@ -96,7 +96,7 @@ flowchart TB
 
 **提交顺序选择：同一数据库、同一事务、一个提交者。** T-A 同时保存安全发送状态、动作绑定、消息与 outbox；T-B 保存中继 payload、去重和责任后才 custody；T-C 保存接收安全状态、历史、去重、证据及回程责任后才展示/确认；T-D 保存验证终态、tombstone 和尚需转发的证据责任后才回收 payload。详细不变量以[事务表](minimal-text-slice.md#从动作到恢复的事务表)为准。
 
-目前公开的 `mls-rs-provider-sqlite 0.23.0` API 提供 group、KeyPackage、PSK 与 application storage；这些接口名称不足以证明与上述业务写入共同提交。[固定版本 API](https://docs.rs/mls-rs-provider-sqlite/0.23.0/mls_rs_provider_sqlite/struct.SqLiteDataStorageEngine.html)。本轮未完成其固定源码实现审计，也未运行适配。
+目前公开的 `mls-rs-provider-sqlite 0.23.0` API 提供 group、KeyPackage、PSK 与 application storage；这些接口名称不足以证明与上述业务写入共同提交。[固定版本 API](https://docs.rs/mls-rs-provider-sqlite/0.23.0/mls_rs_provider_sqlite/struct.SqLiteDataStorageEngine.html)。方案提出时尚未核对其固定源码；后续[关键 API 只读核对](../security/e2ee-sw-g2-decision-package.md#node-联合事务接入源码核对2026-10-24)确认现成 provider 内部独立提交，不能直接承接 Node 联合事务。该核对不是完整审计，也未运行适配。
 
 接入前必须证明：库全部持久写入能由同一外部事务控制；包含 KeyPackage 消费、epoch/skipped-key 更新等旁路；调用失败后的内存会话能丢弃并从已提交状态重建；没有提前输出网络效果。如果现有 provider 不具备能力，优先评审使用库正式 storage trait 的事务适配，而不是改密码算法、fork 候选或用第二套提交日志补偿。该适配是待评审新范围，不能改动现有 spike 的 provider/feature/lockfile 来尝试绕过停止线。
 
@@ -113,6 +113,8 @@ flowchart TB
 - **监督**：候选为 systemd readiness 与限次数失败重启；配置、schema、密钥及隔离错误停止自动重启，避免无限重启破坏诊断。[systemd 官方说明](https://freedesktop.org/software/systemd/man/latest/systemd.service.html)。
 
 缺少可靠 RTC/时间恢复和防回滚基座是实体台架必须回答的问题，不能把“重启后数据库能打开”当作消息可安全续传。
+
+2026-10-24 [服务运行可靠性实施](../testing/node-service-reliability.md)已完成库内单拥有者、命令背压/停止协调、显式 v1→v2 迁移、控制责任预留、周期维护与事件批提交。实际输出仍为安全不可用、时间不确定、提交隔离或维护失败；上述完整产品生命周期还需平台解锁、认证、网络和监督接入。周期维护接口不等于可信平台时钟已实现，跨 boot 仍保持隔离。
 
 ## 本地数据保护与用户行为
 

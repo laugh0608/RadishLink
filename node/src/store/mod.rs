@@ -13,9 +13,15 @@ use std::{
     path::Path,
 };
 
+mod maintenance;
 #[cfg(test)]
-mod tests;
+mod reliability_tests;
+mod scheduling;
+#[cfg(test)]
+pub(crate) mod tests;
 mod transactions;
+pub use maintenance::{MaintenanceReport, Usage};
+pub use scheduling::{QueueEvent, QueueKey, QueueKind, SchedulingReport};
 
 const APP_ID: i64 = 1380732491;
 const DB_PAGES: i64 = 32768; // 128 MiB at the required 4096-byte page size; journal is separate.
@@ -38,6 +44,13 @@ enum TestFault {
     AfterSecurity,
     CrashBeforeCommit,
     CrashAfterCommit,
+}
+
+enum OpenMode {
+    Current,
+    MigrateV1,
+    #[cfg(test)]
+    MigrateV1Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -118,6 +131,7 @@ impl Store {
         configure(&conn)?;
         conn.execute_batch("BEGIN IMMEDIATE;")?;
         conn.execute_batch(include_str!("schema.sql"))?;
+        conn.execute_batch(include_str!("migration_v2.sql"))?;
         let encoded = limits_json(&limits)?;
         conn.execute(
             "INSERT INTO meta VALUES(1,0,?1,?2,?3,?4)",
@@ -145,6 +159,19 @@ impl Store {
         })
     }
     pub fn open(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::Current)
+    }
+    /// Explicit maintenance operation; ordinary open never silently migrates a store.
+    pub fn migrate_v1(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV1)
+    }
+    fn open_version(
+        directory: &Path,
+        limits: Limits,
+        clock: Clock,
+        mode: OpenMode,
+    ) -> Result<Self> {
+        let migrate = !matches!(mode, OpenMode::Current);
         limits.validate()?;
         clock.validate()?;
         private_directory(directory)?;
@@ -166,8 +193,14 @@ impl Store {
         let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if version != 1 || app != APP_ID {
+        if ![1, 2].contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
+        }
+        if version == 1 && !migrate {
+            return Err(Error::new(Code::MigrationRequired, "store schema v1"));
+        }
+        if version != 1 && migrate {
+            return Err(Error::new(Code::Conflict, "migration source must be v1"));
         }
         configure(&conn)?;
         let check: String = conn.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
@@ -193,7 +226,7 @@ impl Store {
         let time_uncertain = boot != clock.boot
             || clock.monotonic_ms < floor
             || wall.is_some_and(|w| clock.trusted_unix_ms.is_none_or(|n| n < w));
-        let s = Self {
+        let mut s = Self {
             conn,
             _lock: owner,
             limits,
@@ -201,9 +234,11 @@ impl Store {
             time_uncertain,
             halted: false,
             #[cfg(test)]
-            fault: None,
+            fault: match mode {
+                OpenMode::MigrateV1Fault(fault) => Some(fault),
+                _ => None,
+            },
         };
-        s.check_quotas()?;
         let mut stmt = s.conn.prepare("SELECT retry FROM queues")?;
         for row in stmt.query_map([], |r| r.get::<_, String>(0))? {
             let state: RetryState = serde_json::from_str(&row?)
@@ -211,10 +246,22 @@ impl Store {
             state.validate()?;
         }
         drop(stmt);
+        if migrate {
+            s.atomic(|store| {
+                store.conn.execute_batch(include_str!("migration_v2.sql"))?;
+                Ok(())
+            })?;
+        }
+        s.check_quotas()?;
+        s.check_reservations()?;
+
         Ok(s)
     }
     pub fn is_time_uncertain(&self) -> bool {
         self.time_uncertain
+    }
+    pub(crate) fn current_clock(&self) -> Clock {
+        self.clock.clone()
     }
     pub fn is_quarantined(&self) -> bool {
         self.halted
@@ -235,25 +282,8 @@ impl Store {
     }
     /// Advances only within the verified boot coordinate; never infers downtime.
     pub fn advance_clock(&mut self, clock: Clock) -> Result<()> {
-        self.writable()?;
-        clock.validate()?;
-        if clock.boot != self.clock.boot
-            || clock.monotonic_ms < self.clock.monotonic_ms
-            || self
-                .clock
-                .trusted_unix_ms
-                .is_some_and(|w| clock.trusted_unix_ms.is_none_or(|n| n < w))
-        {
-            self.time_uncertain = true;
-            return Err(Error::new(Code::TimeUncertain, "clock regression"));
-        }
-        self.atomic(|s| {
-            s.conn.execute(
-                "UPDATE meta SET monotonic_ms=?1,unix_ms=?2 WHERE id=1",
-                params![clock.monotonic_ms, clock.trusted_unix_ms],
-            )?;
-            Ok(())
-        })?;
+        self.validate_clock_advance(&clock)?;
+        self.atomic(|s| s.write_clock(&clock))?;
         self.clock = clock;
         Ok(())
     }
@@ -262,6 +292,7 @@ impl Store {
         self.conn.execute_batch("BEGIN IMMEDIATE;")?;
         let result = apply(self).and_then(|v| {
             self.check_quotas()?;
+            self.check_reservations()?;
             Ok(v)
         });
         #[cfg(test)]
@@ -336,15 +367,15 @@ impl Store {
                 self.limits.history_bytes as i64,
             ),
             (
-                "SELECT count(*) FROM queues WHERE kind='evidence'",
+                "SELECT (SELECT count(*) FROM queues WHERE kind='evidence')+(SELECT count(*) FROM control_reservations)",
                 self.limits.control_count as i64,
             ),
             (
-                "SELECT coalesce(sum(length(body)),0) FROM queues WHERE kind='evidence'",
+                "SELECT (SELECT coalesce(sum(length(body)),0) FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)",
                 self.limits.control_bytes as i64,
             ),
             (
-                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)",
+                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)",
                 self.limits.record_count as i64,
             ),
             (
@@ -404,8 +435,15 @@ impl Store {
         if after < 0 || !(1..=100).contains(&limit) {
             return Err(Error::new(Code::InvalidInput, "history page"));
         }
-        let mut stmt=self.conn.prepare("SELECT sequence,message_key,body FROM history WHERE sequence>?1 ORDER BY sequence LIMIT ?2")?;
-        let rows = stmt.query_map(params![after, limit], |r| {
+        let mut stmt=self.conn.prepare("SELECT sequence,message_key,body FROM history WHERE sequence>?1 AND (?3 IS NULL OR expires>?3) ORDER BY sequence LIMIT ?2")?;
+        // Expired history is immediately hidden even if bounded cleanup still has a backlog.
+        // Uncertain time retains the existing read-only history instead of guessing expiry.
+        let wall = if self.time_uncertain {
+            None
+        } else {
+            self.clock.trusted_unix_ms
+        };
+        let rows = stmt.query_map(params![after, limit, wall], |r| {
             Ok(HistoryItem {
                 sequence: r.get(0)?,
                 key: r.get(1)?,

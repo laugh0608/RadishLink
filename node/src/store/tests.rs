@@ -9,12 +9,12 @@ use std::{
 };
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Workspace {
+pub(crate) struct Workspace {
     root: PathBuf,
-    dir: PathBuf,
+    pub(crate) dir: PathBuf,
 }
 impl Workspace {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let temp = fs::canonicalize(std::env::temp_dir()).unwrap();
         let root = temp.join(format!(
             "radishlink-node-test-{}-{}",
@@ -25,10 +25,10 @@ impl Workspace {
         let dir = root.join("store");
         Self { root, dir }
     }
-    fn create(&self) -> Store {
+    pub(crate) fn create(&self) -> Store {
         Store::create(&self.dir, Limits::default(), clock(0)).unwrap()
     }
-    fn reopen(&self, now: i64) -> Store {
+    pub(crate) fn reopen(&self, now: i64) -> Store {
         Store::open(&self.dir, Limits::default(), clock(now)).unwrap()
     }
 }
@@ -37,7 +37,7 @@ impl Drop for Workspace {
         fs::remove_dir_all(&self.root).expect("remove exact test-owned directory");
     }
 }
-fn clock(now: i64) -> Clock {
+pub(crate) fn clock(now: i64) -> Clock {
     Clock {
         boot: "test-boot".into(),
         monotonic_ms: now,
@@ -58,10 +58,10 @@ fn security(revision: i64) -> SecurityUpdate {
     SecurityUpdate {
         session: "session".into(),
         expected_revision: revision,
-        state: vec![revision as u8 + 1],
+        state: (revision + 1).to_le_bytes().to_vec(),
     }
 }
-fn send(key: &str, reference: &str, revision: i64) -> Send {
+pub(crate) fn send(key: &str, reference: &str, revision: i64) -> Send {
     Send {
         action: Action {
             scope: "ui".into(),
@@ -76,7 +76,7 @@ fn send(key: &str, reference: &str, revision: i64) -> Send {
         remaining_hops: 1,
     }
 }
-fn relay(key: &str) -> Receive {
+pub(crate) fn relay(key: &str) -> Receive {
     Receive {
         message: message(key),
         role: Role::Relay,
@@ -87,7 +87,7 @@ fn relay(key: &str) -> Receive {
         evidence: None,
     }
 }
-fn destination(key: &str, revision: i64) -> Receive {
+pub(crate) fn destination(key: &str, revision: i64) -> Receive {
     Receive {
         message: message(key),
         role: Role::Destination,
@@ -239,14 +239,8 @@ fn control_quota_prevents_destination_commit_and_relay_cleanup() {
     );
     assert_eq!(state_revision(&s), Some(1));
     assert!(s.message("two").unwrap().is_none());
-    s.receive(relay("relay")).unwrap();
-    assert_eq!(
-        s.finish_delivery("relay", b"core-relay", Some(("A", b"evidence")))
-            .unwrap_err()
-            .code,
-        Code::Quota
-    );
-    assert!(s.message("relay").unwrap().unwrap().payload_present);
+    assert_eq!(s.receive(relay("relay")).unwrap_err().code, Code::Quota);
+    assert!(s.message("relay").unwrap().is_none());
 }
 #[test]
 fn full_history_and_payload_fail_without_partial_security_update() {
@@ -370,7 +364,7 @@ fn unknown_schema_corruption_symlink_and_second_owner_are_rejected() {
             .code,
         Code::Busy
     );
-    s.conn.pragma_update(None, "user_version", 2).unwrap();
+    s.conn.pragma_update(None, "user_version", 99).unwrap();
     drop(s);
     assert_eq!(
         Store::open(&w.dir, Limits::default(), clock(1))

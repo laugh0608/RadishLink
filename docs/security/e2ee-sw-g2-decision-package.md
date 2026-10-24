@@ -259,3 +259,46 @@ cargo build --frozen --release --target aarch64-unknown-linux-gnu --manifest-pat
 继续沿现有[文字闭环事务与验收矩阵](../architecture/minimal-text-slice.md#最小验收矩阵)，下一轮先审三个用户结果：首次配对能识别身份并拒绝未授权界面；手机离开或被撤销后 Node 会话及权限表现明确；提交中崩溃后安全状态、消息队列和送达/清理责任一致。每项都需映射到成熟机制、候选库实际 API、持久提交点和负例，无法映射时明确回到 SW-G1/SW-G2 评审，不自行拼装密码协议。
 
 本次没有改变首次信任、撤销、事务或 proof 的安全决定，没有发送上游消息、接收回复、创建新 R1 evidence、安装/构建候选或联系专业方。输入已更具体，但 R2、Phase B 和 SW-G2 仍为未通过状态。
+
+## Node 联合事务接入源码核对（2026-10-24）
+
+本节是 Node 服务运行可靠性任务中的只读工程核对，不是完整安全审计、许可证补证、R2 或 Phase B。实际读取 D2 run `20260902-130415-49997.8P5Td6` 留存的三个 crate 及解包源码；没有执行其 Cargo、复用该缓存构建、改动 archive、provider 或历史 evidence。三个归档 SHA-256 均与仓库固定 lock 一致，所读核心源码又与归档对应 entry 逐字比较一致：
+
+| 对象 | 固定归档 SHA-256 | 核心源码定位 |
+| --- | --- | --- |
+| mls-rs 0.56.0 | `4392c3b3ed7d835ca8f318f85ca65d3f0d3e879538d6e70679827a2f3af72029` | `src/group/snapshot.rs`、`state_repo.rs`、`mod.rs`；包内 VCS commit `8f1b43f447a792ff9307f1c2c7f54da63914870e` |
+| mls-rs-core 0.27.0 | `e282079e5bd2fe95a009ac8af6a8e510924d876234ee494cd97f15f52de53cb0` | `src/group/group_state.rs`、`src/key_package.rs`；包内 VCS commit `a0eb41def0cf227034bde19b7c11e62ab2a74a03` |
+| mls-rs-provider-sqlite 0.23.0 | `e8e52c2b3b9c3421fe4bd96266016306595a66c1f4830ee2f1a19d50b209895e` | `src/lib.rs`、`group_state.rs`、`key_package.rs`、`connection_strategy.rs`、Cargo.toml；包内 VCS commit 同上 |
+
+### 实际 API 与限制
+
+| 已核对事实 | 对 Node 的影响 |
+| --- | --- |
+| `Group::process_incoming_message` 修改内存状态，持久化须显式调用 `write_to_storage`；后者导出 snapshot 并调用 state repository | 应用处理成功与 SQLite 提交成功是不同事实；提交前不能展示明文、发出证据或发送密文 |
+| `GroupStateStorage::write` 接受 `GroupState`、epoch inserts、epoch updates；还有 state/epoch/max_epoch_id 查询 | 可以评审正式 trait 适配，但现有 Node `SecurityUpdate` 单个不透明 blob 不足以表示完整安全持久操作。trait 注释提及的 `delete_epoch_under` 不在此版本实际签名中，不能照注释臆造参数 |
+| `state_repo.rs` 先调用 group storage write，再删除待消费 KeyPackage，之后清空内存 pending inserts/updates | 联合边界必须包含 group/epoch 和 KeyPackage 消费；仅包住 group write 仍可能部分完成。外围事务失败时必须废弃已推进的内存 group 并从持久结果重建 |
+| SQLite engine 分别通过 `ConnectionStrategy::make_connection` 创建 group、KeyPackage、PSK、application storage；各 storage 内部持有私有连接 | 指向同一路径不意味着使用同一连接或同一事务；公开 `ConnectionStrategy` 返回拥有所有权的 `Connection`，并非借用 Node 事务 |
+| `SqLiteGroupStateStorage::update_group_state` 内部开始并 commit 事务；application `transact_insert` 也自行 commit；KeyPackage 操作独立执行 SQL | 现成 provider 没有公开的“由 Node 统一提交全部操作”入口，不能直接套上 T-A/T-C。外层先提交一份、再提交另一份不满足 ADR 0004 |
+| provider 用 `user_version` 初始化自身表；默认保留有限 prior epochs；KeyPackage decode 路径含 `unwrap` | schema、epoch 保留和损坏拒绝必须由接入层明确控制，不能把 provider 自动初始化或默认保留策略原样接入 Node。发现 `unwrap` 是恢复路径风险输入，不是已复现漏洞结论 |
+
+以上定位可对应上游固定源码：[Group 持久化](https://github.com/awslabs/mls-rs/blob/8f1b43f447a792ff9307f1c2c7f54da63914870e/mls-rs/src/group/state_repo.rs)、[storage trait](https://github.com/awslabs/mls-rs/blob/a0eb41def0cf227034bde19b7c11e62ab2a74a03/mls-rs-core/src/group/group_state.rs)、[SQLite group provider](https://github.com/awslabs/mls-rs/blob/a0eb41def0cf227034bde19b7c11e62ab2a74a03/mls-rs-provider-sqlite/src/group_state.rs)。本轮依据为已核对归档中的文件，没有将网页或浮动分支当作新的 R1 evidence。
+
+### 建议的接入方向与进入条件
+
+**现成 SQLite provider 不能直接承担 Node 联合事务；优先评审基于正式 storage traits 的 Node 事务适配。** 这是 API 级可行方向，尚未通过编译或功能证明，不是密码实现已经可用。
+
+拟议执行顺序为：由唯一状态提交者开启事务，接入层在该事务中读取/保存安全状态与 KeyPackage 消费，完成应用动作、历史、队列和证据责任后统一 COMMIT；提交成功后才对外输出。trait 自身不得另建连接或提前 COMMIT；跨线程调用、重入、缺少活动事务和重复完成必须明确拒绝。`Send + Sync` 约束、同步/异步 feature、锁生命周期与错误传播须在获准功能试验中验证，不能让调用线程持有连接锁后等待 provider 再次取得同一锁。
+
+事务失败或结果不确定时，已调用过候选库的内存 group 必须全部丢弃；不能保留已清空 pending 状态的对象继续加密。恢复只读取完整持久结果，不能导入旧安全快照。密钥材料按库原有字节和 zeroization 类型处理，不手写密码算法或自定义 nonce 策略；SQL 删除也不证明闪存物理擦除。
+
+依赖方面，固定 provider 声明 rusqlite `0.37`，D2 图为 libsqlite3-sys `0.35.0`；Node 为 rusqlite `0.40.2` / libsqlite3-sys `0.38.2`，两个 native crate 都声明 `links = "sqlite3"`。这是整图整合的明确冲突输入，本轮没有试合并构建。若采用 Node 自有 storage trait 适配，可在新产品图中评审不引入旧 SQLite provider；若保留现成 provider，则须单独评审版本/源码变更与事务能力。两条路线都不能修改 D2 旧图以追认历史结果，也不能通过降级 Node 或隐式升级候选绕过复核。
+
+功能接入还须覆盖发送、接收、建组/加入、成员变化、旧 epoch 处理和失败重建；群组 snapshot、epoch 记录、KeyPackage 与应用写入每个边界均需故障用例。当前 Node 单 blob 测试只能作为事务基础，不能当作 storage trait 已适配。
+
+### proof、撤销与时间的未决部分
+
+- MLS 应用内容不能让无会话内容密钥的中继直接读取；当前不存在已接受的 relay-clear proof 映射。接入前须明确证明主体、受信验证键、消息/目标/会话代数绑定、重放窗口和撤销后的处理规则，不能把任意 `core_binding` 或不透明 evidence 当作验证结果。
+- 首次配对与界面授权必须形成 Node 身份到授权主体的可靠映射；HTTPS 开通不证明配对可信。联系人/成员撤销与手机界面撤销分开，持久事务中的检查必须与授权版本一致，不能验证后跨越撤销提交仍使用旧权限。
+- 同一 boot 的受信时间可驱动现有维护；跨 boot 需要可信停机上界与独立防回滚依据。现有 schema 中的单调截止点和墙钟下界不足以证明它们，因此继续隔离旧传输责任。新 boot 的时间锚、候选库状态恢复和迟到 proof 的处理需一起评审，本轮没有自动解除隔离或新加允许跳过检查的开关。
+
+这使后续工作具体落在 storage trait 联合事务、proof 认证映射和可信恢复三处。许可证处置、R2、Phase B、SW-G2 仍按既有顺序完成；本轮没有发送上游消息、联系专业方或新增密码依赖。

@@ -33,6 +33,41 @@ pub struct Batch {
     pub signal: Signal,
     pub admission: Admission,
 }
+impl Batch {
+    /// Merge observations before advancing a queue. Contradictory link observations
+    /// require an ordered platform batch; silently choosing one would create a retry.
+    pub fn merge(self, other: Self) -> Result<Self> {
+        if self.now_ms != other.now_ms || self.now_ms < 0 {
+            return Err(Error::new(Code::Conflict, "event batch time"));
+        }
+        let link = match (self.link, other.link) {
+            (LinkEvent::Unchanged, value) | (value, LinkEvent::Unchanged) => value,
+            (a, b) if a == b => a,
+            _ => {
+                return Err(Error::new(
+                    Code::Conflict,
+                    "contradictory link observations",
+                ));
+            }
+        };
+        let signal = match (self.signal, other.signal) {
+            (Signal::Stop, _) | (_, Signal::Stop) => Signal::Stop,
+            (Signal::Pause, _) | (_, Signal::Pause) => Signal::Pause,
+            _ => Signal::Continue,
+        };
+        let admission = match (self.admission, other.admission) {
+            (Admission::Quota, _) | (_, Admission::Quota) => Admission::Quota,
+            (Admission::Hop, _) | (_, Admission::Hop) => Admission::Hop,
+            _ => Admission::Allow,
+        };
+        Ok(Self {
+            now_ms: self.now_ms,
+            link,
+            signal,
+            admission,
+        })
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum Phase {
     Active,
