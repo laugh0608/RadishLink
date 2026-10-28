@@ -1,7 +1,6 @@
 use super::control_types::*;
 use super::*;
 use crate::retry::{Admission, LinkEvent, Signal};
-use std::collections::BTreeMap;
 
 const SLOTS_MS: [i64; 8] = [0, 1000, 3000, 10000, 30000, 120000, 600000, 1800000];
 
@@ -27,51 +26,21 @@ impl Store {
         clock: Clock,
         events: Vec<ControlEvent>,
     ) -> Result<Vec<ControlDecision>> {
-        self.validate_clock_advance(&clock)?;
-        if events.is_empty() || events.len() > scheduling::MAX_QUEUE_EVENTS {
-            return Err(Error::new(Code::InvalidInput, "control batch size"));
-        }
-        let mut merged: BTreeMap<(ObjectRef, ParticipantId), Batch> = BTreeMap::new();
-        for e in events {
-            let b = Batch {
-                now_ms: clock.monotonic_ms,
-                link: e.link,
-                signal: e.signal,
-                admission: e.admission,
-            };
-            match merged.entry((e.object, e.neighbor)) {
-                std::collections::btree_map::Entry::Occupied(mut saved) => {
-                    *saved.get_mut() = saved.get().merge(b)?;
-                }
-                std::collections::btree_map::Entry::Vacant(saved) => {
-                    saved.insert(b);
-                }
-            }
-        }
-        let decisions = self.atomic(|s| {
-            s.control_live(&activity, clock.monotonic_ms)?;
-            s.write_clock(&clock)?;
-            // Exit before report; stable order for a bounded transaction. Transport fairness
-            // across receipt/ACK queues is still a future integration requirement.
-            let mut ordered = Vec::with_capacity(merged.len());
-            for ((object, neighbor), batch) in merged {
-                let kind: i64 = s.conn.query_row(
-                    "SELECT kind FROM control_objects WHERE reference=?1",
-                    [object.as_slice()],
-                    |r| r.get(0),
-                )?;
-                ordered.push((kind, object, neighbor, batch));
-            }
-            ordered.sort_by_key(|(kind, object, neighbor, _)| (*kind, *object, *neighbor));
-            ordered
-                .into_iter()
-                .map(|(_, o, n, b)| s.advance_control(&activity, o, n, b))
-                .collect::<Result<Vec<_>>>()
-        })?;
-        self.clock = clock;
-        Ok(decisions)
+        self.control_live(&activity, clock.monotonic_ms)?;
+        let report = self.process_outbound_batch(
+            clock,
+            events.into_iter().map(OutboundEvent::Control).collect(),
+        )?;
+        Ok(report
+            .decisions
+            .into_iter()
+            .filter_map(|d| match d {
+                OutboundDecision::Control(d) => Some(d),
+                _ => None,
+            })
+            .collect())
     }
-    fn advance_control(
+    pub(super) fn advance_control(
         &self,
         activity: &ActivityId,
         object: ObjectRef,
@@ -196,18 +165,52 @@ impl Store {
         object: ObjectRef,
         neighbor: ParticipantId,
     ) -> Result<bool> {
-        self.atomic(|s| {
-            let now=s.clock.monotonic_ms;
-            let local=s.control_live(&activity,now)?;
-            // ACK is ordinary authorization, never the special retained-exit exception.
-            if !s.participant_active(&local)? || !s.participant_active(&neighbor)? { return Ok(false); }
-            let count:Option<u8>=s.conn.query_row("SELECT ack_attempts FROM control_neighbors WHERE object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice()],|r|r.get(0)).optional()?;
-            if count.is_none_or(|n|n>=10) || !s.charge_control_output(now,127)? { return Ok(false); }
-            s.conn.execute("UPDATE control_neighbors SET ack_attempts=ack_attempts+1 WHERE object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice()])?;
-            Ok(true)
-        })
+        self.control_live(&activity, self.clock.monotonic_ms)?;
+        let report = self.process_outbound_batch(
+            self.clock.clone(),
+            vec![OutboundEvent::ControlAck { object, neighbor }],
+        )?;
+        Ok(report
+            .decisions
+            .iter()
+            .any(|d| matches!(d, OutboundDecision::ControlAck { send: true, .. })))
     }
-    fn charge_control_output(&self, now: i64, bytes: i64) -> Result<bool> {
+    pub(super) fn consume_control_ack_in_transaction(
+        &self,
+        object: ObjectRef,
+        neighbor: ParticipantId,
+        clock: &Clock,
+    ) -> Result<bool> {
+        let activity: Vec<u8> = self.conn.query_row(
+            "SELECT activity FROM control_activity WHERE id=1",
+            [],
+            |r| r.get(0),
+        )?;
+        let activity: ActivityId = activity
+            .try_into()
+            .map_err(|_| Error::new(Code::StoreCorrupt, "ACK activity"))?;
+        let local = self.control_live(&activity, clock.monotonic_ms)?;
+        if !self.participant_active(&local)? || !self.participant_active(&neighbor)? {
+            return Ok(false);
+        }
+        let count: Option<u8> = self
+            .conn
+            .query_row(
+                "SELECT ack_attempts FROM control_neighbors WHERE object=?1 AND participant=?2",
+                params![object.as_slice(), neighbor.as_slice()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if count.is_none_or(|n| n >= 10) || !self.charge_control_output(clock.monotonic_ms, 127)? {
+            return Ok(false);
+        }
+        self.conn.execute("UPDATE control_neighbors SET ack_attempts=ack_attempts+1 WHERE object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice()])?;
+        Ok(true)
+    }
+    pub(super) fn charge_control_output(&self, now: i64, bytes: i64) -> Result<bool> {
+        if !(1..=8192).contains(&bytes) {
+            return Err(Error::new(Code::InvalidInput, "control frame charge"));
+        }
         let (last, frames, balance): (i64, i64, i64) = self.conn.query_row(
             "SELECT last_ms,frames,bytes FROM control_output_rate WHERE id=1",
             [],

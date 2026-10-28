@@ -13,7 +13,11 @@ use std::{
     path::Path,
 };
 
+mod outbound;
+pub use outbound::{OutboundDecision, OutboundEvent, OutboundReport};
 mod business_policy;
+#[cfg(test)]
+mod outbound_tests;
 pub use business_policy::credential_key;
 #[cfg(test)]
 mod business_policy_tests;
@@ -70,6 +74,7 @@ enum OpenMode {
     MigrateV3,
     MigrateV4,
     MigrateV5,
+    MigrateV6,
     #[cfg(test)]
     MigrateV1Fault(TestFault),
     #[cfg(test)]
@@ -80,6 +85,8 @@ enum OpenMode {
     MigrateV4Fault(TestFault),
     #[cfg(test)]
     MigrateV5Fault(TestFault),
+    #[cfg(test)]
+    MigrateV6Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -166,6 +173,7 @@ impl Store {
         conn.execute_batch(include_str!("migration_v4.sql"))?;
         conn.execute_batch(include_str!("migration_v5.sql"))?;
         conn.execute_batch(include_str!("migration_v6.sql"))?;
+        conn.execute_batch(include_str!("migration_v7.sql"))?;
         let encoded = limits_json(&limits)?;
         conn.execute(
             "INSERT INTO meta(id,revision,boot,monotonic_ms,unix_ms,limits,unix_upper_ms) VALUES(1,0,?1,?2,?3,?4,?5)",
@@ -215,6 +223,10 @@ impl Store {
     pub fn migrate_v5(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV5)
     }
+    /// Explicit v6 -> v7; migrated messages cannot issue new data ACKs.
+    pub fn migrate_v6(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV6)
+    }
     fn open_version(
         directory: &Path,
         limits: Limits,
@@ -228,6 +240,7 @@ impl Store {
             OpenMode::MigrateV3 => Some(3),
             OpenMode::MigrateV4 => Some(4),
             OpenMode::MigrateV5 => Some(5),
+            OpenMode::MigrateV6 => Some(6),
             #[cfg(test)]
             OpenMode::MigrateV1Fault(_) => Some(1),
             #[cfg(test)]
@@ -238,6 +251,8 @@ impl Store {
             OpenMode::MigrateV4Fault(_) => Some(4),
             #[cfg(test)]
             OpenMode::MigrateV5Fault(_) => Some(5),
+            #[cfg(test)]
+            OpenMode::MigrateV6Fault(_) => Some(6),
         };
         limits.validate()?;
         clock.validate()?;
@@ -260,10 +275,10 @@ impl Store {
         let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if ![1, 2, 3, 4, 5, 6].contains(&version) || app != APP_ID {
+        if ![1, 2, 3, 4, 5, 6, 7].contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version < 6 && source_version.is_none() {
+        if version < 7 && source_version.is_none() {
             return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
         if source_version.is_some_and(|source| version != source) {
@@ -331,6 +346,7 @@ impl Store {
                 OpenMode::MigrateV3Fault(fault) => Some(fault),
                 OpenMode::MigrateV4Fault(fault) => Some(fault),
                 OpenMode::MigrateV5Fault(fault) => Some(fault),
+                OpenMode::MigrateV6Fault(fault) => Some(fault),
                 _ => None,
             },
         };
@@ -351,7 +367,10 @@ impl Store {
                 if version < 5 {
                     store.conn.execute_batch(include_str!("migration_v5.sql"))?;
                 }
-                store.conn.execute_batch(include_str!("migration_v6.sql"))?;
+                if version < 6 {
+                    store.conn.execute_batch(include_str!("migration_v6.sql"))?;
+                }
+                store.conn.execute_batch(include_str!("migration_v7.sql"))?;
                 store.write_clock(&store.clock)?;
                 store.check_queue_deadlines(false)?;
                 Ok(())
@@ -362,6 +381,7 @@ impl Store {
         s.check_control_invariants()?;
         s.check_data_invariants()?;
         s.check_business_invariants()?;
+        s.check_outbound_invariants()?;
         s.reset_control_rate_on_open()?;
 
         Ok(s)
@@ -407,6 +427,7 @@ impl Store {
             )?;
             self.reconcile_business_policy(now)?;
             self.check_business_invariants()?;
+            self.check_outbound_invariants()?;
             self.check_quotas()?;
             self.check_reservations()?;
             self.check_control_invariants()?;

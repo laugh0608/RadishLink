@@ -52,9 +52,9 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
-2026-10-24 已接受 ADR 0004—0007 的 D1—D16，Node 服务/事务、证明生命周期及外层 framing 的沿革见[日终回顾](2026-10-24-progress.md)。2026-10-28 的 [D16 控制持久化](../testing/node-control-persistence.md)已本地提交为 `9c75025`。[D15 数据持久化与保守时间](../testing/node-data-persistence.md)已按本次要求提交为 `f7969d2`。随后完成 [schema v6 业务责任与控制政策关联](../testing/node-business-policy.md)：精确活动/端点/邻居检查、政策修订、撤销/Retiring/换代持久停止和证明清理；126 库测试与 2 CLI 测试、fmt/Clippy 通过，本接续批次按所有者本次要求随本次本地提交保存。D16 首次并行恢复测试的文件锁 Busy 原因未确认，历史失败记录保留；生产 run 仍拒绝。
+2026-10-24 已接受 ADR 0004—0007 的 D1—D16，Node 服务/事务、证明生命周期及外层 framing 的沿革见[日终回顾](2026-10-24-progress.md)。2026-10-28 的 [D16 控制持久化](../testing/node-control-persistence.md)已本地提交为 `9c75025`。[D15 数据持久化与保守时间](../testing/node-data-persistence.md)已按本次要求提交为 `f7969d2`。随后完成的 [schema v6 业务责任与控制政策关联](../testing/node-business-policy.md)已提交为 `62e0823`。接续完成 [schema v7 共享外发额度与责任轮转](../testing/node-outbound-scheduling.md)：receipt/退出/报告/两类 ACK 统一计费、持久轮转、数据 ACK 四槽/十次及显式迁移；串行 140 库测试与 2 CLI 测试、fmt/Clippy 通过，本接续批次按所有者本次要求随本次本地提交保存。并行全量再次出现 `store owner lock` Busy，精确单测及串行复验通过，根因仍未确认；生产 run 仍拒绝。
 
-[帧边界与 G0 输入准备](../testing/node-framing-and-graph-inputs.md)仅覆盖 4 邻居/64 KiB/10 秒组装及 7957-byte 可复现审阅包。framing 未接入 transport/Service；D15/D16 内部持久字段已实施，业务身份与活动/撤销已在内部事务关联；入站限速、共享外发/公平调度、新活动重配及真实签验仍缺，严格 CBOR/MLS 未接入；[新图 G1/G2](../testing/node-security-graph-review-package.md)缺真实硬资源、网络和进程监督证据，未执行。许可证/R2、Phase B、可信平台和真实运行停止线不变。
+[帧边界与 G0 输入准备](../testing/node-framing-and-graph-inputs.md)仅覆盖 4 邻居/64 KiB/10 秒组装及 7957-byte 可复现审阅包。framing 未接入 transport/Service；D15/D16 内部持久字段已实施，业务身份与活动/撤销已在内部事务关联；共享外发与轮转已完成有界内部接线，入站限速、真实就绪集合枚举/传输公平、新活动重配及真实签验仍缺，严格 CBOR/MLS 未接入；[新图 G1/G2](../testing/node-security-graph-review-package.md)缺真实硬资源、网络和进程监督证据，未执行。许可证/R2、Phase B、可信平台和真实运行停止线不变。
 
 硬件查价已按所有者反馈收口：当前小计 2024 元，超原首轮上限 1024 元；暂缓功率计为 1824 元。完整购买后的整套名义余额 976 元仍须覆盖后续增量与未说明费用；采购前核对赠送线/到手价及兼容性。累计已支出 0 元、整套 3000 元与首轮 1000 元上限不变，不再扩展询价。BSP/双接口/串口候选只有纸面依据，未采购、安装或连接设备。
 
@@ -64,7 +64,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
-1. 开发优先：D15/D16 自有持久边界已完成有限离线验证，业务政策关联已接入 schema v6，下一批推进 receipt/ACK 与 kind 2/3 的共享外发额度和责任间公平调度；实际功能接入仍须满足许可证/R2/Phase B 前置。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
+1. 开发优先：D15/D16 自有持久边界已完成有限离线验证，业务政策及共享外发调度已接入 schema v7，下一批推进已接受的入站限速和 16 对象验签等待队列的自有有界准入；实际功能接入仍须满足许可证/R2/Phase B 前置。所有者于 2026-10-24 决定自行按[搜索清单](../hardware/poc-purchase-list.md#所有者自行查价的搜索清单)在淘宝查价并反馈；Agent 已按反馈完成一次核算，停止扩展询价流程和重复价格检索。采购预算取舍不阻塞独立的软件设计、离线开发或硬件准备，但不放行既有安全/运行停止线；Mac 串口候选已有记录，仍未安装或连接设备。
 2. 基于已整理的内部 Linux ARM64 产物评审表，冻结实际复制/留存范围、评审者与下一精确包；分别处置 `debug_tree` 固定源码正文/归属与 `r-efi` 的 MIT alternative。专业意见、新证据与执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 按已接受的活动身份、撤销与 COSE profile 准备实际首次信任/签验/联合事务的验证输入，继续核对手机授权、物理与覆盖层路由边界；不重复讨论 D11—D16，也不把已接受设计写成安全能力已实现。
 4. I5 后续先满足[路线 A 宿主资源门](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)，不把当前 Mac/UTM 改名或增加 guest 配额当作达标。资源条件变化后复核完整准备预算、真实输入与可信基座，冻结真实 FD loader、非 UTM 控制面和新版执行合同，再另行授权实现、原生环境验收及验签/APT。安装、冷构建、daemon/store 计费和正式 21 样本 I5-R 仍各有前置；不直接创建满额四盘后安装，不在域外先构建。V0 历史合同与 SW-G2 安全门不变。

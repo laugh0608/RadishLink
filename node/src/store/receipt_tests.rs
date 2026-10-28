@@ -81,7 +81,8 @@ fn destination_commits_only_intent_and_conversion_preserves_budget_and_history()
     let result = s
         .advance_queue("one", "evidence", super::tests::PEER_2, event(1))
         .unwrap();
-    assert!(result.send);
+    assert!(!result.send); // A reopened shared control bucket starts empty.
+    assert_eq!(result.reason, Reason::Quota);
     let saved = retry_json(&s, "one");
     finalize(&mut s, "one").unwrap();
     s.receive(destination("one", 0)).unwrap();
@@ -400,11 +401,10 @@ fn v2_migration_shortens_deadline_without_refunding_consumed_retries() {
     let mut s = w.create();
     s.receive(destination("one", 0)).unwrap();
     finalize(&mut s, "one").unwrap();
-    assert!(
-        s.advance_queue("one", "evidence", super::tests::PEER_2, event(0))
-            .unwrap()
-            .send
-    );
+    let denied = s
+        .advance_queue("one", "evidence", super::tests::PEER_2, event(0))
+        .unwrap();
+    assert!(!denied.send && denied.consumed == 1);
     make_v2(&s);
     let old = retry_json(&s, "one");
     drop(s);
@@ -433,7 +433,7 @@ fn v2_migration_shortens_deadline_without_refunding_consumed_retries() {
         Code::UnsupportedVersion
     );
     drop(s);
-    assert_eq!(version(&w), 6);
+    assert_eq!(version(&w), 7);
     assert_eq!(
         Store::migrate_v2(&w.dir, Limits::default(), clock(2))
             .err()
@@ -603,7 +603,7 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
                 .unwrap();
             assert_eq!(result.code(), Some(exit));
             if operation == "migration" {
-                assert_eq!(version(&w), if committed { 6 } else { 2 });
+                assert_eq!(version(&w), if committed { 7 } else { 2 });
                 let s = if committed {
                     w.reopen(2)
                 } else {

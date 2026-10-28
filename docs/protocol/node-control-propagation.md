@@ -100,4 +100,4 @@ LinkAckV1 = [1, 3, activity_id, ack_kind, object_ref,
 
 必须覆盖 20/21 绑定、80/81 报告、20/21 退出、576/577 记录和 1 MiB 边界；恶意新 operation_id、reason、换键与链路抖动不能重开槽/次数。还需验证报告满额时自身退出/本机封禁可处理、活动截止在队列中途生效、ACK 丢失与重放、提交未知、签署失败、Retiring 崩溃以及不同 boot 拒绝。
 
-[D16 自有持久边界](../testing/node-control-persistence.md)已实现 schema v4、固定预留、对象/邻居状态、尝试/控制 ACK 预算及显式迁移，并完成合成验证。控制批处理复用现有 Store 事务、Batch 合并和状态拥有者边界，I1 RetryState 参数不变；没有新 runner 或公共发送入口。真实时序、完整速率/公平接线、密码及平台恢复仍未验证。依赖、R2/Phase B、可信时钟、逐跳安全与物理资源门继续生效。
+[D16 自有持久边界](../testing/node-control-persistence.md)已实现 schema v4、固定预留、对象/邻居状态、尝试/控制 ACK 预算及显式迁移，并完成合成验证。控制批处理复用现有 Store 事务、Batch 合并和状态拥有者边界，I1 RetryState 参数不变；没有新 runner 或公共发送入口。同日 [schema v7 共享外发调度](../testing/node-outbound-scheduling.md)已将 receipt/两类 ACK 与退出/报告接到同一内部额度及持久轮转，覆盖四槽/十次数据 ACK 与迁移；只证明有界调用批次，真实就绪集合枚举、时序/速率/公平、密码及平台恢复仍未验证。依赖、R2/Phase B、可信时钟、逐跳安全与物理资源门继续生效。

@@ -39,7 +39,7 @@ fn old_store_requires_explicit_atomic_migration_and_preserves_records() {
     assert_eq!(s.history(0, 100).unwrap().len(), 1);
     assert!(s.action("ui", 1, "a").unwrap().is_some());
     drop(s);
-    assert_eq!(version(&w), 6);
+    assert_eq!(version(&w), 7);
     assert!(Store::migrate_v1(&w.dir, Limits::default(), clock(2)).is_err());
     let mut s = w.reopen(2);
     assert_eq!(
@@ -243,7 +243,7 @@ fn migration_crash_child() {
 
 #[test]
 fn migration_process_exit_preserves_old_or_new_schema_without_partial_reservation() {
-    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 6)] {
+    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 7)] {
         let w = Workspace::new();
         let mut s = w.create();
         s.receive(relay("one")).unwrap();

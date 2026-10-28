@@ -288,7 +288,7 @@ fn retained_exit_is_the_only_control_exception_to_local_retirement() {
     assert!(output[0].send);
     assert!(!s.consume_control_ack(ACTIVITY, [7; 32], [2; 16]).unwrap());
     let report = s.maintain(s.current_clock()).unwrap();
-    assert_eq!(report.stopped_receipt_intents, 1);
+    assert_eq!(report.stopped_receipt_intents, 0); // Unified round already cleaned the stopped intent.
     assert_eq!(s.history(0, 10).unwrap().len(), 1);
 }
 
@@ -647,7 +647,7 @@ fn process_exit_recovers_policy_marker_binding_object_and_revision_together() {
                 assert_eq!(
                     conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                         .unwrap(),
-                    if committed { 6 } else { 5 }
+                    if committed { 7 } else { 5 }
                 );
                 drop(conn);
             }

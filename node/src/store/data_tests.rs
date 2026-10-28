@@ -343,7 +343,7 @@ fn migration_failure_and_cross_boot_leave_v4_intact() {
         let version: i64 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, if kind == "after" { 6 } else { 4 });
+        assert_eq!(version, if kind == "after" { 7 } else { 4 });
         let has: bool = conn
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='message_data')",

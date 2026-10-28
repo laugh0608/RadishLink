@@ -31,7 +31,7 @@ impl Store {
             if exists { return Err(Error::new(Code::Conflict,"activity already assigned; no restart")); }
             s.write_clock(&s.clock)?;
             s.conn.execute("INSERT INTO control_activity(id,activity,local_participant,boot,started,deadline) VALUES(1,?1,?2,?3,?4,?5)",params![activity.as_slice(),local.as_slice(),s.clock.boot,now,deadline])?;
-            s.conn.execute("INSERT INTO control_output_rate VALUES(1,?1,0,0)",[now])?;
+            s.conn.execute("INSERT INTO control_output_rate(id,last_ms,frames,bytes) VALUES(1,?1,0,0)",[now])?;
             Ok(())
         })
     }

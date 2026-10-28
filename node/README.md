@@ -24,7 +24,7 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 - `model`、`retry`：进程内记录及 I1 重试规则移植，不是产品 wire 或认证结果。
 - `framing`：ADR 0007 的 u32be 前缀、每邻居一个 ≤64 KiB frame、最多四邻居和固定 10 秒组装期限；仅内部缓冲边界，尚未接入 transport/Service，详见[离线验证记录](../docs/testing/node-framing-and-graph-inputs.md)。
 - `data`：D15 原始 core/解析字段、完整身份、u64 epoch 与可信 UTC 区间的有界运算；不解码 CBOR 或验证密码。
-- `store`：schema v6、显式 v1/v2/v3/v4/v5 迁移、单拥有者、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与事件批调度。
+- `store`：schema v7、显式 v1/v2/v3/v4/v5/v6 迁移、单拥有者、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与事件批调度。
 - `service`：容量 32 的命令队列、可克隆 Client、专属状态线程；支持平台时钟源周期维护，查询已提交事实；关闭接纳后排空已接纳命令并 Join，业务发送仍拒绝。
 - `error`：稳定错误分类与受控诊断原因；默认 Display/Debug 不回显底层输入。
 
@@ -32,7 +32,7 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 
 `Store::create` 只允许全新目录，`Store::open` 不创建或重置缺失/损坏的库。目录必须为 canonical 0700，状态/锁文件为单链接 0600；这些检查不证明卷已加密或能够抵抗同用户/root 的并发路径替换。平台接入仍须验证受控父目录、用户身份、解锁和锁定生命周期。
 
-schema 当前为 6，config/retry 仍为 1，未知版本拒绝。普通 open 遇到 v1/v2/v3/v4/v5 返回 MigrationRequired，须按实际来源显式调用 `Store::migrate_v1`、`Store::migrate_v2`、`Store::migrate_v3`、`Store::migrate_v4` 或 `Store::migrate_v5` 到当前版本。迁移为旧中继补预留、缩短旧 proof queue 至原消息 deadline、终结已到期证明并保留目标端交付事实；不重置 retry 预算。容量不足整笔拒绝，已有 v6 不重复执行，不能通过改版本号降级或静默重建。旧消息缺 D15 字段或可信政策快照，保留查询/到期维护但禁止继续输出，不从新帧补造缺失认证内容。版本化记录与动作 generation 不是可信硬件抗回滚机制。
+schema 当前为 7，config/retry 仍为 1，未知版本拒绝。普通 open 遇到 v1/v2/v3/v4/v5/v6 返回 MigrationRequired，须按实际来源显式调用 `Store::migrate_v1`、`Store::migrate_v2`、`Store::migrate_v3`、`Store::migrate_v4`、`Store::migrate_v5` 或 `Store::migrate_v6` 到当前版本。迁移为旧中继补预留、缩短旧 proof queue 至原消息 deadline、终结已到期证明并保留目标端交付事实；不重置 retry 预算。容量不足整笔拒绝，已有 v7 不重复执行，不能通过改版本号降级或静默重建。旧消息缺 D15 字段或可信政策快照，保留查询/到期维护但禁止继续输出，不从新帧补造缺失认证内容。版本化记录与动作 generation 不是可信硬件抗回滚机制。
 
 历史默认 7 天，新历史按可信 UTC 上界起算、可信下界删除，由受信平台时钟推进；启动/Clock 命令和可选周期维护将时钟推进与有界清理一起提交，到期内容立即从查询过滤。`Service::start_with_clock` 的周期为 100 ms–60 s，平台必须提供可信且有界的 `ClockSource`；现有测试用合成源，Linux 时钟信任与休眠恢复后端尚未接入。不同 boot、单调时钟回退或可信 UTC 任一端回退、区间超宽或来源丢失进入 `TIME_UNCERTAIN`，保留可读状态并拒绝写入，不能通过新的时间值自动解除隔离。提交结果不确定时停止查询/写入，须重开并按动作键查询，不自动重发。
 
@@ -48,4 +48,6 @@ D16 在原 8 MiB / 4096 控制总额度内固定保留 1 MiB / 576 记录，全�
 
 D15 新消息保存原始 core 和完整身份；epoch 为固定 8-byte big-endian BLOB。重复接收同步收紧消息/队列期限，时间准入与内部输出均检查 UTC 上界和同 boot deadline。调用方仍须提供严格解码/认证后的匹配字段及新鲜可信采样；完整身份已接到 D16 内部撤销/活动检查。
 
-当前 schema v6 见[业务政策关联记录](../docs/testing/node-business-policy.md)。新业务必须具备活动与 Active 精确端点/本机/邻居绑定；neighbor 为 credential_ref 的 64 位小写十六进制，不是地址。Send/Receive 传入准备时的政策修订，ReceiptIntent 返回修订供 finalize_receipt/T-D 复核。撤销、Retiring、换代和停用持久停止相关责任；未发 proof/intent 有界清理，已交付历史保持。政策存储失败隔离当前拥有者，禁止继续使用旧权限；真实验证/输出接线仍未开放。
+schema v6 政策关联见[业务政策关联记录](../docs/testing/node-business-policy.md)。新业务必须具备活动与 Active 精确端点/本机/邻居绑定；neighbor 为 credential_ref 的 64 位小写十六进制，不是地址。Send/Receive 传入准备时的政策修订，ReceiptIntent 返回修订供 finalize_receipt/T-D 复核。撤销、Retiring、换代和停用持久停止相关责任；未发 proof/intent 有界清理，已交付历史保持。政策存储失败隔离当前拥有者，禁止继续使用旧权限；真实验证/输出接线仍未开放。
+
+当前 schema v7 及[共享外发调度](../docs/testing/node-outbound-scheduling.md)复用既有 Store 事务。`process_outbound_batch` 每轮至多 128 个事件，统一 receipt/退出/报告/两类 ACK 的 4 frames/s、8192 bytes/s 额度；退出优先，责任按持久游标轮转，同 boot 重开空桶。数据 ACK 每消息四个 participant 槽、每槽十次，不因换键恢复；v6 旧消息不补造 ACK 预算。原 queue/control 批处理委托新入口，单责任 receipt 也共享扣费；全局公平仍要求未来拥有者公平汇总完整就绪集合与真实传输接线。

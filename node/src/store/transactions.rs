@@ -38,6 +38,10 @@ impl Store {
             Role::Destination => "committed",
         };
         self.conn.execute("INSERT INTO messages(key,core,role,state,payload,deadline,retain_until,hops,origin_ref,source_neighbor,data_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1)",params![m.key,m.core_binding,role.as_str(),state,m.payload,m.deadline_ms,m.retain_until_ms,hops,m.data.origin_ref(),source])?;
+        self.conn.execute(
+            "UPDATE messages SET data_ack_budget='[]' WHERE key=?1",
+            [&m.key],
+        )?;
         self.insert_data(m)?;
         self.insert_business_policy(m, role, source, policy_revision)
     }

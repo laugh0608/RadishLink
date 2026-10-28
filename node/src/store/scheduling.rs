@@ -1,22 +1,23 @@
 use super::*;
-use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
 
 pub const MAX_QUEUE_EVENTS: usize = 128;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum QueueKind {
     Data,
     Evidence,
 }
 impl QueueKind {
-    fn as_str(self) -> &'static str {
+    pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Data => "data",
             Self::Evidence => "evidence",
         }
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct QueueKey {
     pub message: String,
     pub kind: QueueKind,
@@ -40,44 +41,21 @@ impl Store {
         clock: Clock,
         events: Vec<QueueEvent>,
     ) -> Result<SchedulingReport> {
-        self.validate_clock_advance(&clock)?;
-        if events.is_empty() || events.len() > MAX_QUEUE_EVENTS {
-            return Err(Error::new(Code::InvalidInput, "queue batch size"));
-        }
-        let mut merged: BTreeMap<QueueKey, Batch> = BTreeMap::new();
-        for event in events {
-            check_ref(&event.queue.message)?;
-            check_ref(&event.queue.neighbor)?;
-            if event.batch.now_ms != clock.monotonic_ms {
-                return Err(Error::new(Code::InvalidInput, "queue batch coordinate"));
-            }
-            if let Some(saved) = merged.get_mut(&event.queue) {
-                *saved = saved.merge(event.batch)?;
-            } else {
-                merged.insert(event.queue, event.batch);
-            }
-        }
-        let report = self.atomic(|s| {
-            s.write_clock(&clock)?;
-            let mut decisions = Vec::with_capacity(merged.len());
-            for (queue, batch) in &merged {
-                let decision = s.advance_queue_in_transaction(
-                    &queue.message,
-                    queue.kind.as_str(),
-                    &queue.neighbor,
-                    *batch,
-                    &clock,
-                )?;
-                decisions.push((queue.clone(), decision));
-            }
-            let maintenance = s.cleanup_due(&clock)?;
-            Ok(SchedulingReport {
-                decisions,
-                maintenance,
-            })
-        })?;
-        self.clock = clock;
-        Ok(report)
+        let report = self.process_outbound_batch(
+            clock,
+            events.into_iter().map(OutboundEvent::Queue).collect(),
+        )?;
+        Ok(SchedulingReport {
+            decisions: report
+                .decisions
+                .into_iter()
+                .filter_map(|d| match d {
+                    OutboundDecision::Queue(k, d) => Some((k, d)),
+                    _ => None,
+                })
+                .collect(),
+            maintenance: report.maintenance,
+        })
     }
 
     pub(super) fn advance_queue_in_transaction(
@@ -115,7 +93,18 @@ impl Store {
         if expired {
             retry.constrain_deadline(batch.now_ms)?;
         }
-        let (next, decision) = retry.advance(batch)?;
+        let (next, mut decision) = retry.advance(batch)?;
+        if kind == "evidence" && decision.send {
+            let body_bytes:i64=self.conn.query_row("SELECT length(body) FROM queues WHERE message_key=?1 AND kind='evidence' AND neighbor=?2",params![key,neighbor],|r|r.get(0))?;
+            // Existing prepared proof buffers may exceed the future 512-byte wire profile.
+            // Charge their full conservative frame size; this does not validate a wire object.
+            if !self.charge_control_output(batch.now_ms, (body_bytes + 10).max(522))? {
+                decision.send = false;
+                decision.reason = crate::retry::Reason::Quota;
+            } else {
+                self.record_receipt_cursor(key, neighbor)?;
+            }
+        }
         self.conn.execute(
             "UPDATE queues SET retry=?4 WHERE message_key=?1 AND kind=?2 AND neighbor=?3",
             params![

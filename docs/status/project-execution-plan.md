@@ -154,7 +154,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 
 ## 近期工作包与决策顺序
 
-2026-10-24 已提交 Node/framing/G0 实现 `a27d455`，沿革见[日终记录](2026-10-24-progress.md)。2026-10-28 已完成 [D16 自有持久边界](../testing/node-control-persistence.md)的 schema v4、固定预留、对象/邻居尝试预算与离线故障验证，实现及文档已提交为 `9c75025`；随后完成 [D15 数据字段/时间映射及 schema v5 显式迁移](../testing/node-data-persistence.md)，109 库测试与 2 CLI 测试通过，D15 已提交为 `f7969d2`；接续完成 [schema v6 业务政策关联](../testing/node-business-policy.md)，126 库测试与 2 CLI 测试通过，本接续批次按所有者本次要求随本次本地提交保存，下一步为共享外发额度/公平调度。新图实际执行和安全接入继续依赖各自真实前置。
+2026-10-24 已提交 Node/framing/G0 实现 `a27d455`，沿革见[日终记录](2026-10-24-progress.md)。2026-10-28 已完成 [D16 自有持久边界](../testing/node-control-persistence.md)的 schema v4、固定预留、对象/邻居尝试预算与离线故障验证，实现及文档已提交为 `9c75025`；随后完成 [D15 数据字段/时间映射及 schema v5 显式迁移](../testing/node-data-persistence.md)，109 库测试与 2 CLI 测试通过，D15 已提交为 `f7969d2`；接续完成 [schema v6 业务政策关联](../testing/node-business-policy.md)，126 库测试与 2 CLI 测试通过，业务政策批次已提交为 `62e0823`；随后完成 [schema v7 共享外发额度/责任轮转](../testing/node-outbound-scheduling.md)，串行 140 库测试 + 2 CLI 测试通过，按所有者本次要求随本次本地提交保存，下一步为入站限速/16 对象验签等待队列的自有边界。新图实际执行和安全接入继续依赖各自真实前置。
 
 下表于 2026-10-09 按接续决定更新；2026-10-18 同步 I5 RPC/生命周期、初始化/容量声明、初始化/暂存内部接线、执行合同/原生证据候选及宿主写入裁决/原生生命周期的离线进展，2026-10-24 同步使用量、BOM 与内部 ARM64 评审输入。表中角色是决策职责，不表示已指派外部人员；所有者在启动相应工作包时确认执行者、投入上限和复核日期。日期未定时明确保持待定；到期缺输入应选择补证、调整范围或暂停，不无限延长取证。
 
@@ -162,7 +162,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 | --- | --- | --- | --- |
 | 最高 | [首个用户场景](../product-definition.md)、[地区预检](../regulatory/radio-compliance.md) | 3–5 人、6–8 小时活动、背包携带、上海与整套最高 3000 元已确认；10 月 24 日按所有者委托补操作频率、断连容忍及携带规划值，仍需场景反馈和具体无线 SKU/配置书面路径 | 规划值是预算起点，专业方核对法规；场地可选不等于 RF 通过 |
 | 已确认范围 | [阶段顺序修订记录](../roadmap.md#阶段顺序修订记录2026-09-26) | 首台 E0 文字/语音样机不等待 P2；产品、依赖图、硬件与媒体验收同步 | 所有者已选择；安全、升级恢复、HW/RF 门不变，阶段未通过 |
-| 当前先行 | [Node 服务架构与关键选型](../architecture/node-service-design.md) | ADR 0004—0007 已接受并提交；2026-10-28 D15/D16 持久边界及业务政策关联推进到 schema v6，Node 128 项测试通过，保留 D16 首次并行锁失败及复验记录；既有 G0 的 19 项结果不重跑，真实接线和 G1/G2 仍停止 | 按 D15/D16 推进不受阻的离线实现；新图硬资源/网络监督环境及可信平台输入仍缺，实际 storage trait/签验接入须许可证/R2/Phase B 前置，离线基础不替代运行/HW 证据 |
+| 当前先行 | [Node 服务架构与关键选型](../architecture/node-service-design.md) | ADR 0004—0007 已接受并提交；2026-10-28 D15/D16 持久边界、业务政策及共享外发推进到 schema v7，Node 串行 142 项测试通过，保留本次再次出现的并行锁 Busy 及精确/串行复验记录；既有 G0 的 19 项结果不重跑，真实接线和 G1/G2 仍停止 | 按 D15/D16 推进不受阻的离线实现；新图硬资源/网络监督环境及可信平台输入仍缺，实际 storage trait/签验接入须许可证/R2/Phase B 前置，离线基础不替代运行/HW 证据 |
 | 高 | [E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)及现有 R1d 处置 | 优先固定 mls-rs 0.56.0；10 月 24 日已整理内部 Linux ARM64 输入与拟议产物/命令，下一步冻结实际复制范围和复核责任，分别处理 debug_tree 与 r-efi，满足新证据轨/R2 条件 | 分渠道方向已接受，专业意见与新合同仍待完成；不放宽现行 gate，不进入 Phase B |
 | 高 | [手机身份](../mobile/companion-app.md)、[路由边界](../architecture/network-and-routing.md)与安全状态 | Node 身份/会话/历史及手机界面职责已选择；继续证明首次信任、撤销、hop 映射、事务和 relay-clear proof | 系统/安全评审；方向接受不等于密码实现或 SW-G2 通过 |
 | 高 | [文字闭环设计](../architecture/minimal-text-slice.md)、[SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与 [I5 三进程闭环包](../testing/sw-g4-synthetic-i5-plan.md) | I1–I5-I 已提交并通过各自离线验证；[资源隔离设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)保留整批 768 MiB，证据计费、容量探测及受限双构建 helper 离线通过；10 月 18 日 [RPC/生命周期内部接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#受监督-rpc-与单次生命周期离线接线2026-10-18)通过离线验收、提交为 `17a142e`，未 push；第一包新增[初始化合同与容量账本离线评审](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化合同与容量账本离线评审2026-10-18)，已提交为 `e6d50ff`，未 push；第二包已完成[合成初始化、受控暂存与收尾接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化受控暂存与收尾内部接线2026-10-18)，已提交为 `4281fb0`，未 push；第四包已完成[原生初始化与 bootstrap 离线实施](../testing/sw-g4-synthetic-i5-native-initialization.md)；第五包新增[宿主写入裁决与原生生命周期离线接入](../testing/sw-g4-synthetic-i5-host-delivery.md)，当前 Mac/UTM 全域写入仍阻塞；仍须补齐真实 FD loader、输入、Linux 父监督验收、运行合同的真实绑定和完整硬额度，再完成运行接入、daemon 隔离及环境验收后评审入口重开 | 当前 preflight/run 停止；测试文件存储不替代生产数据库/安全联合提交，不宣称正式 V1/V2/V3 通过 |
@@ -224,4 +224,4 @@ D11—D14 已提交为 `5d2ebfc`。按本次接续请求完成[数据 envelope �
 
 所有者本次明确要求实施 D16 控制持久化、容量预留及尝试预算，并验证、同步文档；范围按 ADR 0007 与现有安全停止线执行。已完成[控制持久化批次](../testing/node-control-persistence.md)：显式 v3→v4（及 v1/v2→v4）迁移、固定 1 MiB/576 记录、活动/绑定与控制对象槽、Retiring、四邻居持久尝试及控制 ACK 预算，Node 95 库测试 + 2 CLI 测试通过。所有者随后明确要求提交工作区更改；本批实现与文档随本次本地提交保存，未改依赖/lock、根协作规则、正式实验或远程状态。
 
-同日已按继续推进要求完成 [schema v5 的 D15 数据字段与时间映射](../testing/node-data-persistence.md)，D15 已提交为 `f7969d2`；随后完成 [业务/证明责任政策关联](../testing/node-business-policy.md)。新活动重配、真实传输撤销联动、完整控制速率/公平接线、真实签验与物理运行证据仍分别待完成；本批不代表完整 D16 协议或安全能力已经运行通过。首次全量测试发生一次瞬态文件锁 Busy，后续单测及完整复验通过，根因未确认，继续保留稳定性风险。
+同日已按继续推进要求完成 [schema v5 的 D15 数据字段与时间映射](../testing/node-data-persistence.md)，D15 已提交为 `f7969d2`；随后完成 [业务/证明责任政策关联](../testing/node-business-policy.md)。随后又完成 [schema v7 共享外发额度/责任轮转](../testing/node-outbound-scheduling.md)的有界内部接线；入站限速、新活动重配、真实传输撤销联动/公平、真实签验与物理运行证据仍分别待完成；本批不代表完整 D16 协议或安全能力已经运行通过。首次全量测试发生一次瞬态文件锁 Busy，后续单测及完整复验通过，根因未确认，继续保留稳定性风险。

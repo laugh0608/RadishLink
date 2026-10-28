@@ -727,7 +727,11 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
 }
 
 /// Reconstruct an actual v3 schema for legacy migration tests, without v4 tables.
+pub(crate) fn strip_v7(s: &Store) {
+    s.conn.execute_batch("ALTER TABLE messages DROP COLUMN data_ack_budget; ALTER TABLE control_output_rate DROP COLUMN exit_cursor; ALTER TABLE control_output_rate DROP COLUMN ordinary_cursor; PRAGMA user_version=6;").unwrap();
+}
 pub(crate) fn strip_v6(s: &Store) {
+    strip_v7(s);
     s.conn.execute_batch("ALTER TABLE messages DROP COLUMN policy_revision; ALTER TABLE messages DROP COLUMN local_credential; ALTER TABLE messages DROP COLUMN policy_stopped; ALTER TABLE control_activity DROP COLUMN policy_revision; PRAGMA user_version=5;").unwrap();
 }
 pub(crate) fn strip_v5(s: &Store) {

@@ -81,6 +81,6 @@ git diff --check
 
 ## 接续与停止线
 
-本批之后于同日完成 [schema v5 / D15 字段与时间迁移](node-data-persistence.md)，原始 core、复合身份、uint64 epoch 和 UTC 区间/同 boot deadline 已有有限离线验证；随后完成[业务政策关联](node-business-policy.md)的内部检查与持久停止。新活动重新配对、真实签验/联合事务、完整控制入口与公平调度须在各自前置范围内接续，不通过增加合成 helper 冒充安全闭环。
+本批之后于同日完成 [schema v5 / D15 字段与时间迁移](node-data-persistence.md)，原始 core、复合身份、uint64 epoch 和 UTC 区间/同 boot deadline 已有有限离线验证；随后完成[业务政策关联](node-business-policy.md)的内部检查与持久停止。同日又完成[共享外发额度/责任轮转](node-outbound-scheduling.md)的 schema v7 内部接线。新活动重新配对、真实签验/联合事务、完整控制入口与真实传输公平仍须在各自前置范围内接续，不通过增加合成 helper 冒充安全闭环。
 
 本批没有修改 manifest/lock、固定密码图、历史实验合同、I5 入口、公共 Service 发送能力或根协作规则；没有运行 G1/G2、Phase B、正式矩阵、设备/VM/网络、采购或射频操作。许可证/R2、可信平台、I5 资源、HW/RF 停止线保持。
