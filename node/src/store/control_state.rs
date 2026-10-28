@@ -63,7 +63,7 @@ impl Store {
     }
     /// Deadline can only decrease; stopping retains all markers and business history.
     pub fn shorten_control_activity(&mut self, activity: ActivityId, deadline: i64) -> Result<()> {
-        self.atomic(|s| {
+        self.policy_atomic(|s| {
             s.control_live(&activity, s.clock.monotonic_ms)?;
             let (start, old): (i64, i64) = s.conn.query_row(
                 "SELECT started,deadline FROM control_activity WHERE id=1",
@@ -80,11 +80,11 @@ impl Store {
                 "UPDATE control_activity SET deadline=?1 WHERE id=1",
                 [deadline],
             )?;
-            Ok(())
+            s.business_policy_changed()
         })
     }
     pub fn stop_control_activity(&mut self, activity: ActivityId) -> Result<()> {
-        self.atomic(|s| {
+        self.policy_atomic(|s| {
             let count = s.conn.execute(
                 "UPDATE control_activity SET stopped=1 WHERE id=1 AND activity=?1",
                 [activity.as_slice()],
@@ -92,7 +92,7 @@ impl Store {
             if count != 1 {
                 return Err(Error::new(Code::Conflict, "control activity missing"));
             }
-            Ok(())
+            s.business_policy_changed()
         })
     }
     /// Trusted local pairing preparation only; never allocate a record for network strangers.
@@ -132,7 +132,7 @@ impl Store {
         credential: CredentialRef,
         expected_body: &[u8],
     ) -> Result<()> {
-        self.atomic(|s| {
+        self.policy_atomic(|s| {
             s.control_live(&activity,s.clock.monotonic_ms)?;
             s.reject_local_retirement()?;
             let (p,g,b,state):(Vec<u8>,i64,Vec<u8>,String)=s.conn.query_row("SELECT participant,generation,body,state FROM control_bindings WHERE credential=?1",[credential.as_slice()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
@@ -143,7 +143,7 @@ impl Store {
             if g!=latest+1 { return Err(Error::new(Code::Conflict,"credential activation order")); }
             s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE participant=?1 AND state='active'",[p.as_slice()])?;
             s.conn.execute("UPDATE control_bindings SET state='active' WHERE credential=?1",[credential.as_slice()])?;
-            Ok(())
+            s.business_policy_changed()
         })
     }
     /// Owner policy does not require a free report/object slot or an output budget.
@@ -152,11 +152,11 @@ impl Store {
         activity: ActivityId,
         credential: CredentialRef,
     ) -> Result<()> {
-        self.atomic(|s| {
+        self.policy_atomic(|s| {
             s.control_live(&activity,s.clock.monotonic_ms)?;
             let changed=s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE credential=?1 AND state!='pending'",[credential.as_slice()])?;
             if changed!=1 { return Err(Error::new(Code::Conflict,"unknown verified credential")); }
-            Ok(())
+            s.business_policy_changed()
         })
     }
     pub fn control_binding_state(&self, credential: CredentialRef) -> Result<Option<BindingState>> {

@@ -13,7 +13,7 @@ impl Store {
     /// Commits one fixed unsigned local exit intent and Retiring before any future signer runs.
     pub fn begin_control_exit(&mut self, fields: ControlPayload) -> Result<()> {
         fields.validate()?;
-        self.atomic(|s| {
+        self.policy_atomic(|s| {
             let local=s.control_live(&fields.activity,s.clock.monotonic_ms)?;
             if fields.kind!=ControlKind::Exit || fields.issuer_id!=local {
                 return Err(Error::new(Code::InvalidInput,"local exit identity"));
@@ -27,7 +27,7 @@ impl Store {
             }
             s.conn.execute("UPDATE control_activity SET exit_credential=?1,exit_operation=?2,exit_ref=?3,exit_payload=?4,exit_reason=?5 WHERE id=1",params![fields.issuer.as_slice(),fields.operation.as_slice(),fields.reference.as_slice(),fields.payload,fields.reason])?;
             s.conn.execute("UPDATE control_bindings SET state='retiring' WHERE credential=?1",[fields.issuer.as_slice()])?;
-            Ok(())
+            s.business_policy_changed()
         })
     }
     /// Only a still-Retiring intent is eligible for a future signer; retained completed or
@@ -81,7 +81,7 @@ impl Store {
                 "control object or neighbor bounds",
             ));
         }
-        self.atomic(|s| {
+        self.policy_atomic(|s| {
             let f=&object.fields;
             let local=s.control_live(&f.activity,s.clock.monotonic_ms)?;
             let issuer=s.control_binding(&f.issuer,&f.issuer_id)?;
@@ -125,6 +125,7 @@ impl Store {
             for neighbor in neighbors { s.insert_control_neighbor(f.activity,f.reference,*neighbor)?; }
             if f.kind==ControlKind::Exit {
                 s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE credential=?1",[f.issuer.as_slice()])?;
+                s.business_policy_changed()?;
             }
             Ok(ControlAdmission::Inserted(f.reference))
         })

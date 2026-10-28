@@ -39,14 +39,15 @@ fn old_store_requires_explicit_atomic_migration_and_preserves_records() {
     assert_eq!(s.history(0, 100).unwrap().len(), 1);
     assert!(s.action("ui", 1, "a").unwrap().is_some());
     drop(s);
-    assert_eq!(version(&w), 5);
+    assert_eq!(version(&w), 6);
     assert!(Store::migrate_v1(&w.dir, Limits::default(), clock(2)).is_err());
     let mut s = w.reopen(2);
     assert_eq!(
         s.finish_delivery(
             "relay",
             &super::tests::binding("relay"),
-            Some(("A", b"proof"))
+            Some((super::tests::PEER_2, b"proof")),
+            5
         )
         .unwrap_err()
         .code,
@@ -116,6 +117,7 @@ fn relay_reserves_control_until_delivery_or_expiry() {
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits.clone(), clock(0)).unwrap();
+    super::tests::prepare_business(&mut s);
     s.receive(relay("one")).unwrap();
     assert_eq!(s.usage().unwrap().reserved_control_bytes, 4096);
     assert_eq!(
@@ -127,14 +129,24 @@ fn relay_reserves_control_until_delivery_or_expiry() {
     let mut s = Store::open(&w.dir, limits, clock(1)).unwrap();
     s.fault = Some(TestFault::BeforeCommit);
     assert!(
-        s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
-            .is_err()
+        s.finish_delivery(
+            "one",
+            &super::tests::binding("one"),
+            Some((super::tests::PEER_2, b"proof")),
+            5
+        )
+        .is_err()
     );
     assert_eq!(s.usage().unwrap().reserved_control_count, 1);
     assert!(s.message("one").unwrap().unwrap().payload_present);
     s.fault = None;
-    s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
-        .unwrap();
+    s.finish_delivery(
+        "one",
+        &super::tests::binding("one"),
+        Some((super::tests::PEER_2, b"proof")),
+        5,
+    )
+    .unwrap();
     assert_eq!(s.usage().unwrap().reserved_control_count, 0);
     assert_eq!(s.usage().unwrap().evidence_count, 1);
 }
@@ -231,7 +243,7 @@ fn migration_crash_child() {
 
 #[test]
 fn migration_process_exit_preserves_old_or_new_schema_without_partial_reservation() {
-    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 5)] {
+    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 6)] {
         let w = Workspace::new();
         let mut s = w.create();
         s.receive(relay("one")).unwrap();
@@ -264,7 +276,7 @@ fn queue_event(key: &str, now: i64, signal: crate::retry::Signal) -> QueueEvent 
         queue: QueueKey {
             message: key.into(),
             kind: QueueKind::Data,
-            neighbor: "B".into(),
+            neighbor: super::tests::PEER_2.into(),
         },
         batch: Batch {
             now_ms: now,
@@ -394,7 +406,7 @@ fn corrupt_retry_is_rejected_before_migration_changes_any_schema() {
     let w = Workspace::new();
     let mut s = w.create();
     s.receive(relay("one")).unwrap();
-    s.schedule_forward("one", "C").unwrap();
+    s.schedule_forward("one", super::tests::PEER_3).unwrap();
     make_v1(&s);
     s.conn.execute("UPDATE queues SET retry='{}'", []).unwrap();
     drop(s);
@@ -418,16 +430,24 @@ fn full_record_budget_still_allows_reserved_return_proof_conversion() {
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits, clock(0)).unwrap();
+    super::tests::prepare_business(&mut s);
     s.receive(relay("one")).unwrap();
-    s.schedule_forward("one", "C").unwrap();
-    assert_eq!(s.usage().unwrap().records, 3);
+    s.schedule_forward("one", super::tests::PEER_3).unwrap();
+    assert_eq!(
+        s.usage().unwrap().records,
+        3 + s.control_usage().unwrap().used_records
+    );
     s.finish_delivery(
         "one",
         &super::tests::binding("one"),
-        Some(("A", &[1; 4096])),
+        Some((super::tests::PEER_2, &[1; 4096])),
+        5,
     )
     .unwrap();
-    assert_eq!(s.usage().unwrap().records, 2);
+    assert_eq!(
+        s.usage().unwrap().records,
+        2 + s.control_usage().unwrap().used_records
+    );
     assert_eq!(s.usage().unwrap().evidence_bytes, 4096);
     assert!(!s.message("one").unwrap().unwrap().payload_present);
 }

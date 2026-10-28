@@ -102,6 +102,7 @@ impl SecurityUpdate {
     }
 }
 pub struct Send {
+    pub expected_policy_revision: i64,
     pub action: Action,
     pub message: Message,
     pub security: SecurityUpdate,
@@ -110,6 +111,7 @@ pub struct Send {
     pub remaining_hops: u8,
 }
 pub struct Receive {
+    pub expected_policy_revision: i64,
     pub remaining_lifetime_ms: i64,
     pub message: Message,
     pub role: Role,
@@ -124,6 +126,7 @@ pub struct Receive {
 /// Committed input for a future signer, not a signature or permission to send.
 /// Deliberately does not implement Debug: the application-defined body is private.
 pub struct ReceiptIntent {
+    pub policy_revision: i64,
     pub key: String,
     pub core_binding: Vec<u8>,
     pub body: Vec<u8>,
@@ -134,6 +137,7 @@ pub struct ReceiptIntent {
 /// Does not contain plaintext or secret state, including in Debug output.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MessageView {
+    pub policy_stopped: bool,
     pub key: String,
     pub source_neighbor: Option<String>,
     pub state: String,

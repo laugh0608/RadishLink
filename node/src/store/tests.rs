@@ -26,6 +26,11 @@ impl Workspace {
         Self { root, dir }
     }
     pub(crate) fn create(&self) -> Store {
+        let mut store = self.create_bare();
+        prepare_business(&mut store);
+        store
+    }
+    pub(crate) fn create_bare(&self) -> Store {
         Store::create(&self.dir, Limits::default(), clock(0)).unwrap()
     }
     pub(crate) fn reopen(&self, now: i64) -> Store {
@@ -35,6 +40,39 @@ impl Workspace {
 impl Drop for Workspace {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.root).expect("remove exact test-owned directory");
+    }
+}
+pub(crate) const PEER_2: &str = "0202020202020202020202020202020202020202020202020202020202020201";
+pub(crate) const PEER_3: &str = "0303030303030303030303030303030303030303030303030303030303030301";
+pub(crate) const ACTIVITY: ActivityId = [1; 32];
+pub(crate) fn test_credential(n: u8) -> CredentialRef {
+    let mut value = [n; 32];
+    value[31] = 1;
+    value
+}
+pub(crate) fn prepare_business(store: &mut Store) {
+    prepare_business_as(store, 1);
+}
+pub(crate) fn prepare_business_as(store: &mut Store, local: u8) {
+    store
+        .start_control_activity(ACTIVITY, [local; 16], MAX_ACTIVITY_MS)
+        .unwrap();
+    for n in 1..=5 {
+        let credential = test_credential(n);
+        store
+            .stage_control_binding(
+                ACTIVITY,
+                ControlBinding {
+                    participant: [n; 16],
+                    credential,
+                    generation: 1,
+                    body: vec![n, 1],
+                },
+            )
+            .unwrap();
+        store
+            .activate_control_binding(ACTIVITY, credential, &[n, 1])
+            .unwrap();
     }
 }
 pub(crate) fn clock(now: i64) -> Clock {
@@ -62,7 +100,7 @@ pub(crate) fn message(key: &str) -> Message {
             identity: crate::data::MessageIdentity {
                 activity_id: [1; 32],
                 origin_id: [2; 16],
-                origin_credential_ref: [3; 32],
+                origin_credential_ref: test_credential(2),
                 message_id: {
                     let mut id = [0; 16];
                     assert!(key.len() <= 16);
@@ -70,8 +108,8 @@ pub(crate) fn message(key: &str) -> Message {
                     id
                 },
             },
-            destination_id: [4; 16],
-            destination_credential_ref: [5; 32],
+            destination_id: [3; 16],
+            destination_credential_ref: test_credential(3),
             mls_group_id: [6; 32],
             mls_epoch: 0,
             originated_at_ms: 100000,
@@ -92,25 +130,32 @@ fn security(revision: i64) -> SecurityUpdate {
 }
 pub(crate) fn send(key: &str, reference: &str, revision: i64) -> Send {
     Send {
+        expected_policy_revision: 5,
         action: Action {
             scope: "ui".into(),
             generation: 1,
             reference: reference.into(),
             binding: format!("request-{key}").into_bytes(),
         },
-        message: message(key),
+        message: {
+            let mut m = message(key);
+            m.data.identity.origin_id = [1; 16];
+            m.data.identity.origin_credential_ref = test_credential(1);
+            m
+        },
         security: security(revision),
         text: b"synthetic text".to_vec(),
-        neighbor: "B".into(),
+        neighbor: super::tests::PEER_2.into(),
         remaining_hops: 1,
     }
 }
 pub(crate) fn relay(key: &str) -> Receive {
     Receive {
+        expected_policy_revision: 5,
         remaining_lifetime_ms: 10000,
         message: message(key),
         role: Role::Relay,
-        neighbor: "A".into(),
+        neighbor: super::tests::PEER_2.into(),
         remaining_hops: 1,
         security: None,
         text: None,
@@ -119,10 +164,16 @@ pub(crate) fn relay(key: &str) -> Receive {
 }
 pub(crate) fn destination(key: &str, revision: i64) -> Receive {
     Receive {
+        expected_policy_revision: 5,
         remaining_lifetime_ms: 10000,
-        message: message(key),
+        message: {
+            let mut m = message(key);
+            m.data.destination_id = [1; 16];
+            m.data.destination_credential_ref = test_credential(1);
+            m
+        },
         role: Role::Destination,
-        neighbor: "B".into(),
+        neighbor: super::tests::PEER_2.into(),
         remaining_hops: 0,
         security: Some(security(revision)),
         text: Some(b"synthetic text".to_vec()),
@@ -229,8 +280,8 @@ fn relay_delivery_keeps_return_work_after_payload_cleanup() {
     let w = Workspace::new();
     let mut s = w.create();
     s.receive(relay("one")).unwrap();
-    s.schedule_forward("one", "C").unwrap();
-    assert!(s.schedule_forward("one", "C").is_err());
+    s.schedule_forward("one", super::tests::PEER_3).unwrap();
+    assert!(s.schedule_forward("one", super::tests::PEER_3).is_err());
     let hops: i64 = s
         .conn
         .query_row("SELECT hops FROM queues WHERE kind='data'", [], |r| {
@@ -239,15 +290,21 @@ fn relay_delivery_keeps_return_work_after_payload_cleanup() {
         .unwrap();
     assert_eq!(hops, 0);
     assert_eq!(
-        s.finish_delivery("one", b"wrong", Some(("A", b"evidence")))
-            .unwrap_err()
-            .code,
+        s.finish_delivery(
+            "one",
+            b"wrong",
+            Some((super::tests::PEER_2, b"evidence")),
+            5
+        )
+        .unwrap_err()
+        .code,
         Code::Conflict
     );
     s.finish_delivery(
         "one",
         &super::tests::binding("one"),
-        Some(("A", b"evidence")),
+        Some((super::tests::PEER_2, b"evidence")),
+        5,
     )
     .unwrap();
     let v = s.message("one").unwrap().unwrap();
@@ -267,6 +324,7 @@ fn control_quota_prevents_destination_commit_and_relay_cleanup() {
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits, clock(0)).unwrap();
+    super::tests::prepare_business(&mut s);
     s.receive(destination("one", 0)).unwrap();
     assert_eq!(
         s.receive(destination("two", 1)).unwrap_err().code,
@@ -286,6 +344,7 @@ fn full_history_and_payload_fail_without_partial_security_update() {
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits, clock(0)).unwrap();
+    super::tests::prepare_business(&mut s);
     s.create_action_scope("ui").unwrap();
     s.submit(send("one", "a", 0)).unwrap();
     assert_eq!(s.submit(send("two", "b", 1)).unwrap_err().code, Code::Quota);
@@ -373,16 +432,24 @@ fn retry_consumption_survives_reopen_without_refund() {
     let mut s = w.create();
     s.create_action_scope("ui").unwrap();
     s.submit(send("one", "a", 0)).unwrap();
-    assert!(s.advance_queue("one", "data", "B", event(0)).unwrap().send);
+    assert!(
+        s.advance_queue("one", "data", super::tests::PEER_2, event(0))
+            .unwrap()
+            .send
+    );
     drop(s);
     let mut s = w.reopen(1);
-    assert!(!s.advance_queue("one", "data", "B", event(1)).unwrap().send);
+    assert!(
+        !s.advance_queue("one", "data", super::tests::PEER_2, event(1))
+            .unwrap()
+            .send
+    );
     s.advance_clock(clock(250)).unwrap();
-    s.observe_custody("one", "B").unwrap();
+    s.observe_custody("one", super::tests::PEER_2).unwrap();
     assert!(s.message("one").unwrap().unwrap().payload_present);
     s.advance_clock(clock(251)).unwrap();
     assert_eq!(
-        s.advance_queue("one", "data", "B", event(251))
+        s.advance_queue("one", "data", super::tests::PEER_2, event(251))
             .unwrap()
             .reason,
         Reason::Paused
@@ -495,11 +562,16 @@ fn receive_and_cleanup_faults_preserve_whole_transaction() {
         let w = Workspace::new();
         let mut s = w.create();
         s.receive(relay("one")).unwrap();
-        s.schedule_forward("one", "C").unwrap();
+        s.schedule_forward("one", super::tests::PEER_3).unwrap();
         s.fault = Some(fault);
         assert!(
-            s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
-                .is_err()
+            s.finish_delivery(
+                "one",
+                &super::tests::binding("one"),
+                Some((super::tests::PEER_2, b"proof")),
+                5
+            )
+            .is_err()
         );
         drop(s);
         let s = w.reopen(1);
@@ -515,22 +587,36 @@ fn three_independent_stores_preserve_endpoint_and_relay_responsibilities() {
     let wb = Workspace::new();
     let wc = Workspace::new();
     let mut a = wa.create();
-    let mut b = wb.create();
-    let mut c = wc.create();
+    let mut b = wb.create_bare();
+    prepare_business_as(&mut b, 2);
+    let mut c = wc.create_bare();
+    prepare_business_as(&mut c, 3);
     a.create_action_scope("ui").unwrap();
     a.submit(send("one", "a", 0)).unwrap();
-    b.receive(relay("one")).unwrap();
-    b.schedule_forward("one", "C").unwrap();
-    a.observe_custody("one", "B").unwrap();
+    let mut input = relay("one");
+    input.message.data = send("one", "a", 0).message.data;
+    input.neighbor = credential_key(&test_credential(1));
+    b.receive(input).unwrap();
+    b.schedule_forward("one", super::tests::PEER_3).unwrap();
+    a.observe_custody("one", super::tests::PEER_2).unwrap();
     assert!(a.message("one").unwrap().unwrap().payload_present);
-    c.receive(destination("one", 0)).unwrap();
-    c.receive(destination("one", 0)).unwrap();
-    c.finalize_receipt("one", b"synthetic intent", b"proof")
+    let mut input = destination("one", 0);
+    input.message.data = send("one", "a", 0).message.data;
+    c.receive(input).unwrap();
+    let mut input = destination("one", 0);
+    input.message.data = send("one", "a", 0).message.data;
+    c.receive(input).unwrap();
+    c.finalize_receipt("one", b"synthetic intent", b"proof", 5)
         .unwrap();
-    b.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
-        .unwrap();
+    b.finish_delivery(
+        "one",
+        &super::tests::binding("one"),
+        Some((&credential_key(&test_credential(1)), b"proof")),
+        5,
+    )
+    .unwrap();
     assert!(b.message("one").unwrap().unwrap().evidence_pending);
-    a.finish_delivery("one", &super::tests::binding("one"), None)
+    a.finish_delivery("one", &super::tests::binding("one"), None, 5)
         .unwrap();
     assert_eq!(a.message("one").unwrap().unwrap().state, "delivered");
     assert_eq!(a.history(0, 100).unwrap().len(), 1);
@@ -603,7 +689,7 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
             .unwrap()
             .source_neighbor
             .as_deref(),
-        Some("A")
+        Some(super::tests::PEER_2)
     );
     let mut changed = relay("one");
     changed.message.data.identity.origin_credential_ref = [9; 32];
@@ -612,15 +698,21 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
         s.finish_delivery(
             "one",
             &super::tests::binding("one"),
-            Some(("wrong", b"proof"))
+            Some((super::tests::PEER_3, b"proof")),
+            5
         )
         .unwrap_err()
         .code,
         Code::Conflict
     );
     assert!(s.message("one").unwrap().unwrap().payload_present);
-    s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
-        .unwrap();
+    s.finish_delivery(
+        "one",
+        &super::tests::binding("one"),
+        Some((super::tests::PEER_2, b"proof")),
+        5,
+    )
+    .unwrap();
     drop(s);
     let s = w.reopen(2);
     let neighbor: String = s
@@ -631,11 +723,15 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(neighbor, "A");
+    assert_eq!(neighbor, super::tests::PEER_2);
 }
 
 /// Reconstruct an actual v3 schema for legacy migration tests, without v4 tables.
+pub(crate) fn strip_v6(s: &Store) {
+    s.conn.execute_batch("ALTER TABLE messages DROP COLUMN policy_revision; ALTER TABLE messages DROP COLUMN local_credential; ALTER TABLE messages DROP COLUMN policy_stopped; ALTER TABLE control_activity DROP COLUMN policy_revision; PRAGMA user_version=5;").unwrap();
+}
 pub(crate) fn strip_v5(s: &Store) {
+    strip_v6(s);
     s.conn.execute_batch("DROP TABLE message_data; ALTER TABLE messages DROP COLUMN data_version; ALTER TABLE meta DROP COLUMN unix_upper_ms; PRAGMA user_version=4;").unwrap();
 }
 pub(crate) fn strip_v4(s: &Store) {

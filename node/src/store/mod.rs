@@ -13,6 +13,10 @@ use std::{
     path::Path,
 };
 
+mod business_policy;
+pub use business_policy::credential_key;
+#[cfg(test)]
+mod business_policy_tests;
 mod control_objects;
 mod control_scheduling;
 mod control_state;
@@ -65,6 +69,7 @@ enum OpenMode {
     MigrateV2,
     MigrateV3,
     MigrateV4,
+    MigrateV5,
     #[cfg(test)]
     MigrateV1Fault(TestFault),
     #[cfg(test)]
@@ -73,6 +78,8 @@ enum OpenMode {
     MigrateV3Fault(TestFault),
     #[cfg(test)]
     MigrateV4Fault(TestFault),
+    #[cfg(test)]
+    MigrateV5Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -158,6 +165,7 @@ impl Store {
         conn.execute_batch(include_str!("migration_v3.sql"))?;
         conn.execute_batch(include_str!("migration_v4.sql"))?;
         conn.execute_batch(include_str!("migration_v5.sql"))?;
+        conn.execute_batch(include_str!("migration_v6.sql"))?;
         let encoded = limits_json(&limits)?;
         conn.execute(
             "INSERT INTO meta(id,revision,boot,monotonic_ms,unix_ms,limits,unix_upper_ms) VALUES(1,0,?1,?2,?3,?4,?5)",
@@ -203,6 +211,10 @@ impl Store {
     pub fn migrate_v4(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV4)
     }
+    /// Explicit v5 -> v6; existing messages acquire no inferred channel authority.
+    pub fn migrate_v5(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV5)
+    }
     fn open_version(
         directory: &Path,
         limits: Limits,
@@ -215,6 +227,7 @@ impl Store {
             OpenMode::MigrateV2 => Some(2),
             OpenMode::MigrateV3 => Some(3),
             OpenMode::MigrateV4 => Some(4),
+            OpenMode::MigrateV5 => Some(5),
             #[cfg(test)]
             OpenMode::MigrateV1Fault(_) => Some(1),
             #[cfg(test)]
@@ -223,6 +236,8 @@ impl Store {
             OpenMode::MigrateV3Fault(_) => Some(3),
             #[cfg(test)]
             OpenMode::MigrateV4Fault(_) => Some(4),
+            #[cfg(test)]
+            OpenMode::MigrateV5Fault(_) => Some(5),
         };
         limits.validate()?;
         clock.validate()?;
@@ -245,10 +260,10 @@ impl Store {
         let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if ![1, 2, 3, 4, 5].contains(&version) || app != APP_ID {
+        if ![1, 2, 3, 4, 5, 6].contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version < 5 && source_version.is_none() {
+        if version < 6 && source_version.is_none() {
             return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
         if source_version.is_some_and(|source| version != source) {
@@ -315,6 +330,7 @@ impl Store {
                 OpenMode::MigrateV2Fault(fault) => Some(fault),
                 OpenMode::MigrateV3Fault(fault) => Some(fault),
                 OpenMode::MigrateV4Fault(fault) => Some(fault),
+                OpenMode::MigrateV5Fault(fault) => Some(fault),
                 _ => None,
             },
         };
@@ -332,7 +348,10 @@ impl Store {
                 if version < 4 {
                     store.conn.execute_batch(include_str!("migration_v4.sql"))?;
                 }
-                store.conn.execute_batch(include_str!("migration_v5.sql"))?;
+                if version < 5 {
+                    store.conn.execute_batch(include_str!("migration_v5.sql"))?;
+                }
+                store.conn.execute_batch(include_str!("migration_v6.sql"))?;
                 store.write_clock(&store.clock)?;
                 store.check_queue_deadlines(false)?;
                 Ok(())
@@ -342,6 +361,7 @@ impl Store {
         s.check_reservations()?;
         s.check_control_invariants()?;
         s.check_data_invariants()?;
+        s.check_business_invariants()?;
         s.reset_control_rate_on_open()?;
 
         Ok(s)
@@ -380,6 +400,13 @@ impl Store {
         self.writable()?;
         self.conn.execute_batch("BEGIN IMMEDIATE;")?;
         let result = apply(self).and_then(|v| {
+            let now: i64 = self.conn.query_row(
+                "SELECT max(monotonic_ms,?1) FROM meta WHERE id=1",
+                [self.clock.monotonic_ms],
+                |r| r.get(0),
+            )?;
+            self.reconcile_business_policy(now)?;
+            self.check_business_invariants()?;
             self.check_quotas()?;
             self.check_reservations()?;
             self.check_control_invariants()?;
@@ -498,7 +525,7 @@ impl Store {
     pub fn message(&self, key: &str) -> Result<Option<MessageView>> {
         self.readable()?;
         check_ref(key)?;
-        Ok(self.conn.query_row("SELECT key,state,payload IS NOT NULL,custody,EXISTS(SELECT 1 FROM queues WHERE message_key=messages.key AND kind='evidence'),source_neighbor,EXISTS(SELECT 1 FROM receipt_intents WHERE message_key=messages.key) FROM messages WHERE key=?1",[key],|r|Ok(MessageView{key:r.get(0)?,state:r.get(1)?,payload_present:r.get(2)?,custody_observed:r.get(3)?,evidence_pending:r.get(4)?,source_neighbor:r.get(5)?,receipt_intent_pending:r.get(6)?})).optional()?)
+        Ok(self.conn.query_row("SELECT key,state,payload IS NOT NULL,custody,EXISTS(SELECT 1 FROM queues WHERE message_key=messages.key AND kind='evidence'),source_neighbor,EXISTS(SELECT 1 FROM receipt_intents WHERE message_key=messages.key),policy_stopped FROM messages WHERE key=?1",[key],|r|Ok(MessageView{policy_stopped:r.get(7)?,key:r.get(0)?,state:r.get(1)?,payload_present:r.get(2)?,custody_observed:r.get(3)?,evidence_pending:r.get(4)?,source_neighbor:r.get(5)?,receipt_intent_pending:r.get(6)?})).optional()?)
     }
     pub fn action(
         &self,

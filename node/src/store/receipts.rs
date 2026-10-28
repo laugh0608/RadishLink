@@ -6,13 +6,18 @@ impl Store {
     pub fn receipt_intent(&self, key: &str) -> Result<Option<ReceiptIntent>> {
         self.writable()?;
         check_ref(key)?;
-        let intent = self.conn.query_row(
+        let mut intent = self.conn.query_row(
             "SELECT m.key,m.core,i.body,m.source_neighbor,m.deadline FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.key=?1",
             [key],
-            |r| Ok(ReceiptIntent { key: r.get(0)?, core_binding: r.get(1)?, body: r.get(2)?, neighbor: r.get(3)?, deadline_ms: r.get(4)? }),
+            |r| Ok(ReceiptIntent { policy_revision:0,key: r.get(0)?, core_binding: r.get(1)?, body: r.get(2)?, neighbor: r.get(3)?, deadline_ms: r.get(4)? }),
         ).optional()?;
-        if intent.is_some() {
+        if let Some(intent) = intent.as_mut() {
             self.data_remaining_at(key, &self.clock)?;
+            intent.policy_revision = self.authorize_business_message(
+                key,
+                Some(&intent.neighbor),
+                self.clock.monotonic_ms,
+            )?;
         }
         if intent
             .as_ref()
@@ -31,6 +36,7 @@ impl Store {
         key: &str,
         intent_body: &[u8],
         evidence: &[u8],
+        expected_policy_revision: i64,
     ) -> Result<()> {
         check_ref(key)?;
         if intent_body.is_empty()
@@ -42,6 +48,8 @@ impl Store {
         }
         self.atomic(|s| {
             s.data_remaining_at(key, &s.clock)?;
+            let revision=s.authorize_business_message(key,None,s.clock.monotonic_ms)?;
+            if revision!=expected_policy_revision {return Err(Error::new(Code::Conflict,"receipt authorization revision changed"));}
             let (role, deadline, neighbor): (String, i64, Option<String>) = s.conn.query_row(
                 "SELECT role,deadline,source_neighbor FROM messages WHERE key=?1", [key],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;

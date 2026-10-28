@@ -1,6 +1,6 @@
 # RadishLink Node
 
-Rust 服务与事务基础，依据 [ADR 0004](../docs/adr/0004-node-service-foundation.md) 和 [ADR 0005](../docs/adr/0005-node-security-integration.md)。当前可验证单写者应用入口、SQLite 联合事务、恢复与调度；尚不能部署为聊天服务。首批范围见[第一批记录](../docs/testing/node-service-foundation.md)，生命周期、维护与调度见[运行可靠性记录](../docs/testing/node-service-reliability.md)；证明意图见[证明生命周期记录](../docs/testing/node-receipt-lifecycle.md)，D16 控制持久边界见[控制持久化记录](../docs/testing/node-control-persistence.md)，当前 schema v5、D15 完整字段与 UTC 区间见[数据持久化记录](../docs/testing/node-data-persistence.md)。
+Rust 服务与事务基础，依据 [ADR 0004](../docs/adr/0004-node-service-foundation.md) 和 [ADR 0005](../docs/adr/0005-node-security-integration.md)。当前可验证单写者应用入口、SQLite 联合事务、恢复与调度；尚不能部署为聊天服务。首批范围见[第一批记录](../docs/testing/node-service-foundation.md)，生命周期、维护与调度见[运行可靠性记录](../docs/testing/node-service-reliability.md)；证明意图见[证明生命周期记录](../docs/testing/node-receipt-lifecycle.md)，D16 控制持久边界见[控制持久化记录](../docs/testing/node-control-persistence.md)，D15 完整字段与 UTC 区间见[数据持久化记录](../docs/testing/node-data-persistence.md)。
 
 ## 开发验证
 
@@ -24,7 +24,7 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 - `model`、`retry`：进程内记录及 I1 重试规则移植，不是产品 wire 或认证结果。
 - `framing`：ADR 0007 的 u32be 前缀、每邻居一个 ≤64 KiB frame、最多四邻居和固定 10 秒组装期限；仅内部缓冲边界，尚未接入 transport/Service，详见[离线验证记录](../docs/testing/node-framing-and-graph-inputs.md)。
 - `data`：D15 原始 core/解析字段、完整身份、u64 epoch 与可信 UTC 区间的有界运算；不解码 CBOR 或验证密码。
-- `store`：schema v5、显式 v1/v2/v3/v4 迁移、单拥有者、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与事件批调度。
+- `store`：schema v6、显式 v1/v2/v3/v4/v5 迁移、单拥有者、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与事件批调度。
 - `service`：容量 32 的命令队列、可克隆 Client、专属状态线程；支持平台时钟源周期维护，查询已提交事实；关闭接纳后排空已接纳命令并 Join，业务发送仍拒绝。
 - `error`：稳定错误分类与受控诊断原因；默认 Display/Debug 不回显底层输入。
 
@@ -32,7 +32,7 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 
 `Store::create` 只允许全新目录，`Store::open` 不创建或重置缺失/损坏的库。目录必须为 canonical 0700，状态/锁文件为单链接 0600；这些检查不证明卷已加密或能够抵抗同用户/root 的并发路径替换。平台接入仍须验证受控父目录、用户身份、解锁和锁定生命周期。
 
-schema 当前为 5，config/retry 仍为 1，未知版本拒绝。普通 open 遇到 v1/v2/v3/v4 返回 MigrationRequired，须按实际来源显式调用 `Store::migrate_v1`、`Store::migrate_v2`、`Store::migrate_v3` 或 `Store::migrate_v4` 到当前版本。迁移为旧中继补预留、缩短旧 proof queue 至原消息 deadline、终结已到期证明并保留目标端交付事实；不重置 retry 预算。容量不足整笔拒绝，已有 v5 不重复执行，不能通过改版本号降级或静默重建。旧消息缺 D15 字段，保留查询/到期维护但禁止继续输出，不从新帧补造缺失认证内容。版本化记录与动作 generation 不是可信硬件抗回滚机制。
+schema 当前为 6，config/retry 仍为 1，未知版本拒绝。普通 open 遇到 v1/v2/v3/v4/v5 返回 MigrationRequired，须按实际来源显式调用 `Store::migrate_v1`、`Store::migrate_v2`、`Store::migrate_v3`、`Store::migrate_v4` 或 `Store::migrate_v5` 到当前版本。迁移为旧中继补预留、缩短旧 proof queue 至原消息 deadline、终结已到期证明并保留目标端交付事实；不重置 retry 预算。容量不足整笔拒绝，已有 v6 不重复执行，不能通过改版本号降级或静默重建。旧消息缺 D15 字段或可信政策快照，保留查询/到期维护但禁止继续输出，不从新帧补造缺失认证内容。版本化记录与动作 generation 不是可信硬件抗回滚机制。
 
 历史默认 7 天，新历史按可信 UTC 上界起算、可信下界删除，由受信平台时钟推进；启动/Clock 命令和可选周期维护将时钟推进与有界清理一起提交，到期内容立即从查询过滤。`Service::start_with_clock` 的周期为 100 ms–60 s，平台必须提供可信且有界的 `ClockSource`；现有测试用合成源，Linux 时钟信任与休眠恢复后端尚未接入。不同 boot、单调时钟回退或可信 UTC 任一端回退、区间超宽或来源丢失进入 `TIME_UNCERTAIN`，保留可读状态并拒绝写入，不能通过新的时间值自动解除隔离。提交结果不确定时停止查询/写入，须重开并按动作键查询，不自动重发。
 
@@ -44,6 +44,8 @@ T-C 只保存 `Receive.receipt_intent`，不接收预生成的送达签名；提
 
 D16 在原 8 MiB / 4096 控制总额度内固定保留 1 MiB / 576 记录，全局记录额度也预留 576 槽；业务 proof 按完整 4096-byte 责任计费，默认字节维度上限为 1792 条。迁移空间不足保留旧库；不通过删除 custody 或增大配置放行。`Usage.security_control` 报告专用预留和实际使用，`records` 包括两类实际记录，`reserved_control_*` 仍为业务证明预留。这些不是物理磁盘硬边界。
 
-内部控制接口保存当前活动、五人四代绑定、退出/报告固定槽、Retiring 意图和邻居责任。`process_control_batch` 复用 Batch 合并和原子提交边界，消费八个 D16 时槽与两次有间隔恢复机会，已错过时槽跳过；每邻居最多十次尝试/控制 ACK。同 boot 重开从空桶开始且不返还持久次数；新 boot 拒绝输出。没有公开的新活动重配/清理接口，不删除旧活动 marker 恢复额度。真实签验、业务身份关联、入站限速与传输统一授权门仍待接入；详见控制持久化记录及其中保留的测试失败。
+内部控制接口保存当前活动、五人四代绑定、退出/报告固定槽、Retiring 意图和邻居责任。`process_control_batch` 复用 Batch 合并和原子提交边界，消费八个 D16 时槽与两次有间隔恢复机会，已错过时槽跳过；每邻居最多十次尝试/控制 ACK。同 boot 重开从空桶开始且不返还持久次数；新 boot 拒绝输出。没有公开的新活动重配/清理接口，不删除旧活动 marker 恢复额度。业务身份/活动/撤销已有内部关联；真实签验、入站限速与实际传输统一授权门仍待接入；详见控制持久化记录及其中保留的测试失败。
 
-D15 新消息保存原始 core 和完整身份；epoch 为固定 8-byte big-endian BLOB。重复接收同步收紧消息/队列期限，时间准入与内部输出均检查 UTC 上界和同 boot deadline。调用方仍须提供严格解码/认证后的匹配字段及新鲜可信采样；完整身份尚未接到 D16 撤销/活动授权门。
+D15 新消息保存原始 core 和完整身份；epoch 为固定 8-byte big-endian BLOB。重复接收同步收紧消息/队列期限，时间准入与内部输出均检查 UTC 上界和同 boot deadline。调用方仍须提供严格解码/认证后的匹配字段及新鲜可信采样；完整身份已接到 D16 内部撤销/活动检查。
+
+当前 schema v6 见[业务政策关联记录](../docs/testing/node-business-policy.md)。新业务必须具备活动与 Active 精确端点/本机/邻居绑定；neighbor 为 credential_ref 的 64 位小写十六进制，不是地址。Send/Receive 传入准备时的政策修订，ReceiptIntent 返回修订供 finalize_receipt/T-D 复核。撤销、Retiring、换代和停用持久停止相关责任；未发 proof/intent 有界清理，已交付历史保持。政策存储失败隔离当前拥有者，禁止继续使用旧权限；真实验证/输出接线仍未开放。

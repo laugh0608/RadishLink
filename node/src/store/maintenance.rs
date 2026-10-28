@@ -9,6 +9,8 @@ pub struct MaintenanceReport {
     pub expired_evidence: usize,
     pub expired_receipt_intents: usize,
     pub deleted_history: usize,
+    pub stopped_evidence: usize,
+    pub stopped_receipt_intents: usize,
     pub more_due: bool,
     pub history_time_available: bool,
 }
@@ -45,7 +47,7 @@ impl Store {
             ));
         }
         let invalid: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.role!='destination' OR m.state NOT IN ('committed','delivered') OR EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence')) OR EXISTS(SELECT 1 FROM messages m WHERE m.role='destination' AND m.deadline>(SELECT monotonic_ms FROM meta WHERE id=1) AND NOT EXISTS(SELECT 1 FROM receipt_intents i WHERE i.message_key=m.key) AND NOT EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence'))",
+            "SELECT EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.role!='destination' OR m.state NOT IN ('committed','delivered') OR EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence')) OR EXISTS(SELECT 1 FROM messages m WHERE m.role='destination' AND m.policy_stopped=0 AND m.deadline>(SELECT monotonic_ms FROM meta WHERE id=1) AND NOT EXISTS(SELECT 1 FROM receipt_intents i WHERE i.message_key=m.key) AND NOT EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence'))",
             [], |r| r.get(0))?;
         if invalid {
             return Err(Error::new(
@@ -121,7 +123,8 @@ impl Store {
                 clock.utc_upper_ms()
             ],
         )?;
-        self.constrain_data_clock(clock)
+        self.constrain_data_clock(clock)?;
+        self.reconcile_business_policy(clock.monotonic_ms)
     }
 
     /// Caller supplies an already trusted boot/time coordinate, never a UI or peer timestamp.
@@ -165,13 +168,18 @@ impl Store {
             Some(wall) => self.conn.execute("DELETE FROM history WHERE sequence IN (SELECT sequence FROM history WHERE expires<=?1 ORDER BY expires,sequence LIMIT ?2)", params![wall, MAINTENANCE_BATCH])?,
             None => 0,
         };
+        let stopped_evidence=self.conn.execute("DELETE FROM queues WHERE rowid IN (SELECT q.rowid FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.policy_stopped=1 AND m.policy_revision IS NOT NULL ORDER BY m.key,q.neighbor LIMIT ?1)",[MAINTENANCE_BATCH])?;
+        let stopped_receipt_intents=self.conn.execute("DELETE FROM receipt_intents WHERE message_key IN (SELECT i.message_key FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.policy_stopped=1 AND m.policy_revision IS NOT NULL ORDER BY m.key LIMIT ?1)",[MAINTENANCE_BATCH])?;
+        let stopped_due:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.policy_stopped=1 AND m.policy_revision IS NOT NULL) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.policy_stopped=1 AND m.policy_revision IS NOT NULL)",[],|r|r.get(0))?;
         let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2) OR EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.deadline<=?1) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1)", params![clock.monotonic_ms, clock.utc_lower_ms()], |r| r.get(0))?;
         Ok(MaintenanceReport {
             expired_payloads: keys.len(),
             expired_evidence,
             expired_receipt_intents,
             deleted_history,
-            more_due,
+            stopped_evidence,
+            stopped_receipt_intents,
+            more_due: more_due || stopped_due,
             history_time_available: clock.utc_lower_ms().is_some(),
         })
     }

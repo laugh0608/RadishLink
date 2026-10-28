@@ -98,6 +98,7 @@ impl Store {
             .optional()?;
         let (encoded, deadline) =
             record.ok_or_else(|| Error::new(Code::Conflict, "queue target missing"))?;
+        self.authorize_business_message(key, Some(neighbor), clock.monotonic_ms)?;
         let expired = match self.data_remaining_at(key, clock) {
             Ok(_) => false,
             Err(error) if error.code == Code::Expired => true,

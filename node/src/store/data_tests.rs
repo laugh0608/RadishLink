@@ -92,14 +92,18 @@ fn duplicate_shortens_message_and_all_queues_without_refund() {
     let w = Workspace::new();
     let mut s = w.create();
     s.receive(relay("one")).unwrap();
-    s.schedule_forward("one", "C").unwrap();
+    s.schedule_forward("one", super::tests::PEER_3).unwrap();
     let event = Batch {
         now_ms: 0,
         link: crate::retry::LinkEvent::Unchanged,
         signal: crate::retry::Signal::Continue,
         admission: crate::retry::Admission::Allow,
     };
-    assert!(s.advance_queue("one", "data", "C", event).unwrap().send);
+    assert!(
+        s.advance_queue("one", "data", super::tests::PEER_3, event)
+            .unwrap()
+            .send
+    );
     let before: String = s
         .conn
         .query_row("SELECT retry FROM queues", [], |r| r.get(0))
@@ -138,7 +142,7 @@ fn utc_jump_stops_data_delivery_and_receipts_before_monotonic_deadline() {
     s.create_action_scope("ui").unwrap();
     s.submit(send("origin", "a", 0)).unwrap();
     s.receive(relay("relay")).unwrap();
-    s.schedule_forward("relay", "C").unwrap();
+    s.schedule_forward("relay", super::tests::PEER_3).unwrap();
     s.receive(destination("dest", 1)).unwrap();
     let mut c = clock(1);
     c.trusted_utc = Some(UtcInterval {
@@ -151,13 +155,18 @@ fn utc_jump_stops_data_delivery_and_receipts_before_monotonic_deadline() {
         Code::Expired
     );
     assert_eq!(
-        s.finish_delivery("relay", &binding("relay"), Some(("A", b"proof")))
-            .unwrap_err()
-            .code,
+        s.finish_delivery(
+            "relay",
+            &binding("relay"),
+            Some((super::tests::PEER_2, b"proof")),
+            5
+        )
+        .unwrap_err()
+        .code,
         Code::Expired
     );
     assert_eq!(
-        s.finalize_receipt("dest", b"synthetic intent", b"proof")
+        s.finalize_receipt("dest", b"synthetic intent", b"proof", 5)
             .unwrap_err()
             .code,
         Code::Expired
@@ -169,7 +178,11 @@ fn utc_jump_stops_data_delivery_and_receipts_before_monotonic_deadline() {
         signal: crate::retry::Signal::Continue,
         admission: crate::retry::Admission::Allow,
     };
-    assert!(!s.advance_queue("origin", "data", "B", event).unwrap().send);
+    assert!(
+        !s.advance_queue("origin", "data", super::tests::PEER_2, event)
+            .unwrap()
+            .send
+    );
     let report = s.maintain(s.current_clock()).unwrap();
     assert_eq!(report.expired_payloads, 3);
     assert_eq!(report.expired_receipt_intents, 1);
@@ -184,6 +197,7 @@ fn clock_uncertainty_latches_and_history_uses_opposite_interval_ends() {
         upper_ms: 102000,
     });
     let mut s = Store::create(&w.dir, Limits::default(), c).unwrap();
+    super::tests::prepare_business(&mut s);
     s.create_action_scope("ui").unwrap();
     let mut input = send("one", "a", 0);
     input.message.deadline_ms = 8000;
@@ -218,7 +232,7 @@ fn migration_keeps_legacy_facts_and_disables_every_output_path() {
     s.create_action_scope("ui").unwrap();
     s.submit(send("origin", "a", 0)).unwrap();
     s.receive(relay("relay")).unwrap();
-    s.schedule_forward("relay", "C").unwrap();
+    s.schedule_forward("relay", super::tests::PEER_3).unwrap();
     s.receive(destination("dest", 1)).unwrap();
     let prior = s.usage().unwrap();
     super::tests::strip_v5(&s);
@@ -244,13 +258,18 @@ fn migration_keeps_legacy_facts_and_disables_every_output_path() {
         Code::UnsupportedVersion
     );
     assert_eq!(
-        s.finish_delivery("relay", &binding("relay"), Some(("A", b"proof")))
-            .unwrap_err()
-            .code,
+        s.finish_delivery(
+            "relay",
+            &binding("relay"),
+            Some((super::tests::PEER_2, b"proof")),
+            5
+        )
+        .unwrap_err()
+        .code,
         Code::UnsupportedVersion
     );
     assert_eq!(
-        s.finalize_receipt("dest", b"synthetic intent", b"proof")
+        s.finalize_receipt("dest", b"synthetic intent", b"proof", 5)
             .unwrap_err()
             .code,
         Code::UnsupportedVersion
@@ -266,7 +285,7 @@ fn migration_keeps_legacy_facts_and_disables_every_output_path() {
         admission: crate::retry::Admission::Allow,
     };
     assert_eq!(
-        s.advance_queue("origin", "data", "B", event)
+        s.advance_queue("origin", "data", super::tests::PEER_2, event)
             .unwrap_err()
             .code,
         Code::UnsupportedVersion
@@ -275,7 +294,9 @@ fn migration_keeps_legacy_facts_and_disables_every_output_path() {
         s.receive(relay("relay")).unwrap_err().code,
         Code::UnsupportedVersion
     );
-    s.receive(relay("new")).unwrap();
+    let mut new = relay("new");
+    new.expected_policy_revision = 0;
+    s.receive(new).unwrap();
     assert!(s.message_core("new").unwrap().is_some());
     drop(s);
     assert_eq!(
@@ -322,7 +343,7 @@ fn migration_failure_and_cross_boot_leave_v4_intact() {
         let version: i64 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, if kind == "after" { 5 } else { 4 });
+        assert_eq!(version, if kind == "after" { 6 } else { 4 });
         let has: bool = conn
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='message_data')",
@@ -433,7 +454,9 @@ fn reopened_same_monotonic_sample_uses_new_utc_upper_for_queue_decision() {
         signal: crate::retry::Signal::Continue,
         admission: crate::retry::Admission::Allow,
     };
-    let decision = s.advance_queue("one", "data", "B", event).unwrap();
+    let decision = s
+        .advance_queue("one", "data", super::tests::PEER_2, event)
+        .unwrap();
     assert!(!decision.send);
     assert_eq!(decision.reason, crate::retry::Reason::Expired);
 }
@@ -470,9 +493,14 @@ fn core_identity_scopes_and_immutable_fields_are_all_compared() {
             1 => distinct.message.data.identity.origin_id = [9; 16],
             _ => distinct.message.data.identity.origin_credential_ref = [9; 32],
         };
-        s.receive(distinct).unwrap();
+        assert_eq!(s.receive(distinct).unwrap_err().code, Code::Conflict);
     }
-    assert_eq!(s.usage().unwrap().payload_count, 4);
+    let mut distinct = relay("other-origin");
+    distinct.message.data.identity.message_id = relay("one").message.data.identity.message_id;
+    distinct.message.data.identity.origin_id = [4; 16];
+    distinct.message.data.identity.origin_credential_ref = super::tests::test_credential(4);
+    s.receive(distinct).unwrap();
+    assert_eq!(s.usage().unwrap().payload_count, 2);
 }
 
 #[test]
@@ -516,7 +544,7 @@ fn process_exit_keeps_atomic_d15_metadata_migration_and_shortening() {
             let mut s = w.create();
             if operation != "receive" {
                 s.receive(relay("one")).unwrap();
-                s.schedule_forward("one", "C").unwrap();
+                s.schedule_forward("one", super::tests::PEER_3).unwrap();
             }
             if operation == "migration" {
                 super::tests::strip_v5(&s);

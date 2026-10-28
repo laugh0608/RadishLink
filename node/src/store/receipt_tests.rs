@@ -11,7 +11,7 @@ fn event(now_ms: i64) -> Batch {
     }
 }
 fn finalize(s: &mut Store, key: &str) -> Result<()> {
-    s.finalize_receipt(key, b"synthetic intent", b"synthetic proof")
+    s.finalize_receipt(key, b"synthetic intent", b"synthetic proof", 5)
 }
 fn retry_json(s: &Store, key: &str) -> serde_json::Value {
     let encoded: String = s
@@ -70,15 +70,17 @@ fn destination_commits_only_intent_and_conversion_preserves_budget_and_history()
     assert!(view.receipt_intent_pending && !view.evidence_pending);
     let intent = s.receipt_intent("one").unwrap().unwrap();
     assert_eq!(intent.core_binding, super::tests::binding("one"));
-    assert_eq!(intent.neighbor, "B");
+    assert_eq!(intent.neighbor, super::tests::PEER_2);
     assert_eq!(intent.deadline_ms, 10000);
     assert_eq!(s.usage().unwrap().reserved_control_bytes, 4096);
     drop(s);
     let mut s = w.reopen(1);
-    s.finalize_receipt("one", &intent.body, b"synthetic proof")
+    s.finalize_receipt("one", &intent.body, b"synthetic proof", 5)
         .unwrap();
     assert!(s.receipt_intent("one").unwrap().is_none());
-    let result = s.advance_queue("one", "evidence", "B", event(1)).unwrap();
+    let result = s
+        .advance_queue("one", "evidence", super::tests::PEER_2, event(1))
+        .unwrap();
     assert!(result.send);
     let saved = retry_json(&s, "one");
     finalize(&mut s, "one").unwrap();
@@ -138,7 +140,7 @@ fn invalid_conversion_does_not_consume_committed_intent() {
         (&b"synthetic intent"[..], &[1; 4097][..], Code::InvalidInput),
     ] {
         assert_eq!(
-            s.finalize_receipt("one", body, proof).unwrap_err().code,
+            s.finalize_receipt("one", body, proof, 5).unwrap_err().code,
             expected
         );
         assert_eq!(s.revision().unwrap(), revision);
@@ -146,7 +148,7 @@ fn invalid_conversion_does_not_consume_committed_intent() {
     }
     finalize(&mut s, "one").unwrap();
     assert_eq!(
-        s.finalize_receipt("one", b"synthetic intent", b"changed")
+        s.finalize_receipt("one", b"synthetic intent", b"changed", 5)
             .unwrap_err()
             .code,
         Code::Conflict
@@ -168,12 +170,19 @@ fn destination_reservation_supports_maximum_proof_at_full_quota() {
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits, clock(0)).unwrap();
+    super::tests::prepare_business(&mut s);
     s.receive(destination("one", 0)).unwrap();
-    assert_eq!(s.usage().unwrap().records, 3);
+    assert_eq!(
+        s.usage().unwrap().records,
+        3 + s.control_usage().unwrap().used_records
+    );
     assert_eq!(s.receive(relay("two")).unwrap_err().code, Code::Quota);
-    s.finalize_receipt("one", b"synthetic intent", &[1; 4096])
+    s.finalize_receipt("one", b"synthetic intent", &[1; 4096], 5)
         .unwrap();
-    assert_eq!(s.usage().unwrap().records, 3);
+    assert_eq!(
+        s.usage().unwrap().records,
+        3 + s.control_usage().unwrap().used_records
+    );
     assert_eq!(s.usage().unwrap().evidence_bytes, 4096);
     assert_eq!(s.usage().unwrap().reserved_control_bytes, 0);
 }
@@ -193,9 +202,10 @@ fn deadline_blocks_intent_conversion_and_relay_delivery_without_maintenance() {
         let relay_result = s.finish_delivery(
             "relay",
             &super::tests::binding("relay"),
-            Some(("A", b"proof")),
+            Some((super::tests::PEER_2, b"proof")),
+            5,
         );
-        let origin_result = s.finish_delivery("origin", &super::tests::binding("origin"), None);
+        let origin_result = s.finish_delivery("origin", &super::tests::binding("origin"), None, 5);
         if now < 10000 {
             assert!(
                 intent.is_ok() && proof.is_ok() && relay_result.is_ok() && origin_result.is_ok()
@@ -221,14 +231,18 @@ fn both_proof_legs_stop_at_original_deadline_and_destination_fact_survives() {
     s.finish_delivery(
         "relay",
         &super::tests::binding("relay"),
-        Some(("A", b"proof")),
+        Some((super::tests::PEER_2, b"proof")),
+        5,
     )
     .unwrap();
     for key in ["dest", "relay"] {
         assert_eq!(retry_json(&s, key)["deadline_ms"], 10000);
     }
     s.advance_clock(clock(10000)).unwrap();
-    for (key, neighbor) in [("dest", "B"), ("relay", "A")] {
+    for (key, neighbor) in [
+        ("dest", super::tests::PEER_2),
+        ("relay", super::tests::PEER_2),
+    ] {
         let result = s
             .advance_queue(key, "evidence", neighbor, event(10000))
             .unwrap();
@@ -277,8 +291,13 @@ fn proof_cleanup_is_bounded_and_batch_at_deadline_cannot_send() {
     for i in 0..257 {
         let key = format!("m{i:03}");
         s.receive(relay(&key)).unwrap();
-        s.finish_delivery(&key, &super::tests::binding(&key), Some(("A", b"proof")))
-            .unwrap();
+        s.finish_delivery(
+            &key,
+            &super::tests::binding(&key),
+            Some((super::tests::PEER_2, b"proof")),
+            5,
+        )
+        .unwrap();
     }
     let report = s
         .process_queue_batch(
@@ -287,7 +306,7 @@ fn proof_cleanup_is_bounded_and_batch_at_deadline_cannot_send() {
                 queue: QueueKey {
                     message: "m256".into(),
                     kind: QueueKind::Evidence,
-                    neighbor: "A".into(),
+                    neighbor: super::tests::PEER_2.into(),
                 },
                 batch: event(10000),
             }],
@@ -300,7 +319,7 @@ fn proof_cleanup_is_bounded_and_batch_at_deadline_cannot_send() {
     assert_eq!(s.usage().unwrap().evidence_count, 1);
     // Remaining storage backlog cannot be used to send or renew return responsibility.
     assert!(
-        !s.advance_queue("m256", "evidence", "A", event(10000))
+        !s.advance_queue("m256", "evidence", super::tests::PEER_2, event(10000))
             .unwrap()
             .send
     );
@@ -308,7 +327,8 @@ fn proof_cleanup_is_bounded_and_batch_at_deadline_cannot_send() {
         s.finish_delivery(
             "m256",
             &super::tests::binding("m256"),
-            Some(("A", b"proof"))
+            Some((super::tests::PEER_2, b"proof")),
+            5
         )
         .unwrap_err()
         .code,
@@ -358,7 +378,8 @@ fn cross_boot_never_exposes_signing_work_or_releases_old_responsibility() {
         s.finish_delivery(
             "relay",
             &super::tests::binding("relay"),
-            Some(("A", b"proof")),
+            Some((super::tests::PEER_2, b"proof")),
+            5,
         ),
         s.expire_payload("relay"),
         s.advance_clock(new_boot.clone()),
@@ -380,7 +401,7 @@ fn v2_migration_shortens_deadline_without_refunding_consumed_retries() {
     s.receive(destination("one", 0)).unwrap();
     finalize(&mut s, "one").unwrap();
     assert!(
-        s.advance_queue("one", "evidence", "B", event(0))
+        s.advance_queue("one", "evidence", super::tests::PEER_2, event(0))
             .unwrap()
             .send
     );
@@ -406,13 +427,13 @@ fn v2_migration_shortens_deadline_without_refunding_consumed_retries() {
     expected["deadline_ms"] = 10000.into();
     assert_eq!(retry_json(&s, "one"), expected);
     assert_eq!(
-        s.advance_queue("one", "evidence", "B", event(1))
+        s.advance_queue("one", "evidence", super::tests::PEER_2, event(1))
             .unwrap_err()
             .code,
         Code::UnsupportedVersion
     );
     drop(s);
-    assert_eq!(version(&w), 5);
+    assert_eq!(version(&w), 6);
     assert_eq!(
         Store::migrate_v2(&w.dir, Limits::default(), clock(2))
             .err()
@@ -456,7 +477,7 @@ fn corrupt_deadline_and_missing_intent_are_rejected_on_reopen() {
                 .execute("UPDATE queues SET retry=?1", [encoded.to_string()])
                 .unwrap();
             assert_eq!(
-                s.advance_queue("one", "evidence", "B", event(0))
+                s.advance_queue("one", "evidence", super::tests::PEER_2, event(0))
                     .unwrap_err()
                     .code,
                 Code::StoreCorrupt
@@ -582,7 +603,7 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
                 .unwrap();
             assert_eq!(result.code(), Some(exit));
             if operation == "migration" {
-                assert_eq!(version(&w), if committed { 5 } else { 2 });
+                assert_eq!(version(&w), if committed { 6 } else { 2 });
                 let s = if committed {
                     w.reopen(2)
                 } else {

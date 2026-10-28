@@ -30,6 +30,7 @@ impl Store {
         role: Role,
         hops: u8,
         source: Option<&str>,
+        policy_revision: i64,
     ) -> Result<()> {
         let state = match role {
             Role::Origin => "queued",
@@ -37,7 +38,8 @@ impl Store {
             Role::Destination => "committed",
         };
         self.conn.execute("INSERT INTO messages(key,core,role,state,payload,deadline,retain_until,hops,origin_ref,source_neighbor,data_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1)",params![m.key,m.core_binding,role.as_str(),state,m.payload,m.deadline_ms,m.retain_until_ms,hops,m.data.origin_ref(),source])?;
-        self.insert_data(m)
+        self.insert_data(m)?;
+        self.insert_business_policy(m, role, source, policy_revision)
     }
     fn insert_history(&self, key: &str, body: &[u8]) -> Result<()> {
         check_text(body)?;
@@ -62,6 +64,7 @@ impl Store {
         deadline: i64,
     ) -> Result<()> {
         check_ref(neighbor)?;
+        self.authorize_business_message(key, Some(neighbor), self.clock.monotonic_ms)?;
         if body.len() > MAX_CONTROL {
             return Err(Error::new(Code::InvalidInput, "control size"));
         }
@@ -117,8 +120,24 @@ impl Store {
             return Err(Error::new(Code::Conflict, "message key already assigned"));
         }
         self.atomic(|s| {
+            s.check_policy_revision(
+                send.message.data.identity.activity_id,
+                send.expected_policy_revision,
+            )?;
+            s.authorize_business_core(
+                &send.message.data,
+                Role::Origin,
+                Some(&send.neighbor),
+                s.clock.monotonic_ms,
+            )?;
             s.update_security(&send.security)?;
-            s.insert_message(&send.message, Role::Origin, send.remaining_hops, None)?;
+            s.insert_message(
+                &send.message,
+                Role::Origin,
+                send.remaining_hops,
+                None,
+                send.expected_policy_revision,
+            )?;
             s.insert_history(&send.message.key, &send.text)?;
             s.insert_queue(
                 &send.message.key,
@@ -157,6 +176,17 @@ impl Store {
         }
         if let Some(view) = self.matching_message(&receive.message, receive.role)? {
             self.data_remaining_at(&receive.message.key, &self.clock)?;
+            let revision = self.authorize_business_message(
+                &receive.message.key,
+                Some(&receive.neighbor),
+                self.clock.monotonic_ms,
+            )?;
+            if revision != receive.expected_policy_revision {
+                return Err(Error::new(
+                    Code::Conflict,
+                    "business authorization revision changed",
+                ));
+            }
             let (deadline, hops): (i64, u8) = self.conn.query_row(
                 "SELECT deadline,hops FROM messages WHERE key=?1",
                 [&receive.message.key],
@@ -206,6 +236,16 @@ impl Store {
             Role::Origin => unreachable!(),
         }
         self.atomic(|s| {
+            s.check_policy_revision(
+                receive.message.data.identity.activity_id,
+                receive.expected_policy_revision,
+            )?;
+            s.authorize_business_core(
+                &receive.message.data,
+                receive.role,
+                Some(&receive.neighbor),
+                s.clock.monotonic_ms,
+            )?;
             if let Some(u) = &receive.security {
                 s.update_security(u)?;
             }
@@ -214,6 +254,7 @@ impl Store {
                 receive.role,
                 receive.remaining_hops,
                 Some(&receive.neighbor),
+                receive.expected_policy_revision,
             )?;
             if receive.role == Role::Relay {
                 s.conn.execute(
@@ -291,10 +332,22 @@ impl Store {
         key: &str,
         core: &[u8],
         return_evidence: Option<(&str, &[u8])>,
+        expected_policy_revision: i64,
     ) -> Result<()> {
         check_ref(key)?;
         self.atomic(|s| {
             s.data_remaining_at(key, &s.clock)?;
+            let revision = s.authorize_business_message(
+                key,
+                return_evidence.map(|(neighbor, _)| neighbor),
+                s.clock.monotonic_ms,
+            )?;
+            if revision != expected_policy_revision {
+                return Err(Error::new(
+                    Code::Conflict,
+                    "proof authorization revision changed",
+                ));
+            }
             let (saved, role, state, deadline, source): (
                 Vec<u8>,
                 String,
