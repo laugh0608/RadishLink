@@ -23,7 +23,10 @@ pub struct Usage {
     pub evidence_bytes: u64,
     pub reserved_control_count: u64,
     pub reserved_control_bytes: u64,
+    /// Actual business plus D16 records; unused reserved slots are not physical records.
     pub records: u64,
+    /// Fixed D16 reservation and actual usage, separate from business proof reservations.
+    pub security_control: ControlUsage,
     /// Only the main SQLite file; excludes journal, filesystem and process memory.
     pub database_bytes: u64,
 }
@@ -59,6 +62,7 @@ impl Store {
             u64::try_from(value)
                 .map_err(|e| Error::source_error(Code::StoreCorrupt, "negative usage", e))
         };
+        let security_control = self.control_usage()?;
         Ok(Usage {
             payload_count: scalar("SELECT count(*) FROM messages WHERE payload IS NOT NULL")?,
             payload_bytes: scalar("SELECT coalesce(sum(length(payload)),0) FROM messages")?,
@@ -76,7 +80,8 @@ impl Store {
             )?,
             records: scalar(
                 "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
-            )?,
+            )? + security_control.used_records,
+            security_control,
             database_bytes: scalar(
                 "SELECT page_count*page_size FROM pragma_page_count(),pragma_page_size()",
             )?,

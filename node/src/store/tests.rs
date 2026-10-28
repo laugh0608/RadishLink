@@ -228,7 +228,7 @@ fn relay_delivery_keeps_return_work_after_payload_cleanup() {
 fn control_quota_prevents_destination_commit_and_relay_cleanup() {
     let w = Workspace::new();
     let limits = Limits {
-        control_count: 1,
+        control_count: CONTROL_RESERVED_RECORDS + 1,
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits, clock(0)).unwrap();
@@ -592,4 +592,9 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
         )
         .unwrap();
     assert_eq!(neighbor, "A");
+}
+
+/// Reconstruct an actual v3 schema for legacy migration tests, without v4 tables.
+pub(crate) fn strip_v4(s: &Store) {
+    s.conn.execute_batch("DROP TABLE control_neighbors; DROP TABLE control_objects; DROP TABLE control_bindings; DROP TABLE control_output_rate; DROP TABLE control_activity; PRAGMA user_version=3;").unwrap();
 }

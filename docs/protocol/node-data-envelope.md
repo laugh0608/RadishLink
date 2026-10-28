@@ -81,7 +81,7 @@ D12 receipt 的 `message_binding` 使用上面的唯一摘要。证明重试复�
 
 在协议 v1 中，D12 的逻辑消息身份为 `(activity_id, origin_id, origin_credential_ref, message_id)`；group/epoch/destination 属于该身份不可变且受认证的 core。跨 epoch 使用同一身份但改变 core 是 conflict，不作为新消息。活动/凭据范围与 group/epoch 检查共同实现 SW-G1 的 replay scope；不将同一个身份在新 epoch 再加密当作重试。
 
-建议内部 `Message.key` 使用 `SHA-256(CBOR([1, activity_id, origin_id, origin_credential_ref, message_id]))` 的 64 位小写十六进制文本；保留完整复合身份并比较，hash 不是授权或永久无冲突证明。origin_ref 可映射为 credential_ref 的 64 位小写十六进制；完整端点/活动映射另行保存。core_binding 建议保存 32-byte message_binding，原始 core 必须同时持久，不能只存 hash 后从邻居重建。现有 schema v3 没有完整字段，本稿不声称可直接接线，后续迁移须显式设计。
+建议内部 `Message.key` 使用 `SHA-256(CBOR([1, activity_id, origin_id, origin_credential_ref, message_id]))` 的 64 位小写十六进制文本；保留完整复合身份并比较，hash 不是授权或永久无冲突证明。origin_ref 可映射为 credential_ref 的 64 位小写十六进制；完整端点/活动映射另行保存。core_binding 建议保存 32-byte message_binding，原始 core 必须同时持久，不能只存 hash 后从邻居重建。现有 schema v4（D16 控制持久边界）仍没有完整数据字段，本稿不声称可直接接线，后续迁移须显式设计。
 
 ## D15：一小时寿命与保守时间判定
 

@@ -26,6 +26,8 @@
 
 ## schema v3 与兼容性
 
+本节记录 2026-10-24 的 v3 批次；2026-10-28 当前实现已通过[控制持久化批次](node-control-persistence.md)推进到 v4，普通 open 和显式迁移以该记录为准。历史 v3 结果不重写。
+
 原 schema.sql v1 与 migration_v2.sql 不改。新建库在一笔初始化事务中依次应用 v1/v2/v3；v3 新增 receipt_intents、完整消息 deadline 索引，并修正旧目标端 expired 的事实表达。普通 open 遇到 v1/v2 均返回 MigrationRequired；显式 migrate_v1 执行 v1→v3，migrate_v2 只接受 v2→v3。错误来源、重复迁移和未知版本拒绝，不能靠回填版本号降级。
 
 迁移先核对已有 retry 格式及其原版本寿命边界，再共同提交可信时钟推进、schema、证明截止时间缩短和已到期证明清理。每条 retry 只取更早 deadline，保留 start、slot、recovery、link、phase 和最后批次；不退还预算、不重设起点。旧证据字节仅保持为旧内部数据，不因迁移获得真实性认证。时间隔离禁止迁移；损坏、SQL 错误或提交前故障不留半迁移状态。

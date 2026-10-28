@@ -2,6 +2,7 @@ use super::tests::{Workspace, clock, destination, relay, send};
 use super::*;
 
 fn make_v1(s: &Store) {
+    super::tests::strip_v4(s);
     // schema.sql is unchanged from 2936c6e; remove exactly the later additions.
     s.conn
         .execute_batch(
@@ -38,7 +39,7 @@ fn old_store_requires_explicit_atomic_migration_and_preserves_records() {
     assert_eq!(s.history(0, 100).unwrap().len(), 1);
     assert!(s.action("ui", 1, "a").unwrap().is_some());
     drop(s);
-    assert_eq!(version(&w), 3);
+    assert_eq!(version(&w), 4);
     assert!(Store::migrate_v1(&w.dir, Limits::default(), clock(2)).is_err());
     let mut s = w.reopen(2);
     s.finish_delivery("relay", b"core-relay", Some(("A", b"proof")))
@@ -102,8 +103,8 @@ fn migration_quota_or_sql_failure_rolls_back_schema_and_data() {
 fn relay_reserves_control_until_delivery_or_expiry() {
     let w = Workspace::new();
     let limits = Limits {
-        control_count: 1,
-        control_bytes: 4096,
+        control_count: CONTROL_RESERVED_RECORDS + 1,
+        control_bytes: CONTROL_RESERVED_BYTES + 4096,
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits.clone(), clock(0)).unwrap();
@@ -219,7 +220,7 @@ fn migration_crash_child() {
 
 #[test]
 fn migration_process_exit_preserves_old_or_new_schema_without_partial_reservation() {
-    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 3)] {
+    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 4)] {
         let w = Workspace::new();
         let mut s = w.create();
         s.receive(relay("one")).unwrap();
@@ -400,9 +401,9 @@ fn corrupt_retry_is_rejected_before_migration_changes_any_schema() {
 fn full_record_budget_still_allows_reserved_return_proof_conversion() {
     let w = Workspace::new();
     let limits = Limits {
-        record_count: 3,
-        control_count: 1,
-        control_bytes: 4096,
+        record_count: CONTROL_RESERVED_RECORDS + 3,
+        control_count: CONTROL_RESERVED_RECORDS + 1,
+        control_bytes: CONTROL_RESERVED_BYTES + 4096,
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits, clock(0)).unwrap();

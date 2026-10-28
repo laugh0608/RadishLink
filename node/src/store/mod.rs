@@ -13,6 +13,13 @@ use std::{
     path::Path,
 };
 
+mod control_objects;
+mod control_scheduling;
+mod control_state;
+mod control_types;
+pub use control_types::*;
+#[cfg(test)]
+mod control_tests;
 mod maintenance;
 #[cfg(test)]
 mod receipt_tests;
@@ -53,10 +60,13 @@ enum OpenMode {
     Current,
     MigrateV1,
     MigrateV2,
+    MigrateV3,
     #[cfg(test)]
     MigrateV1Fault(TestFault),
     #[cfg(test)]
     MigrateV2Fault(TestFault),
+    #[cfg(test)]
+    MigrateV3Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -120,6 +130,7 @@ impl Store {
     pub fn create(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         limits.validate()?;
         clock.validate()?;
+        check_control_reserve(&limits)?;
         if !directory.is_absolute() {
             return Err(Error::new(Code::InvalidInput, "store directory"));
         }
@@ -139,6 +150,7 @@ impl Store {
         conn.execute_batch(include_str!("schema.sql"))?;
         conn.execute_batch(include_str!("migration_v2.sql"))?;
         conn.execute_batch(include_str!("migration_v3.sql"))?;
+        conn.execute_batch(include_str!("migration_v4.sql"))?;
         let encoded = limits_json(&limits)?;
         conn.execute(
             "INSERT INTO meta VALUES(1,0,?1,?2,?3,?4)",
@@ -176,6 +188,10 @@ impl Store {
     pub fn migrate_v2(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV2)
     }
+    /// Explicit v3 -> v4; capacity shortage leaves the entire old store intact.
+    pub fn migrate_v3(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV3)
+    }
     fn open_version(
         directory: &Path,
         limits: Limits,
@@ -186,10 +202,13 @@ impl Store {
             OpenMode::Current => None,
             OpenMode::MigrateV1 => Some(1),
             OpenMode::MigrateV2 => Some(2),
+            OpenMode::MigrateV3 => Some(3),
             #[cfg(test)]
             OpenMode::MigrateV1Fault(_) => Some(1),
             #[cfg(test)]
             OpenMode::MigrateV2Fault(_) => Some(2),
+            #[cfg(test)]
+            OpenMode::MigrateV3Fault(_) => Some(3),
         };
         limits.validate()?;
         clock.validate()?;
@@ -212,10 +231,10 @@ impl Store {
         let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if ![1, 2, 3].contains(&version) || app != APP_ID {
+        if ![1, 2, 3, 4].contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version < 3 && source_version.is_none() {
+        if version < 4 && source_version.is_none() {
             return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
         if source_version.is_some_and(|source| version != source) {
@@ -256,6 +275,7 @@ impl Store {
             fault: match mode {
                 OpenMode::MigrateV1Fault(fault) => Some(fault),
                 OpenMode::MigrateV2Fault(fault) => Some(fault),
+                OpenMode::MigrateV3Fault(fault) => Some(fault),
                 _ => None,
             },
         };
@@ -267,14 +287,19 @@ impl Store {
                 if version == 1 {
                     store.conn.execute_batch(include_str!("migration_v2.sql"))?;
                 }
-                store.conn.execute_batch(include_str!("migration_v3.sql"))?;
-                store.migrate_receipt_deadlines()?;
+                if version < 3 {
+                    store.conn.execute_batch(include_str!("migration_v3.sql"))?;
+                    store.migrate_receipt_deadlines()?;
+                }
+                store.conn.execute_batch(include_str!("migration_v4.sql"))?;
                 store.check_queue_deadlines(false)?;
                 Ok(())
             })?;
         }
         s.check_quotas()?;
         s.check_reservations()?;
+        s.check_control_invariants()?;
+        s.reset_control_rate_on_open()?;
 
         Ok(s)
     }
@@ -314,6 +339,7 @@ impl Store {
         let result = apply(self).and_then(|v| {
             self.check_quotas()?;
             self.check_reservations()?;
+            self.check_control_invariants()?;
             Ok(v)
         });
         #[cfg(test)]
@@ -370,6 +396,7 @@ impl Store {
         Ok(value)
     }
     fn check_quotas(&self) -> Result<()> {
+        check_control_reserve(&self.limits)?;
         let checks = [
             (
                 "SELECT count(*) FROM messages WHERE payload IS NOT NULL",
@@ -389,15 +416,15 @@ impl Store {
             ),
             (
                 "SELECT (SELECT count(*) FROM queues WHERE kind='evidence')+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
-                self.limits.control_count as i64,
+                i64::from(self.limits.control_count - CONTROL_RESERVED_RECORDS),
             ),
             (
-                "SELECT (SELECT coalesce(sum(length(body)),0) FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)+(SELECT count(*)*4096 FROM receipt_intents)",
-                self.limits.control_bytes as i64,
+                "SELECT (SELECT count(*)*4096 FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)+(SELECT count(*)*4096 FROM receipt_intents)",
+                (self.limits.control_bytes - CONTROL_RESERVED_BYTES) as i64,
             ),
             (
                 "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
-                self.limits.record_count as i64,
+                i64::from(self.limits.record_count - CONTROL_RESERVED_RECORDS),
             ),
             (
                 "SELECT coalesce(sum(length(state)),0) FROM security_states",
@@ -527,4 +554,14 @@ fn limits_json(l: &Limits) -> Result<String> {
     // Config fields are fixed here rather than serializing secret-bearing runtime state.
     Ok(serde_json::json!({"payload_count":l.payload_count,"payload_bytes":l.payload_bytes,"history_count":l.history_count,
         "history_bytes":l.history_bytes,"control_count":l.control_count,"control_bytes":l.control_bytes,"record_count":l.record_count}).to_string())
+}
+
+fn check_control_reserve(limits: &Limits) -> Result<()> {
+    if limits.control_bytes < CONTROL_RESERVED_BYTES
+        || limits.control_count < CONTROL_RESERVED_RECORDS
+        || limits.record_count < CONTROL_RESERVED_RECORDS
+    {
+        return Err(Error::new(Code::Quota, "D16 full control reservation"));
+    }
+    Ok(())
 }

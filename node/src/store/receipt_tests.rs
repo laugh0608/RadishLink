@@ -31,6 +31,7 @@ fn version(w: &Workspace) -> i64 {
         .unwrap()
 }
 fn make_v2(s: &Store) {
+    super::tests::strip_v4(s);
     // Construct the old evidence behavior without running any cryptographic provider.
     s.conn
         .execute_batch(
@@ -161,9 +162,9 @@ fn invalid_conversion_does_not_consume_committed_intent() {
 fn destination_reservation_supports_maximum_proof_at_full_quota() {
     let w = Workspace::new();
     let limits = Limits {
-        record_count: 3,
-        control_count: 1,
-        control_bytes: 4096,
+        record_count: CONTROL_RESERVED_RECORDS + 3,
+        control_count: CONTROL_RESERVED_RECORDS + 1,
+        control_bytes: CONTROL_RESERVED_BYTES + 4096,
         ..Limits::default()
     };
     let mut s = Store::create(&w.dir, limits, clock(0)).unwrap();
@@ -398,7 +399,7 @@ fn v2_migration_shortens_deadline_without_refunding_consumed_retries() {
             .send
     );
     drop(s);
-    assert_eq!(version(&w), 3);
+    assert_eq!(version(&w), 4);
     assert_eq!(
         Store::migrate_v2(&w.dir, Limits::default(), clock(2))
             .err()
@@ -568,7 +569,7 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
                 .unwrap();
             assert_eq!(result.code(), Some(exit));
             if operation == "migration" {
-                assert_eq!(version(&w), if committed { 3 } else { 2 });
+                assert_eq!(version(&w), if committed { 4 } else { 2 });
                 let s = if committed {
                     w.reopen(2)
                 } else {
