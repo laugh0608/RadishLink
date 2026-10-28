@@ -37,6 +37,7 @@
 - [外场验证计划](testing/field-validation-plan.md)
 - [Node 第一批服务与事务基础](testing/node-service-foundation.md)：固定依赖、SQLite 联合事务、离线故障验证及生产接入边界。
 - [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、schema 迁移、控制容量预留、周期维护及安全接入核对。
+- [Node 控制入站准入与有界验签等待](testing/node-control-ingress.md)：邻居/全局限速、16 个等待及在途对象、任务关联与原子验证后接纳。
 - [Node 共享控制外发额度与责任轮转](testing/node-outbound-scheduling.md)：schema v7、混合控制计费、持久轮转、数据 ACK 次数及迁移故障验证。
 - [Node 业务责任与控制政策关联](testing/node-business-policy.md)：schema v6、精确凭据准入、政策修订、撤销停止与证明清理。
 - [Node D15 数据持久化与保守时间](testing/node-data-persistence.md)：schema v5、完整身份/原始 core、uint64 epoch、可信 UTC 区间及显式迁移。

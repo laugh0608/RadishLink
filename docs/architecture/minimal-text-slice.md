@@ -6,7 +6,7 @@
 - 范围：一对一文字，A—B—C 唯一中继，手机可缺席
 - 非目标：冻结密码库、数据库、生产语言、线格式或实际运行授权
 
-2026-10-24 更新：[ADR 0004—0007](../adr/README.md)已分别接受 Node 服务/事务、证明生命周期、活动身份与控制 profile、数据 envelope 与控制预算。Node 自有持久边界与外层 framing 已有限离线实施；2026-10-28 接续完成 [D16 控制持久化](../testing/node-control-persistence.md)与 [schema v5 / D15 数据持久化](../testing/node-data-persistence.md)，并完成 [schema v6 业务政策关联](../testing/node-business-policy.md)及 [schema v7 共享外发调度](../testing/node-outbound-scheduling.md)；实际密码联合事务、严格 CBOR/COSE、身份机制、可信平台和网络仍未验证，本文整体不因此成为完整协议验收结果。
+2026-10-24 更新：[ADR 0004—0007](../adr/README.md)已分别接受 Node 服务/事务、证明生命周期、活动身份与控制 profile、数据 envelope 与控制预算。Node 自有持久边界与外层 framing 已有限离线实施；2026-10-28 接续完成 [D16 控制持久化](../testing/node-control-persistence.md)与 [schema v5 / D15 数据持久化](../testing/node-data-persistence.md)，并完成 [schema v6 业务政策关联](../testing/node-business-policy.md)、[schema v7 共享外发调度](../testing/node-outbound-scheduling.md)与[控制入站准入](../testing/node-control-ingress.md)；实际密码联合事务、严格 CBOR/COSE、身份机制、可信平台和网络仍未验证，本文整体不因此成为完整协议验收结果。
 
 ## 用户路径与端点边界
 

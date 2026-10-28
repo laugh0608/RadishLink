@@ -15,7 +15,14 @@ use std::{
 
 mod outbound;
 pub use outbound::{OutboundDecision, OutboundEvent, OutboundReport};
+mod control_ingress;
+pub use control_ingress::{
+    ControlIngressAdmission, ControlIngressUsage, ControlVerificationCompletion,
+    ControlVerificationJob, ControlVerificationOutcome, ControlVerificationPoll,
+};
 mod business_policy;
+#[cfg(test)]
+mod control_ingress_tests;
 #[cfg(test)]
 mod outbound_tests;
 pub use business_policy::credential_key;
@@ -48,6 +55,7 @@ const APP_ID: i64 = 1380732491;
 const DB_PAGES: i64 = 32768; // 128 MiB at the required 4096-byte page size; journal is separate.
 
 pub struct Store {
+    ingress: control_ingress::ControlIngress,
     conn: Connection,
     _lock: File,
     limits: Limits,
@@ -190,6 +198,7 @@ impl Store {
             File::open(parent)?.sync_all()?;
         }
         Ok(Self {
+            ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             conn,
             _lock: owner,
             limits,
@@ -333,6 +342,7 @@ impl Store {
             || wall.is_some_and(|w| clock.utc_lower_ms().is_none_or(|n| n < w))
             || upper.is_some_and(|u| clock.utc_upper_ms().is_none_or(|n| n < u));
         let mut s = Self {
+            ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             conn,
             _lock: owner,
             limits,

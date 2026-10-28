@@ -44,10 +44,12 @@ T-C 只保存 `Receive.receipt_intent`，不接收预生成的送达签名；提
 
 D16 在原 8 MiB / 4096 控制总额度内固定保留 1 MiB / 576 记录，全局记录额度也预留 576 槽；业务 proof 按完整 4096-byte 责任计费，默认字节维度上限为 1792 条。迁移空间不足保留旧库；不通过删除 custody 或增大配置放行。`Usage.security_control` 报告专用预留和实际使用，`records` 包括两类实际记录，`reserved_control_*` 仍为业务证明预留。这些不是物理磁盘硬边界。
 
-内部控制接口保存当前活动、五人四代绑定、退出/报告固定槽、Retiring 意图和邻居责任。`process_control_batch` 复用 Batch 合并和原子提交边界，消费八个 D16 时槽与两次有间隔恢复机会，已错过时槽跳过；每邻居最多十次尝试/控制 ACK。同 boot 重开从空桶开始且不返还持久次数；新 boot 拒绝输出。没有公开的新活动重配/清理接口，不删除旧活动 marker 恢复额度。业务身份/活动/撤销已有内部关联；真实签验、入站限速与实际传输统一授权门仍待接入；详见控制持久化记录及其中保留的测试失败。
+内部控制接口保存当前活动、五人四代绑定、退出/报告固定槽、Retiring 意图和邻居责任。`process_control_batch` 复用 Batch 合并和原子提交边界，消费八个 D16 时槽与两次有间隔恢复机会，已错过时槽跳过；每邻居最多十次尝试/控制 ACK。同 boot 重开从空桶开始且不返还持久次数；新 boot 拒绝输出。没有公开的新活动重配/清理接口，不删除旧活动 marker 恢复额度。业务身份/活动/撤销已有内部关联；kind 2/3 入站限速与有界等待已有内部实现，真实签验与实际传输统一授权门仍待接入；详见控制持久化记录及其中保留的测试失败。
 
 D15 新消息保存原始 core 和完整身份；epoch 为固定 8-byte big-endian BLOB。重复接收同步收紧消息/队列期限，时间准入与内部输出均检查 UTC 上界和同 boot deadline。调用方仍须提供严格解码/认证后的匹配字段及新鲜可信采样；完整身份已接到 D16 内部撤销/活动检查。
 
 schema v6 政策关联见[业务政策关联记录](../docs/testing/node-business-policy.md)。新业务必须具备活动与 Active 精确端点/本机/邻居绑定；neighbor 为 credential_ref 的 64 位小写十六进制，不是地址。Send/Receive 传入准备时的政策修订，ReceiptIntent 返回修订供 finalize_receipt/T-D 复核。撤销、Retiring、换代和停用持久停止相关责任；未发 proof/intent 有界清理，已交付历史保持。政策存储失败隔离当前拥有者，禁止继续使用旧权限；真实验证/输出接线仍未开放。
 
 当前 schema v7 及[共享外发调度](../docs/testing/node-outbound-scheduling.md)复用既有 Store 事务。`process_outbound_batch` 每轮至多 128 个事件，统一 receipt/退出/报告/两类 ACK 的 4 frames/s、8192 bytes/s 额度；退出优先，责任按持久游标轮转，同 boot 重开空桶。数据 ACK 每消息四个 participant 槽、每槽十次，不因换键恢复；v6 旧消息不补造 ACK 预算。原 queue/control 批处理委托新入口，单责任 receipt 也共享扣费；全局公平仍要求未来拥有者公平汇总完整就绪集合与真实传输接线。
+
+[控制入站准入](../docs/testing/node-control-ingress.md)由同一 Store 持有：已核验邻居每秒 1 个/burst 2、全局每秒 4 个/burst 4；原始对象限 512 bytes，等待和已分发任务合计最多 16 个。未验证数据不写 SQL，重开丢弃内存队列并空桶起算；相同 participant 换键不重置额度。结果须匹配原字节、活动、来源通道与政策修订，再与控制接纳共同提交；没有实际解析器、验证器或网络入口，schema 仍为 v7。

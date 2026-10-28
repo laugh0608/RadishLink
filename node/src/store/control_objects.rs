@@ -74,6 +74,13 @@ impl Store {
         object: PreparedControl,
         neighbors: &[ControlNeighbor],
     ) -> Result<ControlAdmission> {
+        self.policy_atomic(|s| s.accept_control_in_transaction(&object, neighbors))
+    }
+    pub(super) fn accept_control_in_transaction(
+        &self,
+        object: &PreparedControl,
+        neighbors: &[ControlNeighbor],
+    ) -> Result<ControlAdmission> {
         object.fields.validate()?;
         if object.cose.is_empty() || object.cose.len() > 512 || neighbors.len() > 4 {
             return Err(Error::new(
@@ -81,54 +88,105 @@ impl Store {
                 "control object or neighbor bounds",
             ));
         }
-        self.policy_atomic(|s| {
-            let f=&object.fields;
-            let local=s.control_live(&f.activity,s.clock.monotonic_ms)?;
-            let issuer=s.control_binding(&f.issuer,&f.issuer_id)?;
-            let target=s.control_binding(&f.target,&f.target_id)?;
-            if issuer==BindingState::Pending || target==BindingState::Pending {
-                return Err(Error::new(Code::Conflict,"control requires verified binding"));
-            }
-            let existing=s.conn.query_row(
+        let f = &object.fields;
+        let local = self.control_live(&f.activity, self.clock.monotonic_ms)?;
+        let issuer = self.control_binding(&f.issuer, &f.issuer_id)?;
+        let target = self.control_binding(&f.target, &f.target_id)?;
+        if issuer == BindingState::Pending || target == BindingState::Pending {
+            return Err(Error::new(
+                Code::Conflict,
+                "control requires verified binding",
+            ));
+        }
+        let existing=self.conn.query_row(
                 "SELECT reference,payload,kind,target,reason FROM control_objects WHERE issuer=?1 AND operation=?2",
                 params![f.issuer.as_slice(),f.operation.as_slice()],
                 |r|Ok(StoredControl {reference:r.get(0)?,payload:r.get(1)?,kind:r.get(2)?,target:r.get(3)?,reason:r.get(4)?})
             ).optional()?;
-            if let Some(StoredControl{reference,payload,kind,target,reason})=existing {
-                if reference!=f.reference || payload!=f.payload || kind!=f.kind.number() || target!=f.target || reason!=f.reason {
-                    return Err(Error::new(Code::Conflict,"control operation payload conflict"));
-                }
-                // Semantic duplicate: retain first original bytes, slots and attempts.
-                return Ok(ControlAdmission::Merged(f.reference));
+        if let Some(StoredControl {
+            reference,
+            payload,
+            kind,
+            target,
+            reason,
+        }) = existing
+        {
+            if reference != f.reference
+                || payload != f.payload
+                || kind != f.kind.number()
+                || target != f.target
+                || reason != f.reason
+            {
+                return Err(Error::new(
+                    Code::Conflict,
+                    "control operation payload conflict",
+                ));
             }
-            let prior:Option<Vec<u8>>=s.conn.query_row("SELECT reference FROM control_objects WHERE kind=?1 AND target=?2 AND (?1=2 OR reporter=?3)",params![f.kind.number(),f.target.as_slice(),f.issuer_id.as_slice()],|r|r.get(0)).optional()?;
-            if let Some(reference)=prior {
-                // A blocked issuer cannot submit a new report; the existing exit stays merged.
-                if f.kind==ControlKind::Report && issuer!=BindingState::Active {
-                    return Err(Error::new(Code::Conflict,"report issuer no longer active"));
-                }
-                return Ok(ControlAdmission::Merged(reference.try_into().map_err(|_|Error::new(Code::StoreCorrupt,"object reference size"))?));
+            // Semantic duplicate: retain first original bytes, slots and attempts.
+            return Ok(ControlAdmission::Merged(f.reference));
+        }
+        let prior:Option<Vec<u8>>=self.conn.query_row("SELECT reference FROM control_objects WHERE kind=?1 AND target=?2 AND (?1=2 OR reporter=?3)",params![f.kind.number(),f.target.as_slice(),f.issuer_id.as_slice()],|r|r.get(0)).optional()?;
+        if let Some(reference) = prior {
+            // A blocked issuer cannot submit a new report; the existing exit stays merged.
+            if f.kind == ControlKind::Report && issuer != BindingState::Active {
+                return Err(Error::new(Code::Conflict, "report issuer no longer active"));
             }
-            if f.kind==ControlKind::Exit && f.issuer_id==local {
-                let intent=s.control_exit_intent(f.activity)?.ok_or_else(||Error::new(Code::Conflict,"local exit intent required"))?;
-                if issuer!=BindingState::Retiring || !Self::same_control_payload(&intent,f) {
-                    return Err(Error::new(Code::Conflict,"signed exit differs from fixed intent"));
-                }
-            } else if issuer!=BindingState::Active || !s.participant_active(&local)? {
-                return Err(Error::new(Code::Conflict,"control authorization changed"));
+            return Ok(ControlAdmission::Merged(reference.try_into().map_err(
+                |_| Error::new(Code::StoreCorrupt, "object reference size"),
+            )?));
+        }
+        if f.kind == ControlKind::Exit && f.issuer_id == local {
+            let intent = self
+                .control_exit_intent(f.activity)?
+                .ok_or_else(|| Error::new(Code::Conflict, "local exit intent required"))?;
+            if issuer != BindingState::Retiring || !Self::same_control_payload(&intent, f) {
+                return Err(Error::new(
+                    Code::Conflict,
+                    "signed exit differs from fixed intent",
+                ));
             }
-            let collision:bool=s.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_objects WHERE reference=?1)",[f.reference.as_slice()],|r|r.get(0))?;
-            if collision { return Err(Error::new(Code::Conflict,"control reference already assigned")); }
-            s.conn.execute("INSERT INTO control_objects VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![f.reference.as_slice(),f.kind.number(),f.issuer.as_slice(),f.issuer_id.as_slice(),f.target.as_slice(),f.operation.as_slice(),f.reason,f.payload,object.cose,s.clock.monotonic_ms])?;
-            // Create neighbor rows before applying exit so the issuer's former trusted channel
-            // may retain a terminal slot; output always rechecks the current channel policy.
-            for neighbor in neighbors { s.insert_control_neighbor(f.activity,f.reference,*neighbor)?; }
-            if f.kind==ControlKind::Exit {
-                s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE credential=?1",[f.issuer.as_slice()])?;
-                s.business_policy_changed()?;
-            }
-            Ok(ControlAdmission::Inserted(f.reference))
-        })
+        } else if issuer != BindingState::Active || !self.participant_active(&local)? {
+            return Err(Error::new(Code::Conflict, "control authorization changed"));
+        }
+        let collision: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM control_objects WHERE reference=?1)",
+            [f.reference.as_slice()],
+            |r| r.get(0),
+        )?;
+        if collision {
+            return Err(Error::new(
+                Code::Conflict,
+                "control reference already assigned",
+            ));
+        }
+        self.conn.execute(
+            "INSERT INTO control_objects VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![
+                f.reference.as_slice(),
+                f.kind.number(),
+                f.issuer.as_slice(),
+                f.issuer_id.as_slice(),
+                f.target.as_slice(),
+                f.operation.as_slice(),
+                f.reason,
+                f.payload,
+                object.cose,
+                self.clock.monotonic_ms
+            ],
+        )?;
+        // Create neighbor rows before applying exit so the issuer's former trusted channel
+        // may retain a terminal slot; output always rechecks the current channel policy.
+        for neighbor in neighbors {
+            self.insert_control_neighbor(f.activity, f.reference, *neighbor)?;
+        }
+        if f.kind == ControlKind::Exit {
+            self.conn.execute(
+                "UPDATE control_bindings SET state='blocked' WHERE credential=?1",
+                [f.issuer.as_slice()],
+            )?;
+            self.business_policy_changed()?;
+        }
+        Ok(ControlAdmission::Inserted(f.reference))
     }
     pub(super) fn insert_control_neighbor(
         &self,
