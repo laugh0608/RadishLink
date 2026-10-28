@@ -87,3 +87,7 @@ COSE_Sign1 是标准封装方向，采用成熟实现；应用仍须验证签名
 | 恢复 | 新 boot、回拨、未知停机、旧库镜像、持久版本变化、实际掉电 | 内部拒绝与旧状态保留测试；不实现绕过隔离开关 |
 
 仍需集中处理：许可证有效新证据与 R2 的合格复核者、实际功能试验精确合同、COSE 实现与完整依赖图、身份绑定/撤销 profile、平台可信时钟和重新配对流程、独立安全意见。它们不是 D6—D10 的重复确认，也不能以所有者接受设计替代证据。
+
+## 2026-10-28 内部接入进展
+
+[D15 持久映射](../testing/node-data-persistence.md)、[业务政策关联](../testing/node-business-policy.md)、[共享外发](../testing/node-outbound-scheduling.md)和[有界入站等待](../testing/node-control-ingress.md)已有有限离线验证。[ADR 0008 D17](../adr/0008-node-activity-lifecycle.md)进一步实现同 boot 新活动与旧会话/动作隔离；跨 boot 的新写域、可信时间坐标和重配仍未实现。D6 的真实密码 storage trait 联合事务、实际签验与传输授权交接继续等待原安全门，以上进展不构成 SW-G2 通过。

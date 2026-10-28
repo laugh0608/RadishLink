@@ -1,6 +1,6 @@
 # Node 数据 envelope
 
-日期：2026-10-24。状态：**D15 已由 [ADR 0007](../adr/0007-node-envelope-and-control-budget.md) 接受；完整实现与运行仍待验证**。面向协议与安全实现评审，补齐 [ADR 0006 D12](../adr/0006-node-identity-and-control-profile.md) 的数据核心、MLS AAD 和 receipt 摘要输入。本文不修改 SW-G1、历史 harness/profile、Node schema 或密码依赖，不宣告完整通信协议通过。
+日期：2026-10-24。状态：**D15 已由 [ADR 0007](../adr/0007-node-envelope-and-control-budget.md) 接受；完整实现与运行仍待验证**。面向协议与安全实现评审，补齐 [ADR 0006 D12](../adr/0006-node-identity-and-control-profile.md) 的数据核心、MLS AAD 和 receipt 摘要输入。本协议定义不修改 SW-G1、历史 harness/profile 或密码依赖；Node 持久映射的实施进展单独列于下文，不宣告完整通信协议通过。
 
 ## 范围与已接受约束
 
@@ -54,7 +54,7 @@ CoreV1 = [1, 1, activity_id, origin_id, origin_credential_ref,
 | `priority` | uint 0；本期普通文字只有一个优先级，不接收自封的紧急等级 |
 | `content_type` | uint 1，UTF-8 文字；未知值拒绝 |
 
-所有相加、长度换算和数据库表示均检查溢出；`originated_at_ms + lifetime_ms` 必须不超过有符号 64-bit 上限。epoch 必须用无损表示，不能直接强转 SQLite signed INTEGER；将来的持久映射需明确版本与迁移。
+所有相加、长度换算和数据库表示均检查溢出；`originated_at_ms + lifetime_ms` 必须不超过有符号 64-bit 上限。epoch 必须用无损表示，不能直接强转 SQLite signed INTEGER；现有 schema v5 起使用 8-byte big-endian BLOB 无损持久化，见下文内部映射。
 
 CoreV1 在上述最大值下为 216 bytes。最大数据 body 为 61704 bytes，含前缀为 **61708 bytes**，小于 65536；512-byte core 校验上限不是额外字段的许可。61440-byte 密文上限是准入界限，不是正常开销估计或最低分配量。超过任何一层上限即拒绝，不隐式分片或提高总 frame 上限。
 

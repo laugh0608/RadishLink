@@ -6,6 +6,8 @@
 - 授权：所有者本次明确要求实施 D16 控制状态持久化、容量预留、尝试预算，完成必要验证并同步文档；随后明确要求提交工作区更改，本批实现与文档随本次本地提交保存，不包含远程写入
 - 风险：L2，涉及持久化版本、容量兼容性与安全状态基础；不开放现有生产入口
 
+截至 2026-10-28 日终，当前实现已推进至 [schema v8 活动生命周期](node-activity-lifecycle.md)。本页版本、迁移与测试数字保留该批次时点；当前迁移须旧活动已停用，旧 session/动作隔离，不沿用本页早期版本可继续旧活动的行为。完整接续见[当天回顾](../status/2026-10-28-progress.md)。
+
 ## 实际交付与接口前置
 
 新增 `node/src/store/control_types.rs`、`control_state.rs`、`control_objects.rs`、`control_scheduling.rs`、`migration_v4.sql`，在现有 `Store`、单拥有者锁和 `atomic` 事务中实现。复用既有 `Batch::merge`、128 事件上限、时钟隔离、错误与提交故障机制；没有另建服务、runner 或数据库，也没有改动 I1 数据重试时槽。
@@ -81,6 +83,6 @@ git diff --check
 
 ## 接续与停止线
 
-本批之后于同日完成 [schema v5 / D15 字段与时间迁移](node-data-persistence.md)，原始 core、复合身份、uint64 epoch 和 UTC 区间/同 boot deadline 已有有限离线验证；随后完成[业务政策关联](node-business-policy.md)的内部检查与持久停止。同日又完成[共享外发额度/责任轮转](node-outbound-scheduling.md)的 schema v7 内部接线。新活动重新配对、真实签验/联合事务、完整控制入口与真实传输公平仍须在各自前置范围内接续，不通过增加合成 helper 冒充安全闭环。
+本批之后于同日完成 [schema v5 / D15 字段与时间迁移](node-data-persistence.md)，原始 core、复合身份、uint64 epoch 和 UTC 区间/同 boot deadline 已有有限离线验证；随后完成[业务政策关联](node-business-policy.md)的内部检查与持久停止。同日又完成[共享外发额度/责任轮转](node-outbound-scheduling.md)的 schema v7 内部接线。跨 boot 新活动及真实配对、真实签验/联合事务、完整控制入口与真实传输公平仍须在各自前置范围内接续，不通过增加合成 helper 冒充安全闭环。
 
 本批没有修改 manifest/lock、固定密码图、历史实验合同、I5 入口、公共 Service 发送能力或根协作规则；没有运行 G1/G2、Phase B、正式矩阵、设备/VM/网络、采购或射频操作。许可证/R2、可信平台、I5 资源、HW/RF 停止线保持。

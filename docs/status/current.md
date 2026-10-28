@@ -52,7 +52,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 ## 当前优先级
 
-2026-10-24 已接受 ADR 0004—0007 的 D1—D16，Node 服务/事务、证明生命周期及外层 framing 的沿革见[日终回顾](2026-10-24-progress.md)。2026-10-28 的 [D16 控制持久化](../testing/node-control-persistence.md)已本地提交为 `9c75025`。[D15 数据持久化与保守时间](../testing/node-data-persistence.md)已按本次要求提交为 `f7969d2`。随后完成的 [schema v6 业务责任与控制政策关联](../testing/node-business-policy.md)已提交为 `62e0823`。[schema v7 共享外发额度与责任轮转](../testing/node-outbound-scheduling.md)已提交为 `0a77399`。接续完成[控制入站准入与有界验签等待](../testing/node-control-ingress.md)：邻居/全局空桶限速、等待及已分发任务共 16 槽、原字节/通道/政策关联与验证后原子接纳；schema 保持 v7，串行 154 库测试与 2 CLI 测试、fmt/Clippy 通过，入站准入批次已提交为 `bf99955`。上一批并行全量再次出现的 `store owner lock` Busy 根因仍未确认，本批串行结果不消除该风险；生产 run 仍拒绝。随后所有者接受 [ADR 0008 D17](../adr/0008-node-activity-lifecycle.md)，完成 [schema v8 活动生命周期与有界归档](../testing/node-activity-lifecycle.md)：旧活动保留、满额拒绝、同 boot 原子切换、旧 session/动作隔离及显式迁移；串行 172 库测试 + 2 CLI 测试、fmt/Clippy 通过，本生命周期批次按所有者本次要求随本次本地提交保存。
+2026-10-28 已完成并提交 D15/D16 持久边界、业务政策关联、共享外发、控制入站及 D17 同 boot 活动生命周期，当前为 schema v8，最新实现 `c7008eb`。最终串行 172 库测试 + 2 CLI 测试、fmt/Clippy 通过；只覆盖自有合成离线边界，生产 run 仍拒绝。此前并行 `store owner lock` Busy 根因未确认。六个实现提交、代码/文档核对及[接下来的事项](2026-10-28-progress.md#接下来的事项)见[当天回顾](2026-10-28-progress.md)。
 
 [帧边界与 G0 输入准备](../testing/node-framing-and-graph-inputs.md)仅覆盖 4 邻居/64 KiB/10 秒组装及 7957-byte 可复现审阅包。framing 未接入 transport/Service；D15/D16 内部持久字段已实施，业务身份与活动/撤销已在内部事务关联；共享外发/轮转及 kind 2/3 入站限速/有界等待已完成内部接线，真实输入路由/验证工作池、就绪集合枚举/传输公平、跨 boot 新活动与真实配对/签验仍缺，严格 CBOR/MLS 未接入；[新图 G1/G2](../testing/node-security-graph-review-package.md)缺真实硬资源、网络和进程监督证据，未执行。许可证/R2、Phase B、可信平台和真实运行停止线不变。
 
