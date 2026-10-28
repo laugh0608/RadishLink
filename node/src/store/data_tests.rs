@@ -247,7 +247,16 @@ fn migration_keeps_legacy_facts_and_disables_every_output_path() {
     let mut s = Store::migrate_v4(&w.dir, Limits::default(), clock(1)).unwrap();
     assert_eq!(s.usage().unwrap().records, prior.records);
     assert_eq!(s.history(0, 100).unwrap().len(), 2);
-    assert!(s.action("ui", 1, "a").unwrap().is_some());
+    assert_eq!(s.action("ui", 1, "a").unwrap_err().code, Code::Expired);
+    assert_eq!(
+        s.conn
+            .query_row("SELECT count(*) FROM actions WHERE scope='ui'", [], |r| r
+                .get::<_, i64>(
+                0
+            ))
+            .unwrap(),
+        1
+    );
     assert!(s.message_core("relay").unwrap().is_none());
     assert_eq!(
         s.message_remaining_ms("origin").unwrap_err().code,
@@ -296,8 +305,8 @@ fn migration_keeps_legacy_facts_and_disables_every_output_path() {
     );
     let mut new = relay("new");
     new.expected_policy_revision = 0;
-    s.receive(new).unwrap();
-    assert!(s.message_core("new").unwrap().is_some());
+    assert_eq!(s.receive(new).unwrap_err().code, Code::Conflict);
+    assert!(s.message_core("new").unwrap().is_none());
     drop(s);
     assert_eq!(
         Store::migrate_v4(&w.dir, Limits::default(), clock(2))
@@ -343,7 +352,7 @@ fn migration_failure_and_cross_boot_leave_v4_intact() {
         let version: i64 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, if kind == "after" { 7 } else { 4 });
+        assert_eq!(version, if kind == "after" { 8 } else { 4 });
         let has: bool = conn
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='message_data')",

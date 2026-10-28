@@ -1,20 +1,21 @@
 use super::*;
 
 impl Store {
-    fn update_security(&self, u: &SecurityUpdate) -> Result<()> {
+    fn update_security(&self, activity: ActivityId, u: &SecurityUpdate) -> Result<()> {
         u.validate()?;
+        self.control_live(&activity, self.clock.monotonic_ms)?;
         let revision: Option<i64> = self
             .conn
             .query_row(
-                "SELECT revision FROM security_states WHERE session=?1",
-                [&u.session],
+                "SELECT revision FROM security_states WHERE session=?1 AND activity=?2",
+                params![u.session, activity.as_slice()],
                 |r| r.get(0),
             )
             .optional()?;
         if revision.unwrap_or(0) != u.expected_revision {
             return Err(Error::new(Code::Conflict, "security revision"));
         }
-        self.conn.execute("INSERT INTO security_states VALUES(?1,?2,?3) ON CONFLICT(session) DO UPDATE SET revision=excluded.revision,state=excluded.state",params![u.session,u.expected_revision+1,u.state])?;
+        self.conn.execute("INSERT INTO security_states(activity,session,revision,state) VALUES(?4,?1,?2,?3) ON CONFLICT(activity,session) DO UPDATE SET revision=excluded.revision,state=excluded.state",params![u.session,u.expected_revision+1,u.state,activity.as_slice()])?;
         #[cfg(test)]
         if self.fault == Some(TestFault::AfterSecurity) {
             return Err(Error::new(
@@ -134,7 +135,7 @@ impl Store {
                 Some(&send.neighbor),
                 s.clock.monotonic_ms,
             )?;
-            s.update_security(&send.security)?;
+            s.update_security(send.message.data.identity.activity_id, &send.security)?;
             s.insert_message(
                 &send.message,
                 Role::Origin,
@@ -251,7 +252,7 @@ impl Store {
                 s.clock.monotonic_ms,
             )?;
             if let Some(u) = &receive.security {
-                s.update_security(u)?;
+                s.update_security(receive.message.data.identity.activity_id, u)?;
             }
             s.insert_message(
                 &receive.message,

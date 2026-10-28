@@ -11,3 +11,4 @@ ADR 记录已经接受并会长期影响实现的架构选择。研究候选、�
 | [0005](0005-node-security-integration.md) | Node 安全接入、撤销与证据寿命 | Accepted |
 | [0006](0006-node-identity-and-control-profile.md) | Node 活动身份与控制证明 profile | Accepted |
 | [0007](0007-node-envelope-and-control-budget.md) | Node 数据 envelope 与控制传播预算 | Accepted |
+| [0008](0008-node-activity-lifecycle.md) | Node 活动作用域与有界归档 | Accepted |

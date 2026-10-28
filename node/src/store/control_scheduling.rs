@@ -48,7 +48,7 @@ impl Store {
         batch: Batch,
     ) -> Result<ControlDecision> {
         let NeighborState{start,mut slot,mut recovery,last_recovery,mut link_up,mut terminal,mut attempts,acks,last_ms,last_event} = self.conn.query_row(
-            "SELECT start,next_slot,recoveries,last_recovery,link_up,terminal,attempts,ack_attempts,last_ms,last_event FROM control_neighbors WHERE object=?1 AND participant=?2",
+            "SELECT start,next_slot,recoveries,last_recovery,link_up,terminal,attempts,ack_attempts,last_ms,last_event FROM current_control_neighbors WHERE object=?1 AND participant=?2",
             params![object.as_slice(),neighbor.as_slice()],
             |r|Ok(NeighborState{start:r.get(0)?,slot:r.get(1)?,recovery:r.get(2)?,last_recovery:r.get(3)?,link_up:r.get(4)?,terminal:r.get(5)?,attempts:r.get(6)?,acks:r.get(7)?,last_ms:r.get(8)?,last_event:r.get(9)?})
         )?;
@@ -109,7 +109,7 @@ impl Store {
             }
             terminal |= slot == 8 && recovery == 2;
         }
-        self.conn.execute("UPDATE control_neighbors SET next_slot=?3,recoveries=?4,last_recovery=?5,link_up=?6,terminal=?7,attempts=?8,last_ms=?9,last_event=?10 WHERE object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice(),slot,recovery,recovered_at,link_up,terminal,attempts,batch.now_ms,encoded])?;
+        self.conn.execute("UPDATE control_neighbors SET next_slot=?3,recoveries=?4,last_recovery=?5,link_up=?6,terminal=?7,attempts=?8,last_ms=?9,last_event=?10 WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice(),slot,recovery,recovered_at,link_up,terminal,attempts,batch.now_ms,encoded])?;
         Ok(ControlDecision {
             object,
             neighbor,
@@ -135,7 +135,7 @@ impl Store {
             return Ok(false);
         }
         let (kind, issuer, reporter): (i64, Vec<u8>, Vec<u8>) = self.conn.query_row(
-            "SELECT kind,issuer,reporter FROM control_objects WHERE reference=?1",
+            "SELECT kind,issuer,reporter FROM current_control_objects WHERE reference=?1",
             [object.as_slice()],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )?;
@@ -144,7 +144,7 @@ impl Store {
             return Ok(false);
         }
         let issuer_active: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM control_bindings WHERE credential=?1 AND state='active')",
+            "SELECT EXISTS(SELECT 1 FROM current_control_bindings WHERE credential=?1 AND state='active')",
             [issuer],
             |r| r.get(0),
         )?;
@@ -156,7 +156,7 @@ impl Store {
         neighbor: ParticipantId,
     ) -> Result<Option<ControlProgress>> {
         self.readable()?;
-        Ok(self.conn.query_row("SELECT next_slot,recoveries,attempts,ack_attempts,terminal FROM control_neighbors WHERE object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice()],|r|Ok(ControlProgress{slots_consumed:r.get(0)?,recoveries_consumed:r.get(1)?,attempts:r.get(2)?,ack_attempts:r.get(3)?,terminal:r.get(4)?})).optional()?)
+        Ok(self.conn.query_row("SELECT next_slot,recoveries,attempts,ack_attempts,terminal FROM current_control_neighbors WHERE object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice()],|r|Ok(ControlProgress{slots_consumed:r.get(0)?,recoveries_consumed:r.get(1)?,attempts:r.get(2)?,ack_attempts:r.get(3)?,terminal:r.get(4)?})).optional()?)
     }
     /// No unknown-object ACK state is created. Authentication and final handoff remain external.
     pub fn consume_control_ack(
@@ -182,7 +182,7 @@ impl Store {
         clock: &Clock,
     ) -> Result<bool> {
         let activity: Vec<u8> = self.conn.query_row(
-            "SELECT activity FROM control_activity WHERE id=1",
+            "SELECT activity FROM current_control_activity WHERE id=1",
             [],
             |r| r.get(0),
         )?;
@@ -196,7 +196,7 @@ impl Store {
         let count: Option<u8> = self
             .conn
             .query_row(
-                "SELECT ack_attempts FROM control_neighbors WHERE object=?1 AND participant=?2",
+                "SELECT ack_attempts FROM current_control_neighbors WHERE object=?1 AND participant=?2",
                 params![object.as_slice(), neighbor.as_slice()],
                 |r| r.get(0),
             )
@@ -204,7 +204,7 @@ impl Store {
         if count.is_none_or(|n| n >= 10) || !self.charge_control_output(clock.monotonic_ms, 127)? {
             return Ok(false);
         }
-        self.conn.execute("UPDATE control_neighbors SET ack_attempts=ack_attempts+1 WHERE object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice()])?;
+        self.conn.execute("UPDATE control_neighbors SET ack_attempts=ack_attempts+1 WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND object=?1 AND participant=?2",params![object.as_slice(),neighbor.as_slice()])?;
         Ok(true)
     }
     pub(super) fn charge_control_output(&self, now: i64, bytes: i64) -> Result<bool> {

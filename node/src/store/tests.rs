@@ -728,6 +728,7 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
 
 /// Reconstruct an actual v3 schema for legacy migration tests, without v4 tables.
 pub(crate) fn strip_v7(s: &Store) {
+    super::activity_tests::strip_v8(s, true);
     s.conn.execute_batch("ALTER TABLE messages DROP COLUMN data_ack_budget; ALTER TABLE control_output_rate DROP COLUMN exit_cursor; ALTER TABLE control_output_rate DROP COLUMN ordinary_cursor; PRAGMA user_version=6;").unwrap();
 }
 pub(crate) fn strip_v6(s: &Store) {

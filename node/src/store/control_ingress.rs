@@ -153,7 +153,7 @@ impl Store {
         let raw: Option<Vec<u8>> = self
             .conn
             .query_row(
-                "SELECT participant FROM control_bindings WHERE credential=?1 AND state='active'",
+                "SELECT participant FROM current_control_bindings WHERE credential=?1 AND state='active'",
                 [neighbor.as_slice()],
                 |r| r.get(0),
             )
@@ -188,7 +188,7 @@ impl Store {
         }
         // The bounded saved object set is the only verified-byte cache; claimed object refs
         // and hashes from unverified input are never used to skip verification.
-        let known:Option<(Vec<u8>,bool)>=self.conn.query_row("SELECT o.reference,(o.kind=2 OR b.state='active') FROM control_objects o JOIN control_bindings b ON b.credential=o.issuer WHERE o.body=?1",[bytes],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let known:Option<(Vec<u8>,bool)>=self.conn.query_row("SELECT o.reference,(o.kind=2 OR b.state='active') FROM current_control_objects o JOIN current_control_bindings b ON b.credential=o.issuer WHERE o.body=?1",[bytes],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
         if let Some((reference, allowed)) = known {
             if !allowed {
                 return Err(Error::new(Code::Conflict, "known control issuer inactive"));

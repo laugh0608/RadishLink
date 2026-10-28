@@ -27,10 +27,11 @@ impl Store {
             return Err(Error::new(Code::InvalidInput, "control activity lifetime"));
         }
         self.atomic(|s| {
-            let exists: bool = s.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_activity)", [], |r|r.get(0))?;
+            let exists: bool = s.conn.query_row("SELECT EXISTS(SELECT 1 FROM current_control_activity)", [], |r|r.get(0))?;
             if exists { return Err(Error::new(Code::Conflict,"activity already assigned; no restart")); }
             s.write_clock(&s.clock)?;
             s.conn.execute("INSERT INTO control_activity(id,activity,local_participant,boot,started,deadline) VALUES(1,?1,?2,?3,?4,?5)",params![activity.as_slice(),local.as_slice(),s.clock.boot,now,deadline])?;
+            s.conn.execute("UPDATE meta SET current_activity=?1 WHERE id=1",[activity.as_slice()])?;
             s.conn.execute("INSERT INTO control_output_rate(id,last_ms,frames,bytes) VALUES(1,?1,0,0)",[now])?;
             Ok(())
         })
@@ -38,7 +39,7 @@ impl Store {
     pub(super) fn control_live(&self, activity: &ActivityId, now: i64) -> Result<ParticipantId> {
         self.writable()?;
         let row = self.conn.query_row(
-            "SELECT activity,local_participant,boot,deadline,stopped FROM control_activity WHERE id=1",
+            "SELECT activity,local_participant,boot,deadline,stopped FROM current_control_activity WHERE id=1",
             [], |r| Ok(ActivityRecord {activity:r.get(0)?,local:r.get(1)?,boot:r.get(2)?,deadline:r.get(3)?,stopped:r.get(4)?})
         ).optional()?;
         let ActivityRecord {
@@ -66,7 +67,7 @@ impl Store {
         self.policy_atomic(|s| {
             s.control_live(&activity, s.clock.monotonic_ms)?;
             let (start, old): (i64, i64) = s.conn.query_row(
-                "SELECT started,deadline FROM control_activity WHERE id=1",
+                "SELECT started,deadline FROM current_control_activity WHERE id=1",
                 [],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )?;
@@ -77,7 +78,7 @@ impl Store {
                 ));
             }
             s.conn.execute(
-                "UPDATE control_activity SET deadline=?1 WHERE id=1",
+                "UPDATE control_activity SET deadline=?1 WHERE activity=(SELECT current_activity FROM meta WHERE id=1)",
                 [deadline],
             )?;
             s.business_policy_changed()
@@ -86,7 +87,7 @@ impl Store {
     pub fn stop_control_activity(&mut self, activity: ActivityId) -> Result<()> {
         self.policy_atomic(|s| {
             let count = s.conn.execute(
-                "UPDATE control_activity SET stopped=1 WHERE id=1 AND activity=?1",
+                "UPDATE control_activity SET stopped=1 WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND activity=?1",
                 [activity.as_slice()],
             )?;
             if count != 1 {
@@ -110,18 +111,20 @@ impl Store {
         self.atomic(|s| {
             s.control_live(&activity,s.clock.monotonic_ms)?;
             s.reject_local_retirement()?;
-            let prior:Option<(Vec<u8>,u32,Vec<u8>)>=s.conn.query_row("SELECT participant,generation,body FROM control_bindings WHERE credential=?1",[binding.credential.as_slice()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
+            let prior:Option<(Vec<u8>,u32,Vec<u8>)>=s.conn.query_row("SELECT participant,generation,body FROM current_control_bindings WHERE credential=?1",[binding.credential.as_slice()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
             if let Some((p,g,b))=prior {
                 if p==binding.participant && g==binding.generation && b==binding.body { return Ok(()); }
                 return Err(Error::new(Code::Conflict,"credential binding mismatch"));
             }
-            let latest:i64=s.conn.query_row("SELECT coalesce(max(generation),0) FROM control_bindings WHERE participant=?1 AND state!='pending'",[binding.participant.as_slice()],|r|r.get(0))?;
+            let reused:bool=s.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_bindings WHERE activity!=?1 AND (participant=?2 OR credential=?3)) OR EXISTS(SELECT 1 FROM control_activity WHERE activity!=?1 AND local_participant=?2)", params![activity.as_slice(),binding.participant.as_slice(),binding.credential.as_slice()],|r|r.get(0))?;
+            if reused { return Err(Error::new(Code::Conflict,"identity belongs to an earlier activity")); }
+            let latest:i64=s.conn.query_row("SELECT coalesce(max(generation),0) FROM current_control_bindings WHERE participant=?1 AND state!='pending'",[binding.participant.as_slice()],|r|r.get(0))?;
             if i64::from(binding.generation)!=latest+1 {
                 return Err(Error::new(Code::Conflict,"nonconsecutive credential generation"));
             }
-            let pending:bool=s.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_bindings WHERE participant=?1 AND state='pending')",[binding.participant.as_slice()],|r|r.get(0))?;
+            let pending:bool=s.conn.query_row("SELECT EXISTS(SELECT 1 FROM current_control_bindings WHERE participant=?1 AND state='pending')",[binding.participant.as_slice()],|r|r.get(0))?;
             if pending { return Err(Error::new(Code::Conflict,"pending binding already assigned")); }
-            s.conn.execute("INSERT INTO control_bindings VALUES(?1,?2,?3,?4,'pending')",params![binding.credential.as_slice(),binding.participant.as_slice(),binding.generation,binding.body])?;
+            s.conn.execute("INSERT INTO control_bindings(activity,credential,participant,generation,body,state) VALUES((SELECT current_activity FROM meta WHERE id=1),?1,?2,?3,?4,'pending')",params![binding.credential.as_slice(),binding.participant.as_slice(),binding.generation,binding.body])?;
             Ok(())
         })
     }
@@ -135,14 +138,14 @@ impl Store {
         self.policy_atomic(|s| {
             s.control_live(&activity,s.clock.monotonic_ms)?;
             s.reject_local_retirement()?;
-            let (p,g,b,state):(Vec<u8>,i64,Vec<u8>,String)=s.conn.query_row("SELECT participant,generation,body,state FROM control_bindings WHERE credential=?1",[credential.as_slice()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
+            let (p,g,b,state):(Vec<u8>,i64,Vec<u8>,String)=s.conn.query_row("SELECT participant,generation,body,state FROM current_control_bindings WHERE credential=?1",[credential.as_slice()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional()?.ok_or_else(||Error::new(Code::Conflict,"current binding missing"))?;
             if b!=expected_body { return Err(Error::new(Code::Conflict,"pairing confirmation binding")); }
             if state=="active" { return Ok(()); }
             if state!="pending" { return Err(Error::new(Code::Conflict,"binding cannot be reactivated")); }
-            let latest:i64=s.conn.query_row("SELECT coalesce(max(generation),0) FROM control_bindings WHERE participant=?1 AND state!='pending'",[p.as_slice()],|r|r.get(0))?;
+            let latest:i64=s.conn.query_row("SELECT coalesce(max(generation),0) FROM current_control_bindings WHERE participant=?1 AND state!='pending'",[p.as_slice()],|r|r.get(0))?;
             if g!=latest+1 { return Err(Error::new(Code::Conflict,"credential activation order")); }
-            s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE participant=?1 AND state='active'",[p.as_slice()])?;
-            s.conn.execute("UPDATE control_bindings SET state='active' WHERE credential=?1",[credential.as_slice()])?;
+            s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND participant=?1 AND state='active'",[p.as_slice()])?;
+            s.conn.execute("UPDATE control_bindings SET state='active' WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND credential=?1",[credential.as_slice()])?;
             s.business_policy_changed()
         })
     }
@@ -154,7 +157,7 @@ impl Store {
     ) -> Result<()> {
         self.policy_atomic(|s| {
             s.control_live(&activity,s.clock.monotonic_ms)?;
-            let changed=s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE credential=?1 AND state!='pending'",[credential.as_slice()])?;
+            let changed=s.conn.execute("UPDATE control_bindings SET state='blocked' WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND credential=?1 AND state!='pending'",[credential.as_slice()])?;
             if changed!=1 { return Err(Error::new(Code::Conflict,"unknown verified credential")); }
             s.business_policy_changed()
         })
@@ -164,7 +167,7 @@ impl Store {
         let state: Option<String> = self
             .conn
             .query_row(
-                "SELECT state FROM control_bindings WHERE credential=?1",
+                "SELECT state FROM current_control_bindings WHERE credential=?1",
                 [credential.as_slice()],
                 |r| r.get(0),
             )
@@ -172,7 +175,7 @@ impl Store {
         state.map(|s| BindingState::parse(&s)).transpose()
     }
     pub(super) fn reject_local_retirement(&self) -> Result<()> {
-        let stopped:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_bindings b JOIN control_activity a ON b.participant=a.local_participant WHERE b.state='retiring') OR EXISTS(SELECT 1 FROM control_activity WHERE exit_credential IS NOT NULL)",[],|r|r.get(0))?;
+        let stopped:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM current_control_bindings b JOIN current_control_activity a ON b.participant=a.local_participant WHERE b.state='retiring') OR EXISTS(SELECT 1 FROM current_control_activity WHERE exit_credential IS NOT NULL)",[],|r|r.get(0))?;
         if stopped {
             return Err(Error::new(Code::Conflict, "local exit is irreversible"));
         }
@@ -186,7 +189,7 @@ impl Store {
         let state: Option<String> = self
             .conn
             .query_row(
-                "SELECT state FROM control_bindings WHERE credential=?1 AND participant=?2",
+                "SELECT state FROM current_control_bindings WHERE credential=?1 AND participant=?2",
                 params![credential.as_slice(), participant.as_slice()],
                 |r| r.get(0),
             )
@@ -197,14 +200,14 @@ impl Store {
     }
     pub(super) fn participant_active(&self, participant: &ParticipantId) -> Result<bool> {
         Ok(self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM control_bindings WHERE participant=?1 AND state='active')",
+            "SELECT EXISTS(SELECT 1 FROM current_control_bindings WHERE participant=?1 AND state='active')",
             [participant.as_slice()],
             |r| r.get(0),
         )?)
     }
     pub fn control_usage(&self) -> Result<ControlUsage> {
         self.readable()?;
-        let (bindings,objects,neighbors,aux):(u32,u32,u32,u32)=self.conn.query_row("SELECT (SELECT count(*) FROM control_bindings),(SELECT count(*) FROM control_objects),(SELECT count(*) FROM control_neighbors),(SELECT count(*) FROM control_activity)+(SELECT count(*) FROM control_output_rate)",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
+        let (bindings,objects,neighbors,aux):(u32,u32,u32,u32)=self.conn.query_row("SELECT (SELECT count(*) FROM current_control_bindings),(SELECT count(*) FROM current_control_objects),(SELECT count(*) FROM current_control_neighbors),(SELECT count(*) FROM current_control_activity)+(SELECT count(*) FROM control_output_rate)",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
         let (bindings, objects, neighbors, aux) = (
             u64::from(bindings),
             u64::from(objects),
@@ -233,12 +236,12 @@ impl Store {
         }
         let exceeded: bool = self.conn.query_row(
             "SELECT
-            (SELECT count(DISTINCT participant) FROM control_bindings)>5 OR
-            (SELECT count(*) FROM control_bindings WHERE state='pending')>5 OR
-            (SELECT count(*) FROM control_bindings WHERE state!='pending')>20 OR
-            (SELECT count(*) FROM control_objects WHERE kind=2)>20 OR
-            (SELECT count(*) FROM control_objects WHERE kind=3)>80 OR
-            EXISTS(SELECT 1 FROM control_neighbors GROUP BY object HAVING count(*)>4)",
+            (SELECT count(DISTINCT participant) FROM current_control_bindings)>5 OR
+            (SELECT count(*) FROM current_control_bindings WHERE state='pending')>5 OR
+            (SELECT count(*) FROM current_control_bindings WHERE state!='pending')>20 OR
+            (SELECT count(*) FROM current_control_objects WHERE kind=2)>20 OR
+            (SELECT count(*) FROM current_control_objects WHERE kind=3)>80 OR
+            EXISTS(SELECT 1 FROM current_control_neighbors GROUP BY object HAVING count(*)>4)",
             [],
             |r| r.get(0),
         )?;
@@ -246,18 +249,18 @@ impl Store {
             return Err(Error::new(Code::Quota, "D16 slot limit"));
         }
         let invalid:bool=self.conn.query_row("SELECT
-            ((SELECT count(*) FROM control_activity)!=(SELECT count(*) FROM control_output_rate)) OR
-            (EXISTS(SELECT 1 FROM control_bindings) AND NOT EXISTS(SELECT 1 FROM control_activity)) OR
-            EXISTS(SELECT 1 FROM control_activity a JOIN meta m ON m.id=1 WHERE a.boot!=m.boot OR a.started>m.monotonic_ms) OR
+            ((SELECT count(*) FROM current_control_activity)!=(SELECT count(*) FROM control_output_rate)) OR
+            (EXISTS(SELECT 1 FROM current_control_bindings) AND NOT EXISTS(SELECT 1 FROM current_control_activity)) OR
+            EXISTS(SELECT 1 FROM current_control_activity a JOIN meta m ON m.id=1 WHERE a.boot!=m.boot OR a.started>m.monotonic_ms) OR
             EXISTS(SELECT 1 FROM control_output_rate WHERE last_ms>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
-            EXISTS(SELECT 1 FROM control_activity a LEFT JOIN control_bindings b ON b.credential=a.exit_credential WHERE a.exit_credential IS NOT NULL AND (b.credential IS NULL OR b.participant!=a.local_participant OR b.state NOT IN ('retiring','blocked'))) OR
-            EXISTS(SELECT 1 FROM control_bindings b WHERE b.state='retiring' AND NOT EXISTS(SELECT 1 FROM control_activity a WHERE a.exit_credential=b.credential)) OR
-            EXISTS(SELECT 1 FROM control_objects o WHERE o.accepted>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
-            EXISTS(SELECT 1 FROM control_objects o JOIN control_bindings b ON b.credential=o.issuer WHERE o.kind=2 AND b.state!='blocked') OR
-            EXISTS(SELECT 1 FROM control_neighbors n JOIN control_objects o ON o.reference=n.object WHERE n.start<o.accepted OR n.start>(SELECT monotonic_ms FROM meta WHERE id=1) OR n.last_ms>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
-            EXISTS(SELECT 1 FROM control_bindings b WHERE b.generation!=(SELECT count(*) FROM control_bindings p WHERE p.participant=b.participant AND p.generation<=b.generation)) OR
-            EXISTS(SELECT 1 FROM control_objects o JOIN control_bindings i ON o.issuer=i.credential JOIN control_bindings t ON o.target=t.credential WHERE i.state='pending' OR t.state='pending' OR o.reporter!=i.participant OR (o.kind=3 AND i.participant=t.participant)) OR
-            EXISTS(SELECT 1 FROM control_neighbors n WHERE NOT EXISTS(SELECT 1 FROM control_bindings b WHERE b.participant=n.participant AND b.state!='pending') OR n.participant=(SELECT local_participant FROM control_activity))",
+            EXISTS(SELECT 1 FROM current_control_activity a LEFT JOIN current_control_bindings b ON b.credential=a.exit_credential WHERE a.exit_credential IS NOT NULL AND (b.credential IS NULL OR b.participant!=a.local_participant OR b.state NOT IN ('retiring','blocked'))) OR
+            EXISTS(SELECT 1 FROM current_control_bindings b WHERE b.state='retiring' AND NOT EXISTS(SELECT 1 FROM current_control_activity a WHERE a.exit_credential=b.credential)) OR
+            EXISTS(SELECT 1 FROM current_control_objects o WHERE o.accepted>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
+            EXISTS(SELECT 1 FROM current_control_objects o JOIN current_control_bindings b ON b.credential=o.issuer WHERE o.kind=2 AND b.state!='blocked') OR
+            EXISTS(SELECT 1 FROM current_control_neighbors n JOIN current_control_objects o ON o.reference=n.object WHERE n.start<o.accepted OR n.start>(SELECT monotonic_ms FROM meta WHERE id=1) OR n.last_ms>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
+            EXISTS(SELECT 1 FROM current_control_bindings b WHERE b.generation!=(SELECT count(*) FROM current_control_bindings p WHERE p.participant=b.participant AND p.generation<=b.generation)) OR
+            EXISTS(SELECT 1 FROM current_control_objects o JOIN current_control_bindings i ON o.issuer=i.credential JOIN current_control_bindings t ON o.target=t.credential WHERE i.state='pending' OR t.state='pending' OR o.reporter!=i.participant OR (o.kind=3 AND i.participant=t.participant)) OR
+            EXISTS(SELECT 1 FROM current_control_neighbors n WHERE NOT EXISTS(SELECT 1 FROM current_control_bindings b WHERE b.participant=n.participant AND b.state!='pending') OR n.participant=(SELECT local_participant FROM current_control_activity))",
             [],|r|r.get(0))?;
         if invalid {
             return Err(Error::new(Code::StoreCorrupt, "D16 persistent invariants"));

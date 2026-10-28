@@ -13,6 +13,10 @@ use std::{
     path::Path,
 };
 
+mod activity;
+pub use activity::{ActivityPreflight, ActivityStatus, ActivitySwitch};
+#[cfg(test)]
+mod activity_tests;
 mod outbound;
 pub use outbound::{OutboundDecision, OutboundEvent, OutboundReport};
 mod control_ingress;
@@ -83,6 +87,7 @@ enum OpenMode {
     MigrateV4,
     MigrateV5,
     MigrateV6,
+    MigrateV7,
     #[cfg(test)]
     MigrateV1Fault(TestFault),
     #[cfg(test)]
@@ -95,6 +100,8 @@ enum OpenMode {
     MigrateV5Fault(TestFault),
     #[cfg(test)]
     MigrateV6Fault(TestFault),
+    #[cfg(test)]
+    MigrateV7Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -182,6 +189,7 @@ impl Store {
         conn.execute_batch(include_str!("migration_v5.sql"))?;
         conn.execute_batch(include_str!("migration_v6.sql"))?;
         conn.execute_batch(include_str!("migration_v7.sql"))?;
+        conn.execute_batch(include_str!("migration_v8.sql"))?;
         let encoded = limits_json(&limits)?;
         conn.execute(
             "INSERT INTO meta(id,revision,boot,monotonic_ms,unix_ms,limits,unix_upper_ms) VALUES(1,0,?1,?2,?3,?4,?5)",
@@ -224,17 +232,21 @@ impl Store {
     pub fn migrate_v3(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV3)
     }
-    /// Explicit v4 -> v5. Legacy message records remain non-output-capable.
+    /// Explicit v4 -> current. Legacy message records remain non-output-capable.
     pub fn migrate_v4(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV4)
     }
-    /// Explicit v5 -> v6; existing messages acquire no inferred channel authority.
+    /// Explicit v5 -> current; existing messages acquire no inferred channel authority.
     pub fn migrate_v5(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV5)
     }
-    /// Explicit v6 -> v7; migrated messages cannot issue new data ACKs.
+    /// Explicit v6 -> current; migrated messages cannot issue new data ACKs.
     pub fn migrate_v6(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV6)
+    }
+    /// Explicit stopped v7 -> v8. No old session or action acquires inferred authority.
+    pub fn migrate_v7(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV7)
     }
     fn open_version(
         directory: &Path,
@@ -250,6 +262,7 @@ impl Store {
             OpenMode::MigrateV4 => Some(4),
             OpenMode::MigrateV5 => Some(5),
             OpenMode::MigrateV6 => Some(6),
+            OpenMode::MigrateV7 => Some(7),
             #[cfg(test)]
             OpenMode::MigrateV1Fault(_) => Some(1),
             #[cfg(test)]
@@ -262,6 +275,8 @@ impl Store {
             OpenMode::MigrateV5Fault(_) => Some(5),
             #[cfg(test)]
             OpenMode::MigrateV6Fault(_) => Some(6),
+            #[cfg(test)]
+            OpenMode::MigrateV7Fault(_) => Some(7),
         };
         limits.validate()?;
         clock.validate()?;
@@ -284,10 +299,10 @@ impl Store {
         let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if ![1, 2, 3, 4, 5, 6, 7].contains(&version) || app != APP_ID {
+        if ![1, 2, 3, 4, 5, 6, 7, 8].contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version < 7 && source_version.is_none() {
+        if version < 8 && source_version.is_none() {
             return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
         if source_version.is_some_and(|source| version != source) {
@@ -357,6 +372,7 @@ impl Store {
                 OpenMode::MigrateV4Fault(fault) => Some(fault),
                 OpenMode::MigrateV5Fault(fault) => Some(fault),
                 OpenMode::MigrateV6Fault(fault) => Some(fault),
+                OpenMode::MigrateV7Fault(fault) => Some(fault),
                 _ => None,
             },
         };
@@ -380,7 +396,21 @@ impl Store {
                 if version < 6 {
                     store.conn.execute_batch(include_str!("migration_v6.sql"))?;
                 }
-                store.conn.execute_batch(include_str!("migration_v7.sql"))?;
+                if version < 7 {
+                    store.conn.execute_batch(include_str!("migration_v7.sql"))?;
+                }
+                let running: bool = store.conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM control_activity WHERE stopped=0)",
+                    [],
+                    |r| r.get(0),
+                )?;
+                if running {
+                    return Err(Error::new(
+                        Code::Conflict,
+                        "stop activity using source version before lifecycle migration",
+                    ));
+                }
+                store.conn.execute_batch(include_str!("migration_v8.sql"))?;
                 store.write_clock(&store.clock)?;
                 store.check_queue_deadlines(false)?;
                 Ok(())
@@ -389,6 +419,7 @@ impl Store {
         s.check_quotas()?;
         s.check_reservations()?;
         s.check_control_invariants()?;
+        s.check_activity_invariants()?;
         s.check_data_invariants()?;
         s.check_business_invariants()?;
         s.check_outbound_invariants()?;
@@ -441,6 +472,7 @@ impl Store {
             self.check_quotas()?;
             self.check_reservations()?;
             self.check_control_invariants()?;
+            self.check_activity_invariants()?;
             self.check_data_invariants()?;
             Ok(v)
         });
@@ -517,15 +549,15 @@ impl Store {
                 self.limits.history_bytes as i64,
             ),
             (
-                "SELECT (SELECT count(*) FROM queues WHERE kind='evidence')+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
+                "SELECT (SELECT count(*) FROM queues WHERE kind='evidence')+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)+(SELECT records FROM activity_archive_usage)",
                 i64::from(self.limits.control_count - CONTROL_RESERVED_RECORDS),
             ),
             (
-                "SELECT (SELECT count(*)*4096 FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)+(SELECT count(*)*4096 FROM receipt_intents)",
+                "SELECT (SELECT count(*)*4096 FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)+(SELECT count(*)*4096 FROM receipt_intents)+(SELECT bytes FROM activity_archive_usage)",
                 (self.limits.control_bytes - CONTROL_RESERVED_BYTES) as i64,
             ),
             (
-                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
+                "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)+(SELECT records FROM activity_archive_usage)",
                 i64::from(self.limits.record_count - CONTROL_RESERVED_RECORDS),
             ),
             (
@@ -617,7 +649,7 @@ impl Store {
         let current: Option<i64> = self
             .conn
             .query_row(
-                "SELECT generation FROM action_scopes WHERE scope=?1",
+                "SELECT s.generation FROM action_scopes s JOIN current_control_activity a ON a.activity=s.activity WHERE s.scope=?1 AND s.retired=0 AND a.stopped=0",
                 [scope],
                 |r| r.get(0),
             )
@@ -630,8 +662,12 @@ impl Store {
     pub fn create_action_scope(&mut self, scope: &str) -> Result<()> {
         check_ref(scope)?;
         self.atomic(|s| {
-            s.conn
-                .execute("INSERT INTO action_scopes VALUES(?1,1)", [scope])?;
+            let activity = s.current_activity_id()?;
+            s.control_live(&activity, s.clock.monotonic_ms)?;
+            s.conn.execute(
+                "INSERT INTO action_scopes(scope,generation,activity,retired) VALUES(?1,1,?2,0)",
+                params![scope, activity.as_slice()],
+            )?;
             Ok(())
         })
     }
@@ -646,8 +682,6 @@ impl Store {
                 "UPDATE action_scopes SET generation=generation+1 WHERE scope=?1",
                 [scope],
             )?;
-            s.conn
-                .execute("DELETE FROM actions WHERE scope=?1", [scope])?;
             Ok(())
         })
     }

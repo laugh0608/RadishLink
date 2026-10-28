@@ -498,8 +498,8 @@ fn v5_messages_are_not_promoted_to_verified_policy_by_migration_or_duplicate() {
     );
     let mut new = relay("new");
     new.expected_policy_revision = 0;
-    s.receive(new).unwrap();
-    assert!(!s.message("new").unwrap().unwrap().policy_stopped);
+    assert_eq!(s.receive(new).unwrap_err().code, Code::Conflict);
+    assert!(s.message("new").unwrap().is_none());
 }
 
 #[test]
@@ -647,7 +647,7 @@ fn process_exit_recovers_policy_marker_binding_object_and_revision_together() {
                 assert_eq!(
                     conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                         .unwrap(),
-                    if committed { 7 } else { 5 }
+                    if committed { 8 } else { 5 }
                 );
                 drop(conn);
             }

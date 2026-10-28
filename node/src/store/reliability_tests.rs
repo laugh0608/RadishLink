@@ -37,9 +37,18 @@ fn old_store_requires_explicit_atomic_migration_and_preserves_records() {
     let s = Store::migrate_v1(&w.dir, Limits::default(), clock(1)).unwrap();
     assert_eq!(s.usage().unwrap().reserved_control_count, 1);
     assert_eq!(s.history(0, 100).unwrap().len(), 1);
-    assert!(s.action("ui", 1, "a").unwrap().is_some());
+    assert_eq!(s.action("ui", 1, "a").unwrap_err().code, Code::Expired);
+    assert_eq!(
+        s.conn
+            .query_row("SELECT count(*) FROM actions WHERE scope='ui'", [], |r| r
+                .get::<_, i64>(
+                0
+            ))
+            .unwrap(),
+        1
+    );
     drop(s);
-    assert_eq!(version(&w), 7);
+    assert_eq!(version(&w), 8);
     assert!(Store::migrate_v1(&w.dir, Limits::default(), clock(2)).is_err());
     let mut s = w.reopen(2);
     assert_eq!(
@@ -243,7 +252,7 @@ fn migration_crash_child() {
 
 #[test]
 fn migration_process_exit_preserves_old_or_new_schema_without_partial_reservation() {
-    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 7)] {
+    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 8)] {
         let w = Workspace::new();
         let mut s = w.create();
         s.receive(relay("one")).unwrap();

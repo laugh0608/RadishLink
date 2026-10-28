@@ -132,7 +132,7 @@ impl Store {
                 }
                 let is_exit = if let Responsibility::Control(object, _) = &key {
                     s.conn.query_row(
-                        "SELECT kind=2 FROM control_objects WHERE reference=?1",
+                        "SELECT kind=2 FROM current_control_objects WHERE reference=?1",
                         [object.as_slice()],
                         |r| r.get::<_, bool>(0),
                     )?
@@ -234,7 +234,7 @@ impl Store {
     }
     fn outbound_activity(&self) -> Result<ActivityId> {
         let raw: Vec<u8> = self.conn.query_row(
-            "SELECT activity FROM control_activity WHERE id=1",
+            "SELECT activity FROM current_control_activity WHERE id=1",
             [],
             |r| r.get(0),
         )?;
@@ -316,7 +316,7 @@ impl Store {
         let local = self.control_live(&self.outbound_activity()?, clock.monotonic_ms)?;
         let credential = self.active_business_neighbor(neighbor, &local)?;
         let raw: Vec<u8> = self.conn.query_row(
-            "SELECT participant FROM control_bindings WHERE credential=?1",
+            "SELECT participant FROM current_control_bindings WHERE credential=?1",
             [credential.as_slice()],
             |r| r.get(0),
         )?;
@@ -356,7 +356,7 @@ impl Store {
             .collect::<std::result::Result<Vec<_>, _>>()?;
         for key in keys {
             for slot in self.ack_slots(&key)?.expect("selected non-null") {
-                let known:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_bindings b JOIN control_activity a ON b.participant!=a.local_participant WHERE b.participant=?1 AND b.state!='pending')",[slot.participant.as_slice()],|r|r.get(0))?;
+                let known:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_bindings b JOIN control_activity a ON b.activity=a.activity JOIN message_data d ON d.activity_id=a.activity WHERE d.message_key=?2 AND b.participant!=a.local_participant AND b.participant=?1 AND b.state!='pending')",params![slot.participant.as_slice(),key],|r|r.get(0))?;
                 if !known {
                     return Err(Error::new(
                         Code::StoreCorrupt,

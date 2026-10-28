@@ -30,6 +30,8 @@ pub struct Usage {
     pub records: u64,
     /// Fixed D16 reservation and actual usage, separate from business proof reservations.
     pub security_control: ControlUsage,
+    pub archived_control_bytes: u64,
+    pub archived_control_records: u64,
     /// Only the main SQLite file; excludes journal, filesystem and process memory.
     pub database_bytes: u64,
 }
@@ -83,7 +85,10 @@ impl Store {
             )?,
             records: scalar(
                 "SELECT (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)",
-            )? + security_control.used_records,
+            )? + security_control.used_records
+                + scalar("SELECT records FROM activity_archive_usage")?,
+            archived_control_bytes: scalar("SELECT bytes FROM activity_archive_usage")?,
+            archived_control_records: scalar("SELECT records FROM activity_archive_usage")?,
             security_control,
             database_bytes: scalar(
                 "SELECT page_count*page_size FROM pragma_page_count(),pragma_page_size()",

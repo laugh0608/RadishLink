@@ -399,16 +399,18 @@ fn migration_requires_v6_and_does_not_invent_ack_allowance() {
             .err()
             .unwrap()
             .code,
-        Code::UnsupportedVersion
+        Code::Conflict
     );
-    assert!(!s.message("old").unwrap().unwrap().policy_stopped);
-    prepare_receipt(&mut s, "new", 10);
-    assert_eq!(
-        sent(
-            &s.process_outbound_batch(clock(1250), vec![ack("new")])
-                .unwrap()
-        ),
-        1
+    assert!(s.message("old").unwrap().unwrap().policy_stopped);
+    assert!(
+        s.conn
+            .query_row(
+                "SELECT data_ack_budget FROM messages WHERE key='old'",
+                [],
+                |r| r.get::<_, Option<String>>(0)
+            )
+            .unwrap()
+            .is_none()
     );
 }
 
@@ -549,7 +551,7 @@ fn migration_fault_and_corrupt_ack_or_cursor_are_rejected() {
             if fault == TestFault::BeforeCommit {
                 6
             } else {
-                7
+                8
             }
         );
     }
@@ -676,7 +678,7 @@ fn process_exit_recovers_all_mixed_charges_or_none_and_explicit_migration() {
                 assert_eq!(
                     conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                         .unwrap(),
-                    if committed { 7 } else { 6 }
+                    if committed { 8 } else { 6 }
                 );
             } else {
                 let (frames, bytes, last, cursor): (i64, i64, i64, Option<String>) = conn

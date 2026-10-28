@@ -433,7 +433,7 @@ fn v2_migration_shortens_deadline_without_refunding_consumed_retries() {
         Code::UnsupportedVersion
     );
     drop(s);
-    assert_eq!(version(&w), 7);
+    assert_eq!(version(&w), 8);
     assert_eq!(
         Store::migrate_v2(&w.dir, Limits::default(), clock(2))
             .err()
@@ -603,7 +603,7 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
                 .unwrap();
             assert_eq!(result.code(), Some(exit));
             if operation == "migration" {
-                assert_eq!(version(&w), if committed { 7 } else { 2 });
+                assert_eq!(version(&w), if committed { 8 } else { 2 });
                 let s = if committed {
                     w.reopen(2)
                 } else {

@@ -25,8 +25,8 @@ impl Store {
             if s.control_binding(&fields.issuer,&local)?!=BindingState::Active {
                 return Err(Error::new(Code::Conflict,"local exit not active"));
             }
-            s.conn.execute("UPDATE control_activity SET exit_credential=?1,exit_operation=?2,exit_ref=?3,exit_payload=?4,exit_reason=?5 WHERE id=1",params![fields.issuer.as_slice(),fields.operation.as_slice(),fields.reference.as_slice(),fields.payload,fields.reason])?;
-            s.conn.execute("UPDATE control_bindings SET state='retiring' WHERE credential=?1",[fields.issuer.as_slice()])?;
+            s.conn.execute("UPDATE control_activity SET exit_credential=?1,exit_operation=?2,exit_ref=?3,exit_payload=?4,exit_reason=?5 WHERE activity=(SELECT current_activity FROM meta WHERE id=1)",params![fields.issuer.as_slice(),fields.operation.as_slice(),fields.reference.as_slice(),fields.payload,fields.reason])?;
+            s.conn.execute("UPDATE control_bindings SET state='retiring' WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND credential=?1",[fields.issuer.as_slice()])?;
             s.business_policy_changed()
         })
     }
@@ -34,7 +34,7 @@ impl Store {
     /// owner-blocked intent bytes never reopen signing authorization.
     pub fn control_exit_intent(&self, activity: ActivityId) -> Result<Option<ControlPayload>> {
         let local = self.control_live(&activity, self.clock.monotonic_ms)?;
-        let row=self.conn.query_row("SELECT exit_credential,exit_operation,exit_ref,exit_payload,exit_reason FROM control_activity WHERE id=1 AND exit_credential IS NOT NULL AND EXISTS(SELECT 1 FROM control_bindings b WHERE b.credential=exit_credential AND b.state='retiring')",[],|r| {
+        let row=self.conn.query_row("SELECT exit_credential,exit_operation,exit_ref,exit_payload,exit_reason FROM current_control_activity WHERE id=1 AND exit_credential IS NOT NULL AND EXISTS(SELECT 1 FROM current_control_bindings b WHERE b.credential=exit_credential AND b.state='retiring')",[],|r| {
             Ok((r.get::<_,Vec<u8>>(0)?,r.get::<_,Vec<u8>>(1)?,r.get::<_,Vec<u8>>(2)?,r.get::<_,Vec<u8>>(3)?,r.get::<_,u8>(4)?))
         }).optional()?;
         row.map(|(c, o, r, p, reason)| {
@@ -99,7 +99,7 @@ impl Store {
             ));
         }
         let existing=self.conn.query_row(
-                "SELECT reference,payload,kind,target,reason FROM control_objects WHERE issuer=?1 AND operation=?2",
+                "SELECT reference,payload,kind,target,reason FROM current_control_objects WHERE issuer=?1 AND operation=?2",
                 params![f.issuer.as_slice(),f.operation.as_slice()],
                 |r|Ok(StoredControl {reference:r.get(0)?,payload:r.get(1)?,kind:r.get(2)?,target:r.get(3)?,reason:r.get(4)?})
             ).optional()?;
@@ -125,7 +125,7 @@ impl Store {
             // Semantic duplicate: retain first original bytes, slots and attempts.
             return Ok(ControlAdmission::Merged(f.reference));
         }
-        let prior:Option<Vec<u8>>=self.conn.query_row("SELECT reference FROM control_objects WHERE kind=?1 AND target=?2 AND (?1=2 OR reporter=?3)",params![f.kind.number(),f.target.as_slice(),f.issuer_id.as_slice()],|r|r.get(0)).optional()?;
+        let prior:Option<Vec<u8>>=self.conn.query_row("SELECT reference FROM current_control_objects WHERE kind=?1 AND target=?2 AND (?1=2 OR reporter=?3)",params![f.kind.number(),f.target.as_slice(),f.issuer_id.as_slice()],|r|r.get(0)).optional()?;
         if let Some(reference) = prior {
             // A blocked issuer cannot submit a new report; the existing exit stays merged.
             if f.kind == ControlKind::Report && issuer != BindingState::Active {
@@ -160,7 +160,7 @@ impl Store {
             ));
         }
         self.conn.execute(
-            "INSERT INTO control_objects VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO control_objects(activity,reference,kind,issuer,reporter,target,operation,reason,payload,body,accepted) VALUES((SELECT current_activity FROM meta WHERE id=1),?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
             params![
                 f.reference.as_slice(),
                 f.kind.number(),
@@ -181,7 +181,7 @@ impl Store {
         }
         if f.kind == ControlKind::Exit {
             self.conn.execute(
-                "UPDATE control_bindings SET state='blocked' WHERE credential=?1",
+                "UPDATE control_bindings SET state='blocked' WHERE activity=(SELECT current_activity FROM meta WHERE id=1) AND credential=?1",
                 [f.issuer.as_slice()],
             )?;
             self.business_policy_changed()?;
@@ -196,7 +196,7 @@ impl Store {
     ) -> Result<()> {
         let local = self.control_live(&activity, self.clock.monotonic_ms)?;
         let exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM control_neighbors WHERE object=?1 AND participant=?2)",
+            "SELECT EXISTS(SELECT 1 FROM current_control_neighbors WHERE object=?1 AND participant=?2)",
             params![object.as_slice(), neighbor.participant.as_slice()],
             |r| r.get(0),
         )?;
@@ -207,7 +207,7 @@ impl Store {
             return Err(Error::new(Code::Conflict, "forward neighbor not active"));
         }
         let exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM control_objects WHERE reference=?1)",
+            "SELECT EXISTS(SELECT 1 FROM current_control_objects WHERE reference=?1)",
             [object.as_slice()],
             |r| r.get(0),
         )?;
@@ -215,7 +215,7 @@ impl Store {
             return Err(Error::new(Code::Conflict, "control object missing"));
         }
         self.conn.execute(
-            "INSERT INTO control_neighbors(object,participant,start,link_up) VALUES(?1,?2,?3,?4)",
+            "INSERT INTO control_neighbors(activity,object,participant,start,link_up) VALUES((SELECT current_activity FROM meta WHERE id=1),?1,?2,?3,?4)",
             params![
                 object.as_slice(),
                 neighbor.participant.as_slice(),
@@ -244,7 +244,7 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT body FROM control_objects WHERE reference=?1",
+                "SELECT body FROM current_control_objects WHERE reference=?1",
                 [object.as_slice()],
                 |r| r.get(0),
             )
