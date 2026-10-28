@@ -26,7 +26,7 @@
 
 ## schema v3 与兼容性
 
-本节记录 2026-10-24 的 v3 批次；2026-10-28 当前实现已通过[控制持久化批次](node-control-persistence.md)推进到 v4，普通 open 和显式迁移以该记录为准。历史 v3 结果不重写。
+本节记录 2026-10-24 的 v3 批次；2026-10-28 已依次通过[控制持久化批次](node-control-persistence.md)及[数据持久化批次](node-data-persistence.md)推进到 v5，普通 open 和显式迁移以最新记录为准，旧消息缺 D15 字段禁止继续输出。历史 v3 结果不重写。
 
 原 schema.sql v1 与 migration_v2.sql 不改。新建库在一笔初始化事务中依次应用 v1/v2/v3；v3 新增 receipt_intents、完整消息 deadline 索引，并修正旧目标端 expired 的事实表达。普通 open 遇到 v1/v2 均返回 MigrationRequired；显式 migrate_v1 执行 v1→v3，migrate_v2 只接受 v2→v3。错误来源、重复迁移和未知版本拒绝，不能靠回填版本号降级。
 

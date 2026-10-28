@@ -66,6 +66,7 @@ impl Store {
                     queue.kind.as_str(),
                     &queue.neighbor,
                     *batch,
+                    &clock,
                 )?;
                 decisions.push((queue.clone(), decision));
             }
@@ -85,6 +86,7 @@ impl Store {
         kind: &str,
         neighbor: &str,
         batch: Batch,
+        clock: &Clock,
     ) -> Result<Decision> {
         let record: Option<(String, i64)> = self
             .conn
@@ -96,13 +98,21 @@ impl Store {
             .optional()?;
         let (encoded, deadline) =
             record.ok_or_else(|| Error::new(Code::Conflict, "queue target missing"))?;
-        let retry: RetryState = serde_json::from_str(&encoded)
+        let expired = match self.data_remaining_at(key, clock) {
+            Ok(_) => false,
+            Err(error) if error.code == Code::Expired => true,
+            Err(error) => return Err(error),
+        };
+        let mut retry: RetryState = serde_json::from_str(&encoded)
             .map_err(|e| Error::source_error(Code::StoreCorrupt, "retry record", e))?;
         if retry.deadline_ms() > deadline {
             return Err(Error::new(
                 Code::StoreCorrupt,
                 "queue exceeds message deadline",
             ));
+        }
+        if expired {
+            retry.constrain_deadline(batch.now_ms)?;
         }
         let (next, decision) = retry.advance(batch)?;
         self.conn.execute(

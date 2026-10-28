@@ -147,7 +147,7 @@ fn v3_migration_requires_explicit_call_and_rolls_back_capacity_failure() {
         let v: i64 = c
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(v, if enough { 4 } else { 3 });
+        assert_eq!(v, if enough { 5 } else { 3 });
         let has: bool = c
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='control_activity')",
@@ -590,7 +590,7 @@ fn v3_migration_faults_and_unknown_versions_preserve_source() {
             if fault == TestFault::BeforeCommit {
                 3
             } else {
-                4
+                5
             }
         );
         let s = if v == 3 {
@@ -746,8 +746,12 @@ fn reserve_record_and_byte_edges_preserve_full_proof_charge_after_conversion() {
             continue;
         }
         s.receive(relay("one")).unwrap();
-        s.finish_delivery("one", b"core-one", Some(("A", b"small-proof")))
-            .unwrap();
+        s.finish_delivery(
+            "one",
+            &super::tests::binding("one"),
+            Some(("A", b"small-proof")),
+        )
+        .unwrap();
         assert_eq!(s.usage().unwrap().evidence_bytes, 11);
         // A shorter proof still owns its 4096-byte logical responsibility.
         assert_eq!(s.receive(relay("two")).unwrap_err().code, Code::Quota);
@@ -821,7 +825,10 @@ fn integer_time_limit_and_activity_start_after_empty_reopen_are_checked() {
             ACT,
             Clock {
                 monotonic_ms: i64::MAX - 10,
-                trusted_unix_ms: Some(i64::MAX),
+                trusted_utc: Some(crate::data::UtcInterval {
+                    lower_ms: i64::MAX,
+                    upper_ms: i64::MAX
+                }),
                 ..clock(0)
             },
             vec![event(r, 4)]

@@ -23,7 +23,8 @@ pub struct Usage {
     pub evidence_bytes: u64,
     pub reserved_control_count: u64,
     pub reserved_control_bytes: u64,
-    /// Actual business plus D16 records; unused reserved slots are not physical records.
+    /// Logical business plus D16 records; D15 metadata belongs to its message.
+    /// Unused reserved slots are not physical records.
     pub records: u64,
     /// Fixed D16 reservation and actual usage, separate from business proof reservations.
     pub security_control: ControlUsage,
@@ -90,13 +91,20 @@ impl Store {
 
     pub(super) fn validate_clock_advance(&mut self, clock: &Clock) -> Result<()> {
         self.writable()?;
-        clock.validate()?;
+        if let Err(error) = clock.validate() {
+            self.time_uncertain = true;
+            return Err(error);
+        }
         if clock.boot != self.clock.boot
             || clock.monotonic_ms < self.clock.monotonic_ms
             || self
                 .clock
-                .trusted_unix_ms
-                .is_some_and(|w| clock.trusted_unix_ms.is_none_or(|n| n < w))
+                .utc_lower_ms()
+                .is_some_and(|w| clock.utc_lower_ms().is_none_or(|n| n < w))
+            || self
+                .clock
+                .utc_upper_ms()
+                .is_some_and(|u| clock.utc_upper_ms().is_none_or(|n| n < u))
         {
             self.time_uncertain = true;
             return Err(Error::new(Code::TimeUncertain, "clock regression"));
@@ -106,10 +114,14 @@ impl Store {
 
     pub(super) fn write_clock(&self, clock: &Clock) -> Result<()> {
         self.conn.execute(
-            "UPDATE meta SET monotonic_ms=?1,unix_ms=?2 WHERE id=1",
-            params![clock.monotonic_ms, clock.trusted_unix_ms],
+            "UPDATE meta SET monotonic_ms=?1,unix_ms=?2,unix_upper_ms=?3 WHERE id=1",
+            params![
+                clock.monotonic_ms,
+                clock.utc_lower_ms(),
+                clock.utc_upper_ms()
+            ],
         )?;
-        Ok(())
+        self.constrain_data_clock(clock)
     }
 
     /// Caller supplies an already trusted boot/time coordinate, never a UI or peer timestamp.
@@ -149,18 +161,18 @@ impl Store {
         let expired_receipt_intents = self.conn.execute(
             "DELETE FROM receipt_intents WHERE message_key IN (SELECT i.message_key FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1 ORDER BY m.deadline,m.key LIMIT ?2)",
             params![clock.monotonic_ms, MAINTENANCE_BATCH])?;
-        let deleted_history = match clock.trusted_unix_ms {
+        let deleted_history = match clock.utc_lower_ms() {
             Some(wall) => self.conn.execute("DELETE FROM history WHERE sequence IN (SELECT sequence FROM history WHERE expires<=?1 ORDER BY expires,sequence LIMIT ?2)", params![wall, MAINTENANCE_BATCH])?,
             None => 0,
         };
-        let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2) OR EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.deadline<=?1) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1)", params![clock.monotonic_ms, clock.trusted_unix_ms], |r| r.get(0))?;
+        let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2) OR EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.deadline<=?1) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1)", params![clock.monotonic_ms, clock.utc_lower_ms()], |r| r.get(0))?;
         Ok(MaintenanceReport {
             expired_payloads: keys.len(),
             expired_evidence,
             expired_receipt_intents,
             deleted_history,
             more_due,
-            history_time_available: clock.trusted_unix_ms.is_some(),
+            history_time_available: clock.utc_lower_ms().is_some(),
         })
     }
 }

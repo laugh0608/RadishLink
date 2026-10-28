@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+pub mod data;
 pub mod error;
 pub mod framing;
 pub mod model;

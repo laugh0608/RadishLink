@@ -165,3 +165,24 @@ fn poisoned_admission_still_closes_and_joins_state_owner() {
     assert_eq!(service.stop().unwrap_err().code, Code::Stopped);
     drop(w.reopen(0));
 }
+
+#[test]
+fn invalid_trusted_interval_reaches_owner_and_latches_uncertainty() {
+    let w = Workspace::new();
+    let service = Service::start(w.create()).unwrap();
+    let mut sample = clock(1);
+    sample.trusted_utc = Some(crate::data::UtcInterval {
+        lower_ms: 100001,
+        upper_ms: 102002,
+    });
+    assert_eq!(
+        service.advance_clock(sample).unwrap_err().code,
+        Code::TimeUncertain
+    );
+    assert_eq!(service.status().unwrap(), Status::TimeUncertain);
+    assert_eq!(
+        service.advance_clock(clock(2)).unwrap_err().code,
+        Code::TimeUncertain
+    );
+    service.stop().unwrap();
+}

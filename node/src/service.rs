@@ -315,7 +315,7 @@ impl Client {
     }
     /// Manual platform input; automatically driven services reject this method.
     pub fn advance_clock(&self, clock: Clock) -> Result<MaintenanceReport> {
-        clock.validate()?;
+        // The owner must observe invalid trusted samples and latch time uncertainty.
         self.request(|r| Command::Clock(clock, r))
     }
 }

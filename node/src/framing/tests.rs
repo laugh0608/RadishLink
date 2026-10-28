@@ -6,7 +6,7 @@ fn clock(monotonic_ms: i64) -> Clock {
     Clock {
         boot: "synthetic-boot".into(),
         monotonic_ms,
-        trusted_unix_ms: None,
+        trusted_utc: None,
     }
 }
 

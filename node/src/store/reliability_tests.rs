@@ -39,12 +39,20 @@ fn old_store_requires_explicit_atomic_migration_and_preserves_records() {
     assert_eq!(s.history(0, 100).unwrap().len(), 1);
     assert!(s.action("ui", 1, "a").unwrap().is_some());
     drop(s);
-    assert_eq!(version(&w), 4);
+    assert_eq!(version(&w), 5);
     assert!(Store::migrate_v1(&w.dir, Limits::default(), clock(2)).is_err());
     let mut s = w.reopen(2);
-    s.finish_delivery("relay", b"core-relay", Some(("A", b"proof")))
-        .unwrap();
-    assert_eq!(s.usage().unwrap().reserved_control_count, 0);
+    assert_eq!(
+        s.finish_delivery(
+            "relay",
+            &super::tests::binding("relay"),
+            Some(("A", b"proof"))
+        )
+        .unwrap_err()
+        .code,
+        Code::UnsupportedVersion
+    );
+    assert_eq!(s.usage().unwrap().reserved_control_count, 1);
 }
 
 #[test]
@@ -119,13 +127,13 @@ fn relay_reserves_control_until_delivery_or_expiry() {
     let mut s = Store::open(&w.dir, limits, clock(1)).unwrap();
     s.fault = Some(TestFault::BeforeCommit);
     assert!(
-        s.finish_delivery("one", b"core-one", Some(("A", b"proof")))
+        s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
             .is_err()
     );
     assert_eq!(s.usage().unwrap().reserved_control_count, 1);
     assert!(s.message("one").unwrap().unwrap().payload_present);
     s.fault = None;
-    s.finish_delivery("one", b"core-one", Some(("A", b"proof")))
+    s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
         .unwrap();
     assert_eq!(s.usage().unwrap().reserved_control_count, 0);
     assert_eq!(s.usage().unwrap().evidence_count, 1);
@@ -171,13 +179,16 @@ fn maintenance_is_bounded_and_unknown_wall_time_preserves_history() {
     assert!(!r.more_due);
     let w2 = Workspace::new();
     let mut c = clock(0);
-    c.trusted_unix_ms = None;
+    c.trusted_utc = None;
     let mut s2 = Store::create(&w2.dir, Limits::default(), c.clone()).unwrap();
-    s2.receive(relay("one")).unwrap();
+    assert_eq!(
+        s2.receive(relay("one")).unwrap_err().code,
+        Code::TimeUncertain
+    );
     c.monotonic_ms = 10000;
     let r = s2.maintain(c).unwrap();
     assert!(!r.history_time_available);
-    assert_eq!(r.expired_payloads, 1);
+    assert_eq!(r.expired_payloads, 0);
 }
 
 #[test]
@@ -220,7 +231,7 @@ fn migration_crash_child() {
 
 #[test]
 fn migration_process_exit_preserves_old_or_new_schema_without_partial_reservation() {
-    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 4)] {
+    for (side, exit, expected_version) in [("before", 71, 1), ("after", 72, 5)] {
         let w = Workspace::new();
         let mut s = w.create();
         s.receive(relay("one")).unwrap();
@@ -410,8 +421,12 @@ fn full_record_budget_still_allows_reserved_return_proof_conversion() {
     s.receive(relay("one")).unwrap();
     s.schedule_forward("one", "C").unwrap();
     assert_eq!(s.usage().unwrap().records, 3);
-    s.finish_delivery("one", b"core-one", Some(("A", &[1; 4096])))
-        .unwrap();
+    s.finish_delivery(
+        "one",
+        &super::tests::binding("one"),
+        Some(("A", &[1; 4096])),
+    )
+    .unwrap();
     assert_eq!(s.usage().unwrap().records, 2);
     assert_eq!(s.usage().unwrap().evidence_bytes, 4096);
     assert!(!s.message("one").unwrap().unwrap().payload_present);

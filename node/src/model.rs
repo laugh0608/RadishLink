@@ -45,8 +45,8 @@ impl Role {
 /// The storage layer checks consistency, not authenticity.
 pub struct Message {
     pub key: String,
-    pub origin_ref: String,
     pub core_binding: Vec<u8>,
+    pub data: crate::data::PreparedCore,
     pub payload: Vec<u8>,
     pub deadline_ms: i64,
     pub retain_until_ms: i64,
@@ -54,11 +54,9 @@ pub struct Message {
 impl Message {
     pub fn validate(&self, now_ms: i64) -> Result<()> {
         check_ref(&self.key)?;
-        check_ref(&self.origin_ref)?;
-        if self.core_binding.is_empty()
-            || self.core_binding.len() > 512
+        if self.core_binding.len() != 32
             || self.payload.is_empty()
-            || self.payload.len() > MAX_PAYLOAD
+            || self.payload.len() > crate::data::MAX_MLS_MESSAGE
             || self.retain_until_ms < self.deadline_ms
         {
             return Err(Error::new(Code::InvalidInput, "message bounds"));
@@ -112,6 +110,7 @@ pub struct Send {
     pub remaining_hops: u8,
 }
 pub struct Receive {
+    pub remaining_lifetime_ms: i64,
     pub message: Message,
     pub role: Role,
     pub neighbor: String,
@@ -153,13 +152,22 @@ pub struct Clock {
     pub boot: String,
     pub monotonic_ms: i64,
     /// Only a trusted platform clock may populate this; no network clock is implemented.
-    pub trusted_unix_ms: Option<i64>,
+    pub trusted_utc: Option<crate::data::UtcInterval>,
 }
 impl Clock {
+    pub fn utc_lower_ms(&self) -> Option<i64> {
+        self.trusted_utc.map(|v| v.lower_ms)
+    }
+    pub fn utc_upper_ms(&self) -> Option<i64> {
+        self.trusted_utc.map(|v| v.upper_ms)
+    }
     pub fn validate(&self) -> Result<()> {
         check_ref(&self.boot)?;
-        if self.monotonic_ms < 0 || self.trusted_unix_ms.is_some_and(|n| n < 0) {
+        if self.monotonic_ms < 0 {
             return Err(Error::new(Code::InvalidInput, "clock bounds"));
+        }
+        if let Some(utc) = self.trusted_utc {
+            utc.validate()?;
         }
         Ok(())
     }

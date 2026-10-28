@@ -69,7 +69,7 @@ fn destination_commits_only_intent_and_conversion_preserves_budget_and_history()
     let view = s.message("one").unwrap().unwrap();
     assert!(view.receipt_intent_pending && !view.evidence_pending);
     let intent = s.receipt_intent("one").unwrap().unwrap();
-    assert_eq!(intent.core_binding, b"core-one");
+    assert_eq!(intent.core_binding, super::tests::binding("one"));
     assert_eq!(intent.neighbor, "B");
     assert_eq!(intent.deadline_ms, 10000);
     assert_eq!(s.usage().unwrap().reserved_control_bytes, 4096);
@@ -190,8 +190,12 @@ fn deadline_blocks_intent_conversion_and_relay_delivery_without_maintenance() {
         s.advance_clock(clock(now)).unwrap(); // Deliberately does not perform cleanup.
         let intent = s.receipt_intent("dest");
         let proof = finalize(&mut s, "dest");
-        let relay_result = s.finish_delivery("relay", b"core-relay", Some(("A", b"proof")));
-        let origin_result = s.finish_delivery("origin", b"core-origin", None);
+        let relay_result = s.finish_delivery(
+            "relay",
+            &super::tests::binding("relay"),
+            Some(("A", b"proof")),
+        );
+        let origin_result = s.finish_delivery("origin", &super::tests::binding("origin"), None);
         if now < 10000 {
             assert!(
                 intent.is_ok() && proof.is_ok() && relay_result.is_ok() && origin_result.is_ok()
@@ -214,8 +218,12 @@ fn both_proof_legs_stop_at_original_deadline_and_destination_fact_survives() {
     s.receive(destination("dest", 0)).unwrap();
     finalize(&mut s, "dest").unwrap();
     s.receive(relay("relay")).unwrap();
-    s.finish_delivery("relay", b"core-relay", Some(("A", b"proof")))
-        .unwrap();
+    s.finish_delivery(
+        "relay",
+        &super::tests::binding("relay"),
+        Some(("A", b"proof")),
+    )
+    .unwrap();
     for key in ["dest", "relay"] {
         assert_eq!(retry_json(&s, key)["deadline_ms"], 10000);
     }
@@ -269,12 +277,8 @@ fn proof_cleanup_is_bounded_and_batch_at_deadline_cannot_send() {
     for i in 0..257 {
         let key = format!("m{i:03}");
         s.receive(relay(&key)).unwrap();
-        s.finish_delivery(
-            &key,
-            format!("core-{key}").as_bytes(),
-            Some(("A", b"proof")),
-        )
-        .unwrap();
+        s.finish_delivery(&key, &super::tests::binding(&key), Some(("A", b"proof")))
+            .unwrap();
     }
     let report = s
         .process_queue_batch(
@@ -301,9 +305,13 @@ fn proof_cleanup_is_bounded_and_batch_at_deadline_cannot_send() {
             .send
     );
     assert_eq!(
-        s.finish_delivery("m256", b"core-m256", Some(("A", b"proof")))
-            .unwrap_err()
-            .code,
+        s.finish_delivery(
+            "m256",
+            &super::tests::binding("m256"),
+            Some(("A", b"proof"))
+        )
+        .unwrap_err()
+        .code,
         Code::Expired
     );
     let report = s.maintain(clock(10000)).unwrap();
@@ -347,7 +355,11 @@ fn cross_boot_never_exposes_signing_work_or_releases_old_responsibility() {
     );
     for result in [
         finalize(&mut s, "dest"),
-        s.finish_delivery("relay", b"core-relay", Some(("A", b"proof"))),
+        s.finish_delivery(
+            "relay",
+            &super::tests::binding("relay"),
+            Some(("A", b"proof")),
+        ),
         s.expire_payload("relay"),
         s.advance_clock(new_boot.clone()),
         s.advance_clock(clock(1)),
@@ -393,13 +405,14 @@ fn v2_migration_shortens_deadline_without_refunding_consumed_retries() {
     let mut expected = old;
     expected["deadline_ms"] = 10000.into();
     assert_eq!(retry_json(&s, "one"), expected);
-    assert!(
-        !s.advance_queue("one", "evidence", "B", event(1))
-            .unwrap()
-            .send
+    assert_eq!(
+        s.advance_queue("one", "evidence", "B", event(1))
+            .unwrap_err()
+            .code,
+        Code::UnsupportedVersion
     );
     drop(s);
-    assert_eq!(version(&w), 4);
+    assert_eq!(version(&w), 5);
     assert_eq!(
         Store::migrate_v2(&w.dir, Limits::default(), clock(2))
             .err()
@@ -569,7 +582,7 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
                 .unwrap();
             assert_eq!(result.code(), Some(exit));
             if operation == "migration" {
-                assert_eq!(version(&w), if committed { 4 } else { 2 });
+                assert_eq!(version(&w), if committed { 5 } else { 2 });
                 let s = if committed {
                     w.reopen(2)
                 } else {

@@ -20,6 +20,9 @@ mod control_types;
 pub use control_types::*;
 #[cfg(test)]
 mod control_tests;
+mod data;
+#[cfg(test)]
+mod data_tests;
 mod maintenance;
 #[cfg(test)]
 mod receipt_tests;
@@ -61,12 +64,15 @@ enum OpenMode {
     MigrateV1,
     MigrateV2,
     MigrateV3,
+    MigrateV4,
     #[cfg(test)]
     MigrateV1Fault(TestFault),
     #[cfg(test)]
     MigrateV2Fault(TestFault),
     #[cfg(test)]
     MigrateV3Fault(TestFault),
+    #[cfg(test)]
+    MigrateV4Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -151,14 +157,15 @@ impl Store {
         conn.execute_batch(include_str!("migration_v2.sql"))?;
         conn.execute_batch(include_str!("migration_v3.sql"))?;
         conn.execute_batch(include_str!("migration_v4.sql"))?;
+        conn.execute_batch(include_str!("migration_v5.sql"))?;
         let encoded = limits_json(&limits)?;
         conn.execute(
-            "INSERT INTO meta VALUES(1,0,?1,?2,?3,?4)",
+            "INSERT INTO meta(id,revision,boot,monotonic_ms,unix_ms,limits,unix_upper_ms) VALUES(1,0,?1,?2,?3,?4,?5)",
             params![
                 clock.boot,
                 clock.monotonic_ms,
-                clock.trusted_unix_ms,
-                encoded
+                clock.utc_lower_ms(),
+                encoded, clock.utc_upper_ms()
             ],
         )?;
         conn.execute_batch("COMMIT;")?;
@@ -188,9 +195,13 @@ impl Store {
     pub fn migrate_v2(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV2)
     }
-    /// Explicit v3 -> v4; capacity shortage leaves the entire old store intact.
+    /// Explicit v3 -> current; capacity shortage leaves the entire old store intact.
     pub fn migrate_v3(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV3)
+    }
+    /// Explicit v4 -> v5. Legacy message records remain non-output-capable.
+    pub fn migrate_v4(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV4)
     }
     fn open_version(
         directory: &Path,
@@ -203,12 +214,15 @@ impl Store {
             OpenMode::MigrateV1 => Some(1),
             OpenMode::MigrateV2 => Some(2),
             OpenMode::MigrateV3 => Some(3),
+            OpenMode::MigrateV4 => Some(4),
             #[cfg(test)]
             OpenMode::MigrateV1Fault(_) => Some(1),
             #[cfg(test)]
             OpenMode::MigrateV2Fault(_) => Some(2),
             #[cfg(test)]
             OpenMode::MigrateV3Fault(_) => Some(3),
+            #[cfg(test)]
+            OpenMode::MigrateV4Fault(_) => Some(4),
         };
         limits.validate()?;
         clock.validate()?;
@@ -231,10 +245,10 @@ impl Store {
         let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if ![1, 2, 3, 4].contains(&version) || app != APP_ID {
+        if ![1, 2, 3, 4, 5].contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version < 4 && source_version.is_none() {
+        if version < 5 && source_version.is_none() {
             return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
         if source_version.is_some_and(|source| version != source) {
@@ -261,9 +275,33 @@ impl Store {
         if stored_limits != limits {
             return Err(Error::new(Code::Conflict, "store limit migration required"));
         }
+        let upper: Option<i64> = if version >= 5 {
+            conn.query_row("SELECT unix_upper_ms FROM meta WHERE id=1", [], |r| {
+                r.get(0)
+            })?
+        } else {
+            None
+        };
+        if version >= 5 {
+            match (wall, upper) {
+                (Some(lower_ms), Some(upper_ms)) => crate::data::UtcInterval { lower_ms, upper_ms }
+                    .validate()
+                    .map_err(|e| {
+                        Error::source_error(Code::StoreCorrupt, "stored UTC interval", e)
+                    })?,
+                (None, None) => (),
+                _ => {
+                    return Err(Error::new(
+                        Code::StoreCorrupt,
+                        "stored UTC interval missing endpoint",
+                    ));
+                }
+            }
+        }
         let time_uncertain = boot != clock.boot
             || clock.monotonic_ms < floor
-            || wall.is_some_and(|w| clock.trusted_unix_ms.is_none_or(|n| n < w));
+            || wall.is_some_and(|w| clock.utc_lower_ms().is_none_or(|n| n < w))
+            || upper.is_some_and(|u| clock.utc_upper_ms().is_none_or(|n| n < u));
         let mut s = Self {
             conn,
             _lock: owner,
@@ -276,6 +314,7 @@ impl Store {
                 OpenMode::MigrateV1Fault(fault) => Some(fault),
                 OpenMode::MigrateV2Fault(fault) => Some(fault),
                 OpenMode::MigrateV3Fault(fault) => Some(fault),
+                OpenMode::MigrateV4Fault(fault) => Some(fault),
                 _ => None,
             },
         };
@@ -283,7 +322,6 @@ impl Store {
         if source_version.is_some() {
             s.atomic(|store| {
                 // Migration expiry and responsibility checks use the same committed coordinate.
-                store.write_clock(&store.clock)?;
                 if version == 1 {
                     store.conn.execute_batch(include_str!("migration_v2.sql"))?;
                 }
@@ -291,7 +329,11 @@ impl Store {
                     store.conn.execute_batch(include_str!("migration_v3.sql"))?;
                     store.migrate_receipt_deadlines()?;
                 }
-                store.conn.execute_batch(include_str!("migration_v4.sql"))?;
+                if version < 4 {
+                    store.conn.execute_batch(include_str!("migration_v4.sql"))?;
+                }
+                store.conn.execute_batch(include_str!("migration_v5.sql"))?;
+                store.write_clock(&store.clock)?;
                 store.check_queue_deadlines(false)?;
                 Ok(())
             })?;
@@ -299,6 +341,7 @@ impl Store {
         s.check_quotas()?;
         s.check_reservations()?;
         s.check_control_invariants()?;
+        s.check_data_invariants()?;
         s.reset_control_rate_on_open()?;
 
         Ok(s)
@@ -340,6 +383,7 @@ impl Store {
             self.check_quotas()?;
             self.check_reservations()?;
             self.check_control_invariants()?;
+            self.check_data_invariants()?;
             Ok(v)
         });
         #[cfg(test)]
@@ -368,7 +412,7 @@ impl Store {
             }
         };
         // Revision overflow is a failed transaction, never a wrapping generation.
-        if let Err(e)=self.conn.execute("UPDATE meta SET revision=revision+1,monotonic_ms=max(monotonic_ms,?1),unix_ms=CASE WHEN ?2 IS NULL THEN unix_ms ELSE max(coalesce(unix_ms,?2),?2) END WHERE id=1 AND revision<9223372036854775807",params![self.clock.monotonic_ms,self.clock.trusted_unix_ms])
+        if let Err(e)=self.conn.execute("UPDATE meta SET revision=revision+1,monotonic_ms=max(monotonic_ms,?1),unix_ms=CASE WHEN ?2 IS NULL THEN unix_ms ELSE max(coalesce(unix_ms,?2),?2) END,unix_upper_ms=CASE WHEN ?3 IS NULL THEN unix_upper_ms ELSE max(coalesce(unix_upper_ms,?3),?3) END WHERE id=1 AND revision<9223372036854775807",params![self.clock.monotonic_ms,self.clock.utc_lower_ms(),self.clock.utc_upper_ms()])
             .and_then(|count|if count==1 {Ok(count)} else {Err(rusqlite::Error::InvalidQuery)}) {
             self.halted=true; return Err(Error::source_error(Code::OutcomeUnknown,"commit revision",e));
         }
@@ -489,7 +533,7 @@ impl Store {
         let wall = if self.time_uncertain {
             None
         } else {
-            self.clock.trusted_unix_ms
+            self.clock.utc_lower_ms()
         };
         let rows = stmt.query_map(params![after, limit, wall], |r| {
             Ok(HistoryItem {
@@ -504,7 +548,7 @@ impl Store {
     pub fn purge_expired_history(&mut self) -> Result<usize> {
         let wall = self
             .clock
-            .trusted_unix_ms
+            .utc_lower_ms()
             .ok_or_else(|| Error::new(Code::TimeUncertain, "history retention clock"))?;
         self.atomic(|s| {
             Ok(s.conn

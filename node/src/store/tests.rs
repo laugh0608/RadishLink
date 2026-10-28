@@ -41,14 +41,43 @@ pub(crate) fn clock(now: i64) -> Clock {
     Clock {
         boot: "test-boot".into(),
         monotonic_ms: now,
-        trusted_unix_ms: Some(100000 + now),
+        trusted_utc: Some(crate::data::UtcInterval {
+            lower_ms: 100000 + now,
+            upper_ms: 100000 + now,
+        }),
     }
 }
-fn message(key: &str) -> Message {
+pub(crate) fn binding(key: &str) -> Vec<u8> {
+    let mut value = vec![0; 32];
+    assert!(key.len() <= 32);
+    value[..key.len()].copy_from_slice(key.as_bytes());
+    value
+}
+pub(crate) fn message(key: &str) -> Message {
     Message {
         key: key.into(),
-        origin_ref: "A".into(),
-        core_binding: format!("core-{key}").into_bytes(),
+        core_binding: binding(key),
+        data: crate::data::PreparedCore {
+            raw: format!("synthetic-core-{key}").into_bytes(),
+            identity: crate::data::MessageIdentity {
+                activity_id: [1; 32],
+                origin_id: [2; 16],
+                origin_credential_ref: [3; 32],
+                message_id: {
+                    let mut id = [0; 16];
+                    assert!(key.len() <= 16);
+                    id[..key.len()].copy_from_slice(key.as_bytes());
+                    id
+                },
+            },
+            destination_id: [4; 16],
+            destination_credential_ref: [5; 32],
+            mls_group_id: [6; 32],
+            mls_epoch: 0,
+            originated_at_ms: 100000,
+            lifetime_ms: 10000,
+            initial_hops: 2,
+        },
         payload: b"synthetic-ciphertext".to_vec(),
         deadline_ms: 10000,
         retain_until_ms: 20000,
@@ -78,6 +107,7 @@ pub(crate) fn send(key: &str, reference: &str, revision: i64) -> Send {
 }
 pub(crate) fn relay(key: &str) -> Receive {
     Receive {
+        remaining_lifetime_ms: 10000,
         message: message(key),
         role: Role::Relay,
         neighbor: "A".into(),
@@ -89,6 +119,7 @@ pub(crate) fn relay(key: &str) -> Receive {
 }
 pub(crate) fn destination(key: &str, revision: i64) -> Receive {
     Receive {
+        remaining_lifetime_ms: 10000,
         message: message(key),
         role: Role::Destination,
         neighbor: "B".into(),
@@ -213,8 +244,12 @@ fn relay_delivery_keeps_return_work_after_payload_cleanup() {
             .code,
         Code::Conflict
     );
-    s.finish_delivery("one", b"core-one", Some(("A", b"evidence")))
-        .unwrap();
+    s.finish_delivery(
+        "one",
+        &super::tests::binding("one"),
+        Some(("A", b"evidence")),
+    )
+    .unwrap();
     let v = s.message("one").unwrap().unwrap();
     assert_eq!(v.state, "delivered");
     assert!(!v.payload_present);
@@ -272,7 +307,7 @@ fn readonly_and_sqlite_full_do_not_report_commit() {
         .unwrap();
     s.conn.pragma_update(None, "max_page_count", pages).unwrap();
     let mut large = send("one", "a", 0);
-    large.message.payload = vec![1; MAX_PAYLOAD];
+    large.message.payload = vec![1; crate::data::MAX_MLS_MESSAGE];
     assert!(s.submit(large).is_err());
     drop(s);
     let s = w.reopen(1);
@@ -463,7 +498,7 @@ fn receive_and_cleanup_faults_preserve_whole_transaction() {
         s.schedule_forward("one", "C").unwrap();
         s.fault = Some(fault);
         assert!(
-            s.finish_delivery("one", b"core-one", Some(("A", b"proof")))
+            s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
                 .is_err()
         );
         drop(s);
@@ -492,10 +527,11 @@ fn three_independent_stores_preserve_endpoint_and_relay_responsibilities() {
     c.receive(destination("one", 0)).unwrap();
     c.finalize_receipt("one", b"synthetic intent", b"proof")
         .unwrap();
-    b.finish_delivery("one", b"core-one", Some(("A", b"proof")))
+    b.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
         .unwrap();
     assert!(b.message("one").unwrap().unwrap().evidence_pending);
-    a.finish_delivery("one", b"core-one", None).unwrap();
+    a.finish_delivery("one", &super::tests::binding("one"), None)
+        .unwrap();
     assert_eq!(a.message("one").unwrap().unwrap().state, "delivered");
     assert_eq!(a.history(0, 100).unwrap().len(), 1);
     assert_eq!(c.history(0, 100).unwrap().len(), 1);
@@ -570,16 +606,20 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
         Some("A")
     );
     let mut changed = relay("one");
-    changed.message.origin_ref = "other-origin".into();
+    changed.message.data.identity.origin_credential_ref = [9; 32];
     assert_eq!(s.receive(changed).unwrap_err().code, Code::Conflict);
     assert_eq!(
-        s.finish_delivery("one", b"core-one", Some(("wrong", b"proof")))
-            .unwrap_err()
-            .code,
+        s.finish_delivery(
+            "one",
+            &super::tests::binding("one"),
+            Some(("wrong", b"proof"))
+        )
+        .unwrap_err()
+        .code,
         Code::Conflict
     );
     assert!(s.message("one").unwrap().unwrap().payload_present);
-    s.finish_delivery("one", b"core-one", Some(("A", b"proof")))
+    s.finish_delivery("one", &super::tests::binding("one"), Some(("A", b"proof")))
         .unwrap();
     drop(s);
     let s = w.reopen(2);
@@ -595,6 +635,10 @@ fn reopened_relay_retains_upstream_and_rejects_origin_or_return_changes() {
 }
 
 /// Reconstruct an actual v3 schema for legacy migration tests, without v4 tables.
+pub(crate) fn strip_v5(s: &Store) {
+    s.conn.execute_batch("DROP TABLE message_data; ALTER TABLE messages DROP COLUMN data_version; ALTER TABLE meta DROP COLUMN unix_upper_ms; PRAGMA user_version=4;").unwrap();
+}
 pub(crate) fn strip_v4(s: &Store) {
+    strip_v5(s);
     s.conn.execute_batch("DROP TABLE control_neighbors; DROP TABLE control_objects; DROP TABLE control_bindings; DROP TABLE control_output_rate; DROP TABLE control_activity; PRAGMA user_version=3;").unwrap();
 }

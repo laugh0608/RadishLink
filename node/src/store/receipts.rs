@@ -11,6 +11,9 @@ impl Store {
             [key],
             |r| Ok(ReceiptIntent { key: r.get(0)?, core_binding: r.get(1)?, body: r.get(2)?, neighbor: r.get(3)?, deadline_ms: r.get(4)? }),
         ).optional()?;
+        if intent.is_some() {
+            self.data_remaining_at(key, &self.clock)?;
+        }
         if intent
             .as_ref()
             .is_some_and(|i| i.deadline_ms <= self.clock.monotonic_ms)
@@ -38,6 +41,7 @@ impl Store {
             return Err(Error::new(Code::InvalidInput, "receipt conversion size"));
         }
         self.atomic(|s| {
+            s.data_remaining_at(key, &s.clock)?;
             let (role, deadline, neighbor): (String, i64, Option<String>) = s.conn.query_row(
                 "SELECT role,deadline,source_neighbor FROM messages WHERE key=?1", [key],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;

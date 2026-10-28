@@ -36,14 +36,14 @@ impl Store {
             Role::Relay => "stored",
             Role::Destination => "committed",
         };
-        self.conn.execute("INSERT INTO messages(key,core,role,state,payload,deadline,retain_until,hops,origin_ref,source_neighbor) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![m.key,m.core_binding,role.as_str(),state,m.payload,m.deadline_ms,m.retain_until_ms,hops,m.origin_ref,source])?;
-        Ok(())
+        self.conn.execute("INSERT INTO messages(key,core,role,state,payload,deadline,retain_until,hops,origin_ref,source_neighbor,data_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1)",params![m.key,m.core_binding,role.as_str(),state,m.payload,m.deadline_ms,m.retain_until_ms,hops,m.data.origin_ref(),source])?;
+        self.insert_data(m)
     }
     fn insert_history(&self, key: &str, body: &[u8]) -> Result<()> {
         check_text(body)?;
         let expiry = self
             .clock
-            .trusted_unix_ms
+            .utc_upper_ms()
             .and_then(|t| t.checked_add(HISTORY_MS))
             .ok_or_else(|| Error::new(Code::TimeUncertain, "history expiry"))?;
         self.conn.execute(
@@ -75,23 +75,22 @@ impl Store {
         Ok(())
     }
     fn matching_message(&self, m: &Message, role: Role) -> Result<Option<MessageView>> {
-        let saved: Option<(Vec<u8>, i64, i64, String, String)> = self
+        let saved: Option<(Vec<u8>, String, String)> = self
             .conn
             .query_row(
-                "SELECT core,deadline,retain_until,role,origin_ref FROM messages WHERE key=?1",
+                "SELECT core,role,origin_ref FROM messages WHERE key=?1",
                 [&m.key],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
-        if let Some((core, deadline, retain, saved_role, origin)) = saved {
+        if let Some((core, saved_role, origin)) = saved {
             if saved_role != role.as_str()
                 || core != m.core_binding
-                || origin != m.origin_ref
-                || m.deadline_ms > deadline
-                || m.retain_until_ms > retain
+                || origin != m.data.origin_ref()
             {
-                return Err(Error::new(Code::Conflict, "message core or lifetime"));
+                return Err(Error::new(Code::Conflict, "message binding or role"));
             }
+            self.matching_data(m)?;
             return self.message(&m.key);
         }
         Ok(None)
@@ -110,7 +109,7 @@ impl Store {
                 .message(&key)?
                 .ok_or_else(|| Error::new(Code::StoreCorrupt, "action target"));
         }
-        send.message.validate(self.clock.monotonic_ms)?;
+        self.validate_data_admission(&send.message, send.remaining_hops, None)?;
         check_text(&send.text)?;
         check_ref(&send.neighbor)?;
         send.security.validate()?;
@@ -147,12 +146,31 @@ impl Store {
     /// T-B / T-C. Relay never accepts plaintext or security state for an endpoint.
     pub fn receive(&mut self, receive: Receive) -> Result<MessageView> {
         self.writable()?;
-        receive.message.validate(self.clock.monotonic_ms)?;
+        self.validate_data_admission(
+            &receive.message,
+            receive.remaining_hops,
+            Some(receive.remaining_lifetime_ms),
+        )?;
         check_ref(&receive.neighbor)?;
         if receive.role == Role::Origin {
             return Err(Error::new(Code::InvalidInput, "receive role"));
         }
         if let Some(view) = self.matching_message(&receive.message, receive.role)? {
+            self.data_remaining_at(&receive.message.key, &self.clock)?;
+            let (deadline, hops): (i64, u8) = self.conn.query_row(
+                "SELECT deadline,hops FROM messages WHERE key=?1",
+                [&receive.message.key],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?;
+            if receive.message.deadline_ms < deadline || receive.remaining_hops < hops {
+                self.atomic(|s| {
+                    s.shorten_data(
+                        &receive.message.key,
+                        receive.message.deadline_ms,
+                        Some(receive.remaining_hops),
+                    )
+                })?;
+            }
             return Ok(view);
         }
         match receive.role {
@@ -222,6 +240,7 @@ impl Store {
         check_ref(key)?;
         check_ref(neighbor)?;
         self.atomic(|s| {
+            s.data_remaining_at(key, &s.clock)?;
             let (role, state, deadline, incoming_hops): (String, String, i64, u8) =
                 s.conn.query_row(
                     "SELECT role,state,deadline,hops FROM messages WHERE key=?1",
@@ -261,6 +280,7 @@ impl Store {
                     signal: crate::retry::Signal::Pause,
                     admission: crate::retry::Admission::Allow,
                 },
+                &s.clock,
             )?;
             Ok(())
         })
@@ -274,6 +294,7 @@ impl Store {
     ) -> Result<()> {
         check_ref(key)?;
         self.atomic(|s| {
+            s.data_remaining_at(key, &s.clock)?;
             let (saved, role, state, deadline, source): (
                 Vec<u8>,
                 String,
@@ -371,6 +392,6 @@ impl Store {
         if !["data", "evidence"].contains(&kind) || batch.now_ms != self.clock.monotonic_ms {
             return Err(Error::new(Code::InvalidInput, "queue event coordinate"));
         }
-        self.atomic(|s| s.advance_queue_in_transaction(key, kind, neighbor, batch))
+        self.atomic(|s| s.advance_queue_in_transaction(key, kind, neighbor, batch, &s.clock))
     }
 }

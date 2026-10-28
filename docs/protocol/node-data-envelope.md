@@ -81,7 +81,7 @@ D12 receipt 的 `message_binding` 使用上面的唯一摘要。证明重试复�
 
 在协议 v1 中，D12 的逻辑消息身份为 `(activity_id, origin_id, origin_credential_ref, message_id)`；group/epoch/destination 属于该身份不可变且受认证的 core。跨 epoch 使用同一身份但改变 core 是 conflict，不作为新消息。活动/凭据范围与 group/epoch 检查共同实现 SW-G1 的 replay scope；不将同一个身份在新 epoch 再加密当作重试。
 
-建议内部 `Message.key` 使用 `SHA-256(CBOR([1, activity_id, origin_id, origin_credential_ref, message_id]))` 的 64 位小写十六进制文本；保留完整复合身份并比较，hash 不是授权或永久无冲突证明。origin_ref 可映射为 credential_ref 的 64 位小写十六进制；完整端点/活动映射另行保存。core_binding 建议保存 32-byte message_binding，原始 core 必须同时持久，不能只存 hash 后从邻居重建。现有 schema v4（D16 控制持久边界）仍没有完整数据字段，本稿不声称可直接接线，后续迁移须显式设计。
+建议内部 `Message.key` 使用 `SHA-256(CBOR([1, activity_id, origin_id, origin_credential_ref, message_id]))` 的 64 位小写十六进制文本；保留完整复合身份并比较，hash 不是授权或永久无冲突证明。origin_ref 可映射为 credential_ref 的 64 位小写十六进制；完整端点/活动映射另行保存。core_binding 建议保存 32-byte message_binding，原始 core 必须同时持久，不能只存 hash 后从邻居重建。2026-10-28 已接续 [schema v5 数据持久化](../testing/node-data-persistence.md)：保存原始 core 与完整复合身份，epoch 用 8-byte big-endian BLOB；旧消息缺字段只保留可读事实与到期维护，禁止输出。当前内部 key 仍为有界引用，尚未计算建议的 SHA-256/CBOR key；严格认证映射仍未接线。
 
 ## D15：一小时寿命与保守时间判定
 
@@ -122,4 +122,4 @@ D12 receipt 的 `message_binding` 使用上面的唯一摘要。证明重试复�
 | T-A/T-C 库状态推进后失败、撤销与部分输出交错 | 回滚并废弃内存对象；不提前产生外部成功，不续发旧权限 |
 | 30 分钟断连后恢复、冷启动、旧库回放 | 同 boot 合格时间内只用剩余额度；冷启动/回放不自动恢复 |
 
-字段、标准关系和静态大小已核对，外层 framing 已做上述有限离线实现；未生成密码向量、编译候选或运行网络。完整协议采用仍需逐跳安全、MLS 握手传输、prior_epoch 资源及可信时间输入的独立精确包。
+字段、标准关系和静态大小已核对，外层 framing 已做上述有限离线实现；2026-10-28 的 [D15 批次](../testing/node-data-persistence.md)进一步覆盖完整字段持久化、UTC 区间/同 boot 期限、重复收紧及显式迁移，但不解码或认证原始字段。未生成密码向量、编译候选或运行网络。完整协议采用仍需逐跳安全、MLS 握手传输、prior_epoch 资源及可信时间输入的独立精确包。
