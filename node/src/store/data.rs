@@ -4,6 +4,7 @@ use crate::data::{MAX_LIFETIME_MS, MessageIdentity, PreparedCore, UtcInterval};
 struct StoredData {
     core: PreparedCore,
     boot: String,
+    domain: ClockDomainId,
     admitted_mono: i64,
     admitted_utc: UtcInterval,
     deadline_bound: i64,
@@ -16,7 +17,7 @@ fn fixed<const N: usize>(row: &rusqlite::Row<'_>, column: usize) -> rusqlite::Re
 impl Store {
     fn stored_data(&self, key: &str) -> Result<Option<StoredData>> {
         Ok(self.conn.query_row(
-            "SELECT raw_core,activity_id,origin_id,origin_credential_ref,message_id,destination_id,destination_credential_ref,mls_group_id,mls_epoch,originated_at,lifetime,initial_hops,boot,admitted_mono,admitted_lower,admitted_upper,deadline_bound FROM message_data WHERE message_key=?1", [key], |r| {
+            "SELECT raw_core,activity_id,origin_id,origin_credential_ref,message_id,destination_id,destination_credential_ref,mls_group_id,mls_epoch,originated_at,lifetime,initial_hops,boot,admitted_mono,admitted_lower,admitted_upper,deadline_bound,domain_id FROM message_data WHERE message_key=?1", [key], |r| {
                 Ok(StoredData {
                     core: PreparedCore {
                         raw: r.get(0)?,
@@ -24,7 +25,7 @@ impl Store {
                         destination_id: fixed(r,5)?, destination_credential_ref: fixed(r,6)?, mls_group_id: fixed(r,7)?,
                         mls_epoch: u64::from_be_bytes(fixed(r,8)?), originated_at_ms: r.get(9)?, lifetime_ms: r.get(10)?, initial_hops: r.get(11)?,
                     },
-                    boot: r.get(12)?, admitted_mono: r.get(13)?, admitted_utc: UtcInterval { lower_ms: r.get(14)?, upper_ms: r.get(15)? }, deadline_bound: r.get(16)?,
+                    boot: r.get(12)?, admitted_mono: r.get(13)?, admitted_utc: UtcInterval { lower_ms: r.get(14)?, upper_ms: r.get(15)? }, deadline_bound: r.get(16)?, domain: fixed(r,17)?,
                 })
             }).optional()?)
     }
@@ -36,6 +37,20 @@ impl Store {
         Ok(self.stored_data(key)?.map(|v| v.core))
     }
 
+    pub(super) fn require_current_message_domain(&self, key: &str) -> Result<()> {
+        let domain: Vec<u8> =
+            self.conn
+                .query_row("SELECT domain_id FROM messages WHERE key=?1", [key], |r| {
+                    r.get(0)
+                })?;
+        if domain.as_slice() != self.current_domain_id()?.as_slice() {
+            return Err(Error::new(
+                Code::TimeUncertain,
+                "message belongs to frozen domain",
+            ));
+        }
+        Ok(())
+    }
     pub(super) fn validate_data_admission(
         &self,
         message: &Message,
@@ -70,8 +85,8 @@ impl Store {
             .clock
             .trusted_utc
             .ok_or_else(|| Error::new(Code::TimeUncertain, "D15 admission clock"))?;
-        self.conn.execute("INSERT INTO message_data VALUES(?1,1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
-            params![message.key, core.raw, id.activity_id.as_slice(), id.origin_id.as_slice(), id.origin_credential_ref.as_slice(), id.message_id.as_slice(), core.destination_id.as_slice(), core.destination_credential_ref.as_slice(), core.mls_group_id.as_slice(), core.mls_epoch.to_be_bytes().as_slice(), core.originated_at_ms, core.lifetime_ms, core.initial_hops, self.clock.boot, self.clock.monotonic_ms, utc.lower_ms, utc.upper_ms, message.deadline_ms])?;
+        self.conn.execute("INSERT INTO message_data VALUES(?1,1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+            params![message.key, core.raw, id.activity_id.as_slice(), id.origin_id.as_slice(), id.origin_credential_ref.as_slice(), id.message_id.as_slice(), core.destination_id.as_slice(), core.destination_credential_ref.as_slice(), core.mls_group_id.as_slice(), core.mls_epoch.to_be_bytes().as_slice(), core.originated_at_ms, core.lifetime_ms, core.initial_hops, self.clock.boot, self.clock.monotonic_ms, utc.lower_ms, utc.upper_ms, message.deadline_ms, self.current_domain_id()?.as_slice()])?;
         Ok(())
     }
 
@@ -104,7 +119,7 @@ impl Store {
             Error::new(Code::UnsupportedVersion, "legacy message output disabled")
         })?;
         clock.validate()?;
-        if clock.boot != saved.boot {
+        if clock.boot != saved.boot || saved.domain != self.current_domain_id()? {
             return Err(Error::new(Code::TimeUncertain, "D15 message boot"));
         }
         let upper = clock
@@ -166,7 +181,7 @@ impl Store {
     pub(super) fn constrain_data_clock(&self, clock: &Clock) -> Result<()> {
         let mut stmt = self
             .conn
-            .prepare("SELECT message_key,originated_at,lifetime FROM message_data")?;
+            .prepare("SELECT message_key,originated_at,lifetime FROM message_data WHERE domain_id=(SELECT current_domain FROM meta WHERE id=1)")?;
         let rows = stmt
             .query_map([], |r| {
                 Ok((
@@ -224,8 +239,8 @@ impl Store {
             let origin: String = row.get(5)?;
             let (boot, mono, lower, upper): (String, i64, Option<i64>, Option<i64>) =
                 self.conn.query_row(
-                    "SELECT boot,monotonic_ms,unix_ms,unix_upper_ms FROM meta WHERE id=1",
-                    [],
+                    "SELECT boot,monotonic_ms,unix_ms,unix_upper_ms FROM clock_domains WHERE domain_id=?1",
+                    [saved.domain.as_slice()],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                 )?;
             if saved.admitted_mono > mono

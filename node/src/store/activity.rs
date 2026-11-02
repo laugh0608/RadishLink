@@ -79,15 +79,7 @@ impl Store {
             .activity_status(activity)?
             .ok_or_else(|| Error::new(Code::StoreCorrupt, "current activity association"))?;
         let current = self.control_usage()?;
-        let (bytes,records,all_records):(i64,i64,i64)=self.conn.query_row("SELECT
-            (SELECT count(*)*4096 FROM queues WHERE kind='evidence')+(SELECT coalesce(sum(bytes),0) FROM control_reservations)+(SELECT count(*)*4096 FROM receipt_intents)+(SELECT bytes FROM activity_archive_usage),
-            (SELECT count(*) FROM queues WHERE kind='evidence')+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)+(SELECT records FROM activity_archive_usage),
-            (SELECT count(*) FROM messages)+(SELECT count(*) FROM actions)+(SELECT count(*) FROM queues)+(SELECT count(*) FROM action_scopes)+(SELECT count(*) FROM security_states)+(SELECT count(*) FROM control_reservations)+(SELECT count(*) FROM receipt_intents)+(SELECT records FROM activity_archive_usage)",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-        let [bytes, records, all_records] = [bytes, records, all_records].map(|value| {
-            u64::try_from(value)
-                .map_err(|e| Error::source_error(Code::StoreCorrupt, "negative activity usage", e))
-        });
-        let (bytes, records, all_records) = (bytes?, records?, all_records?);
+        let (free_control_bytes, free_control_records, free_records) = self.archive_capacity()?;
         let usage = self.control_ingress_usage();
         Ok(ActivityPreflight {
             previous,
@@ -96,15 +88,9 @@ impl Store {
                 + current.objects * 4096
                 + current.neighbors * 512,
             archive_records: 1 + current.bindings + current.objects + current.neighbors,
-            free_control_bytes: (self.limits.control_bytes - CONTROL_RESERVED_BYTES)
-                .checked_sub(bytes)
-                .ok_or_else(|| Error::new(Code::Quota, "control archive bytes"))?,
-            free_control_records: u64::from(self.limits.control_count - CONTROL_RESERVED_RECORDS)
-                .checked_sub(records)
-                .ok_or_else(|| Error::new(Code::Quota, "control archive records"))?,
-            free_records: u64::from(self.limits.record_count - CONTROL_RESERVED_RECORDS)
-                .checked_sub(all_records)
-                .ok_or_else(|| Error::new(Code::Quota, "archive records"))?,
+            free_control_bytes,
+            free_control_records,
+            free_records,
             waiting: usage.waiting,
             verifying: usage.verifying,
         })
@@ -143,10 +129,10 @@ impl Store {
             let reused:bool=s.conn.query_row("SELECT EXISTS(SELECT 1 FROM control_activity WHERE activity=?1 OR local_participant=?2) OR EXISTS(SELECT 1 FROM control_bindings WHERE participant=?2)",params![request.activity.as_slice(),request.local_participant.as_slice()],|r|r.get(0))?;
             if reused {return Err(Error::new(Code::Conflict,"new activity identity reused"));}
             let final_rate: String=s.conn.query_row("SELECT json_object('last_ms',last_ms,'frames',frames,'bytes',bytes,'exit_cursor',exit_cursor,'ordinary_cursor',ordinary_cursor) FROM control_output_rate WHERE id=1",[],|r|r.get(0))?;
-            let changed = s.conn.execute("UPDATE control_activity SET archived=1,closed_ms=?1,successor=?2,final_rate=?3 WHERE activity=?4 AND stopped=1 AND policy_revision=?5",params![now,request.activity.as_slice(),final_rate,request.previous_activity.as_slice(),request.expected_policy_revision])?;
+            let changed = s.conn.execute("UPDATE control_activity SET archived=1,closed_kind='same_boot',closed_ms=?1,successor=?2,final_rate=?3 WHERE activity=?4 AND stopped=1 AND policy_revision=?5",params![now,request.activity.as_slice(),final_rate,request.previous_activity.as_slice(),request.expected_policy_revision])?;
             if changed != 1 { return Err(Error::new(Code::Conflict, "activity switch context changed")); }
             s.conn.execute("UPDATE action_scopes SET retired=1 WHERE activity=?1",[request.previous_activity.as_slice()])?;
-            s.conn.execute("INSERT INTO control_activity(activity,local_participant,boot,started,deadline) VALUES(?1,?2,?3,?4,?5)",params![request.activity.as_slice(),request.local_participant.as_slice(),s.clock.boot,now,request.deadline_ms])?;
+            s.conn.execute("INSERT INTO control_activity(activity,local_participant,boot,started,deadline,domain_id) VALUES(?1,?2,?3,?4,?5,(SELECT current_domain FROM meta WHERE id=1))",params![request.activity.as_slice(),request.local_participant.as_slice(),s.clock.boot,now,request.deadline_ms])?;
             s.conn.execute("UPDATE meta SET current_activity=?1 WHERE id=1",[request.activity.as_slice()])?;
             s.conn.execute("UPDATE control_output_rate SET last_ms=?1,frames=0,bytes=0,exit_cursor=NULL,ordinary_cursor=NULL WHERE id=1",[now])?;
             s.write_clock(&s.clock)?;
@@ -175,17 +161,17 @@ impl Store {
         let invalid:bool=self.conn.query_row("SELECT
             (SELECT count(*) FROM control_activity WHERE archived=0)!=(SELECT count(*) FROM current_control_activity) OR
             EXISTS(SELECT 1 FROM meta m WHERE m.current_activity IS NOT NULL AND NOT EXISTS(SELECT 1 FROM control_activity a WHERE a.activity=m.current_activity AND a.archived=0)) OR
-            EXISTS(SELECT 1 FROM control_activity a WHERE a.archived=1 AND (a.stopped!=1 OR a.closed_ms>(SELECT monotonic_ms FROM meta WHERE id=1) OR NOT EXISTS(SELECT 1 FROM control_activity n WHERE n.activity=a.successor AND n.started=a.closed_ms AND n.id>a.id))) OR
-            EXISTS(SELECT 1 FROM control_activity a WHERE a.boot!=(SELECT boot FROM meta WHERE id=1)) OR
+            EXISTS(SELECT 1 FROM control_activity a WHERE a.archived=1 AND (a.stopped!=1 OR a.closed_ms>(SELECT monotonic_ms FROM clock_domains WHERE domain_id=a.domain_id) OR NOT EXISTS(SELECT 1 FROM control_activity n WHERE n.activity=a.successor AND n.id>a.id AND ((a.closed_kind='same_boot' AND n.domain_id=a.domain_id AND n.started=a.closed_ms) OR (a.closed_kind='cross_boot' AND a.closed_ms IS NULL AND n.domain_id=(SELECT successor FROM clock_domains WHERE domain_id=a.domain_id)))))) OR
+            EXISTS(SELECT 1 FROM control_activity a JOIN clock_domains d ON d.domain_id=a.domain_id WHERE a.boot!=d.boot) OR
             EXISTS(SELECT 1 FROM control_objects o JOIN control_bindings i ON i.credential=o.issuer JOIN control_bindings t ON t.credential=o.target WHERE o.activity!=i.activity OR o.activity!=t.activity) OR
             EXISTS(SELECT 1 FROM control_neighbors n JOIN control_objects o ON o.reference=n.object WHERE n.activity!=o.activity OR NOT EXISTS(SELECT 1 FROM control_bindings b WHERE b.activity=n.activity AND b.participant=n.participant AND b.state!='pending')) OR
-            EXISTS(SELECT 1 FROM control_activity a WHERE a.started>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
+            EXISTS(SELECT 1 FROM control_activity a WHERE a.started>(SELECT monotonic_ms FROM clock_domains WHERE domain_id=a.domain_id)) OR
             EXISTS(SELECT 1 FROM control_activity a JOIN control_bindings b ON b.credential=a.exit_credential WHERE b.activity!=a.activity OR b.participant!=a.local_participant OR b.state NOT IN ('retiring','blocked')) OR
             EXISTS(SELECT 1 FROM control_activity a WHERE a.exit_credential IS NOT NULL AND NOT EXISTS(SELECT 1 FROM control_bindings b WHERE b.credential=a.exit_credential)) OR
             EXISTS(SELECT 1 FROM control_bindings b WHERE b.state='retiring' AND NOT EXISTS(SELECT 1 FROM control_activity a WHERE a.activity=b.activity AND a.exit_credential=b.credential)) OR
             EXISTS(SELECT 1 FROM control_bindings b WHERE b.generation!=(SELECT count(*) FROM control_bindings p WHERE p.activity=b.activity AND p.participant=b.participant AND p.generation<=b.generation)) OR
-            EXISTS(SELECT 1 FROM control_objects o JOIN control_activity a ON a.activity=o.activity JOIN control_bindings i ON i.credential=o.issuer JOIN control_bindings t ON t.credential=o.target WHERE o.accepted<a.started OR o.accepted>coalesce(a.closed_ms,(SELECT monotonic_ms FROM meta WHERE id=1)) OR (o.kind=2 AND i.state!='blocked') OR i.state='pending' OR t.state='pending' OR o.reporter!=i.participant OR (o.kind=3 AND i.participant=t.participant)) OR
-            EXISTS(SELECT 1 FROM control_neighbors n JOIN control_objects o ON o.reference=n.object JOIN control_activity a ON a.activity=n.activity WHERE n.start<o.accepted OR n.start>coalesce(a.closed_ms,(SELECT monotonic_ms FROM meta WHERE id=1)) OR n.last_ms>coalesce(a.closed_ms,(SELECT monotonic_ms FROM meta WHERE id=1)) OR n.participant=a.local_participant) OR
+            EXISTS(SELECT 1 FROM control_objects o JOIN control_activity a ON a.activity=o.activity JOIN control_bindings i ON i.credential=o.issuer JOIN control_bindings t ON t.credential=o.target WHERE o.accepted<a.started OR o.accepted>coalesce(a.closed_ms,(SELECT monotonic_ms FROM clock_domains WHERE domain_id=a.domain_id)) OR (o.kind=2 AND i.state!='blocked') OR i.state='pending' OR t.state='pending' OR o.reporter!=i.participant OR (o.kind=3 AND i.participant=t.participant)) OR
+            EXISTS(SELECT 1 FROM control_neighbors n JOIN control_objects o ON o.reference=n.object JOIN control_activity a ON a.activity=n.activity WHERE n.start<o.accepted OR n.start>coalesce(a.closed_ms,(SELECT monotonic_ms FROM clock_domains WHERE domain_id=a.domain_id)) OR n.last_ms>coalesce(a.closed_ms,(SELECT monotonic_ms FROM clock_domains WHERE domain_id=a.domain_id)) OR n.participant=a.local_participant) OR
             EXISTS(SELECT 1 FROM control_activity a WHERE (SELECT count(DISTINCT participant) FROM control_bindings b WHERE b.activity=a.activity)>5 OR (SELECT count(*) FROM control_bindings b WHERE b.activity=a.activity AND b.state='pending')>5 OR (SELECT count(*) FROM control_bindings b WHERE b.activity=a.activity AND b.state!='pending')>20 OR (SELECT count(*) FROM control_objects o WHERE o.activity=a.activity AND o.kind=2)>20 OR (SELECT count(*) FROM control_objects o WHERE o.activity=a.activity AND o.kind=3)>80) OR
             EXISTS(SELECT 1 FROM control_neighbors GROUP BY object HAVING count(*)>4) OR
             EXISTS(SELECT 1 FROM actions j JOIN action_scopes s ON s.scope=j.scope LEFT JOIN message_data d ON d.message_key=j.message_key WHERE j.generation>s.generation OR (j.generation=s.generation AND s.retired=0 AND (d.activity_id IS NULL OR d.activity_id IS NOT s.activity))) OR
@@ -197,7 +183,7 @@ impl Store {
         }
         let mut stmt = self
             .conn
-            .prepare("SELECT closed_ms,final_rate FROM control_activity WHERE archived=1")?;
+            .prepare("SELECT coalesce(a.closed_ms,d.monotonic_ms),a.final_rate FROM control_activity a JOIN clock_domains d ON d.domain_id=a.domain_id WHERE a.archived=1")?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let closed: i64 = row.get(0)?;

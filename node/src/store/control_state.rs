@@ -30,7 +30,7 @@ impl Store {
             let exists: bool = s.conn.query_row("SELECT EXISTS(SELECT 1 FROM current_control_activity)", [], |r|r.get(0))?;
             if exists { return Err(Error::new(Code::Conflict,"activity already assigned; no restart")); }
             s.write_clock(&s.clock)?;
-            s.conn.execute("INSERT INTO control_activity(id,activity,local_participant,boot,started,deadline) VALUES(1,?1,?2,?3,?4,?5)",params![activity.as_slice(),local.as_slice(),s.clock.boot,now,deadline])?;
+            s.conn.execute("INSERT INTO control_activity(id,activity,local_participant,boot,started,deadline,domain_id) VALUES(1,?1,?2,?3,?4,?5,(SELECT current_domain FROM meta WHERE id=1))",params![activity.as_slice(),local.as_slice(),s.clock.boot,now,deadline])?;
             s.conn.execute("UPDATE meta SET current_activity=?1 WHERE id=1",[activity.as_slice()])?;
             s.conn.execute("INSERT INTO control_output_rate(id,last_ms,frames,bytes) VALUES(1,?1,0,0)",[now])?;
             Ok(())
@@ -207,7 +207,7 @@ impl Store {
     }
     pub fn control_usage(&self) -> Result<ControlUsage> {
         self.readable()?;
-        let (bindings,objects,neighbors,aux):(u32,u32,u32,u32)=self.conn.query_row("SELECT (SELECT count(*) FROM current_control_bindings),(SELECT count(*) FROM current_control_objects),(SELECT count(*) FROM current_control_neighbors),(SELECT count(*) FROM current_control_activity)+(SELECT count(*) FROM control_output_rate)",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
+        let (bindings,objects,neighbors,aux):(u32,u32,u32,u32)=self.conn.query_row("SELECT (SELECT count(*) FROM current_control_bindings),(SELECT count(*) FROM current_control_objects),(SELECT count(*) FROM current_control_neighbors),(SELECT count(*) FROM current_control_activity)+(SELECT count(*) FROM control_output_rate)+1",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
         let (bindings, objects, neighbors, aux) = (
             u64::from(bindings),
             u64::from(objects),
@@ -251,13 +251,13 @@ impl Store {
         let invalid:bool=self.conn.query_row("SELECT
             ((SELECT count(*) FROM current_control_activity)!=(SELECT count(*) FROM control_output_rate)) OR
             (EXISTS(SELECT 1 FROM current_control_bindings) AND NOT EXISTS(SELECT 1 FROM current_control_activity)) OR
-            EXISTS(SELECT 1 FROM current_control_activity a JOIN meta m ON m.id=1 WHERE a.boot!=m.boot OR a.started>m.monotonic_ms) OR
-            EXISTS(SELECT 1 FROM control_output_rate WHERE last_ms>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
+            EXISTS(SELECT 1 FROM current_control_activity a JOIN current_clock m ON m.id=1 WHERE a.boot!=m.boot OR a.started>m.monotonic_ms) OR
+            EXISTS(SELECT 1 FROM control_output_rate WHERE last_ms>(SELECT monotonic_ms FROM current_clock WHERE id=1)) OR
             EXISTS(SELECT 1 FROM current_control_activity a LEFT JOIN current_control_bindings b ON b.credential=a.exit_credential WHERE a.exit_credential IS NOT NULL AND (b.credential IS NULL OR b.participant!=a.local_participant OR b.state NOT IN ('retiring','blocked'))) OR
             EXISTS(SELECT 1 FROM current_control_bindings b WHERE b.state='retiring' AND NOT EXISTS(SELECT 1 FROM current_control_activity a WHERE a.exit_credential=b.credential)) OR
-            EXISTS(SELECT 1 FROM current_control_objects o WHERE o.accepted>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
+            EXISTS(SELECT 1 FROM current_control_objects o WHERE o.accepted>(SELECT monotonic_ms FROM current_clock WHERE id=1)) OR
             EXISTS(SELECT 1 FROM current_control_objects o JOIN current_control_bindings b ON b.credential=o.issuer WHERE o.kind=2 AND b.state!='blocked') OR
-            EXISTS(SELECT 1 FROM current_control_neighbors n JOIN current_control_objects o ON o.reference=n.object WHERE n.start<o.accepted OR n.start>(SELECT monotonic_ms FROM meta WHERE id=1) OR n.last_ms>(SELECT monotonic_ms FROM meta WHERE id=1)) OR
+            EXISTS(SELECT 1 FROM current_control_neighbors n JOIN current_control_objects o ON o.reference=n.object WHERE n.start<o.accepted OR n.start>(SELECT monotonic_ms FROM current_clock WHERE id=1) OR n.last_ms>(SELECT monotonic_ms FROM current_clock WHERE id=1)) OR
             EXISTS(SELECT 1 FROM current_control_bindings b WHERE b.generation!=(SELECT count(*) FROM current_control_bindings p WHERE p.participant=b.participant AND p.generation<=b.generation)) OR
             EXISTS(SELECT 1 FROM current_control_objects o JOIN current_control_bindings i ON o.issuer=i.credential JOIN current_control_bindings t ON o.target=t.credential WHERE i.state='pending' OR t.state='pending' OR o.reporter!=i.participant OR (o.kind=3 AND i.participant=t.participant)) OR
             EXISTS(SELECT 1 FROM current_control_neighbors n WHERE NOT EXISTS(SELECT 1 FROM current_control_bindings b WHERE b.participant=n.participant AND b.state!='pending') OR n.participant=(SELECT local_participant FROM current_control_activity))",

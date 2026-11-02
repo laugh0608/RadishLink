@@ -647,7 +647,7 @@ fn process_exit_recovers_policy_marker_binding_object_and_revision_together() {
                 assert_eq!(
                     conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                         .unwrap(),
-                    if committed { 8 } else { 5 }
+                    if committed { 9 } else { 5 }
                 );
                 drop(conn);
             }

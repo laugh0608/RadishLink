@@ -352,7 +352,7 @@ fn migration_failure_and_cross_boot_leave_v4_intact() {
         let version: i64 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, if kind == "after" { 8 } else { 4 });
+        assert_eq!(version, if kind == "after" { 9 } else { 4 });
         let has: bool = conn
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='message_data')",
@@ -426,7 +426,7 @@ fn stored_metadata_corruption_is_rejected_before_output() {
         "UPDATE messages SET origin_ref='other'",
         "UPDATE message_data SET boot='other'",
         "UPDATE message_data SET originated_at=9223372036854775807",
-        "UPDATE meta SET unix_upper_ms=102001",
+        "UPDATE clock_domains SET unix_ms=99999",
     ] {
         let w = Workspace::new();
         let mut s = w.create();

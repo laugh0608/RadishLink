@@ -14,7 +14,17 @@ use std::{
 };
 
 mod activity;
+mod clock_domain_checks;
+mod clock_domains;
 mod connection;
+pub use clock_domains::{
+    ClockDomainId, ClockDomainPreflight, ClockDomainStatus, INITIAL_CLOCK_DOMAIN,
+    IsolateClockDomain, NewClockDomainActivity,
+};
+#[cfg(test)]
+mod clock_domain_recovery_tests;
+#[cfg(test)]
+mod clock_domain_tests;
 pub use activity::{ActivityPreflight, ActivityStatus, ActivitySwitch};
 use connection::StoreConnection;
 #[cfg(test)]
@@ -89,6 +99,10 @@ enum OpenMode {
     MigrateV5,
     MigrateV6,
     MigrateV7,
+    MigrateV8,
+    ColdV8(IsolateClockDomain),
+    #[cfg(test)]
+    ColdV8Fault(IsolateClockDomain, TestFault),
     #[cfg(test)]
     MigrateV1Fault(TestFault),
     #[cfg(test)]
@@ -103,6 +117,8 @@ enum OpenMode {
     MigrateV6Fault(TestFault),
     #[cfg(test)]
     MigrateV7Fault(TestFault),
+    #[cfg(test)]
+    MigrateV8Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -186,6 +202,7 @@ impl Store {
                 encoded, clock.utc_upper_ms()
             ],
         )?;
+        conn.execute_batch(include_str!("migration_v9.sql"))?;
         conn.execute_batch("COMMIT;")?;
         File::open(directory)?.sync_all()?;
         if let Some(parent) = directory.parent() {
@@ -234,9 +251,22 @@ impl Store {
     pub fn migrate_v6(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV6)
     }
-    /// Explicit stopped v7 -> v8. No old session or action acquires inferred authority.
+    /// Explicit stopped v7 -> current through v8. Old sessions/actions acquire no inferred authority.
     pub fn migrate_v7(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV7)
+    }
+    /// Explicit same-boot, stopped v8 -> v9 migration.
+    pub fn migrate_v8(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV8)
+    }
+    /// Explicit cold v8 structural migration and isolation; never creates a new activity.
+    pub fn migrate_v8_isolated(
+        directory: &Path,
+        limits: Limits,
+        clock: Clock,
+        request: IsolateClockDomain,
+    ) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::ColdV8(request))
     }
     fn open_version(
         directory: &Path,
@@ -244,7 +274,7 @@ impl Store {
         clock: Clock,
         mode: OpenMode,
     ) -> Result<Self> {
-        let source_version = match mode {
+        let source_version = match &mode {
             OpenMode::Current => None,
             OpenMode::MigrateV1 => Some(1),
             OpenMode::MigrateV2 => Some(2),
@@ -253,6 +283,9 @@ impl Store {
             OpenMode::MigrateV5 => Some(5),
             OpenMode::MigrateV6 => Some(6),
             OpenMode::MigrateV7 => Some(7),
+            OpenMode::MigrateV8 | OpenMode::ColdV8(_) => Some(8),
+            #[cfg(test)]
+            OpenMode::ColdV8Fault(_, _) => Some(8),
             #[cfg(test)]
             OpenMode::MigrateV1Fault(_) => Some(1),
             #[cfg(test)]
@@ -267,6 +300,8 @@ impl Store {
             OpenMode::MigrateV6Fault(_) => Some(6),
             #[cfg(test)]
             OpenMode::MigrateV7Fault(_) => Some(7),
+            #[cfg(test)]
+            OpenMode::MigrateV8Fault(_) => Some(8),
         };
         limits.validate()?;
         clock.validate()?;
@@ -289,10 +324,10 @@ impl Store {
         conn.open_database(&db)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if ![1, 2, 3, 4, 5, 6, 7, 8].contains(&version) || app != APP_ID {
+        if !(1..=9).contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version < 8 && source_version.is_none() {
+        if version < 9 && source_version.is_none() {
             return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
         if source_version.is_some_and(|source| version != source) {
@@ -309,20 +344,31 @@ impl Store {
         {
             return Err(Error::new(Code::StoreCorrupt, "store integrity"));
         }
-        let (boot, floor, wall, stored): (String, i64, Option<i64>, String) = conn.query_row(
-            "SELECT boot,monotonic_ms,unix_ms,limits FROM meta WHERE id=1",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )?;
+        let clock_table = if version >= 9 {
+            "current_clock"
+        } else {
+            "meta"
+        };
+        let metadata_sql = if version >= 9 {
+            "SELECT c.boot,c.monotonic_ms,c.unix_ms,m.limits FROM current_clock c JOIN meta m ON m.id=c.id"
+        } else {
+            "SELECT boot,monotonic_ms,unix_ms,limits FROM meta WHERE id=1"
+        };
+        let (boot, floor, wall, stored): (String, i64, Option<i64>, String) =
+            conn.query_row(metadata_sql, [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })?;
         let stored_limits: Limits = serde_json::from_str(&stored)
             .map_err(|e| Error::source_error(Code::StoreCorrupt, "stored limits", e))?;
         if stored_limits != limits {
             return Err(Error::new(Code::Conflict, "store limit migration required"));
         }
         let upper: Option<i64> = if version >= 5 {
-            conn.query_row("SELECT unix_upper_ms FROM meta WHERE id=1", [], |r| {
-                r.get(0)
-            })?
+            conn.query_row(
+                &format!("SELECT unix_upper_ms FROM {clock_table} WHERE id=1"),
+                [],
+                |r| r.get(0),
+            )?
         } else {
             None
         };
@@ -342,7 +388,15 @@ impl Store {
                 }
             }
         }
-        let time_uncertain = boot != clock.boot
+        let frozen = if version >= 9 {
+            conn.query_row("SELECT frozen FROM current_clock", [], |r| {
+                r.get::<_, bool>(0)
+            })?
+        } else {
+            false
+        };
+        let time_uncertain = frozen
+            || boot != clock.boot
             || clock.monotonic_ms < floor
             || wall.is_some_and(|w| clock.utc_lower_ms().is_none_or(|n| n < w))
             || upper.is_some_and(|u| clock.utc_upper_ms().is_none_or(|n| n < u));
@@ -354,17 +408,28 @@ impl Store {
             time_uncertain,
             halted: false,
             #[cfg(test)]
-            fault: match mode {
-                OpenMode::MigrateV1Fault(fault) => Some(fault),
-                OpenMode::MigrateV2Fault(fault) => Some(fault),
-                OpenMode::MigrateV3Fault(fault) => Some(fault),
-                OpenMode::MigrateV4Fault(fault) => Some(fault),
-                OpenMode::MigrateV5Fault(fault) => Some(fault),
-                OpenMode::MigrateV6Fault(fault) => Some(fault),
-                OpenMode::MigrateV7Fault(fault) => Some(fault),
+            fault: match &mode {
+                OpenMode::MigrateV1Fault(fault) => Some(*fault),
+                OpenMode::MigrateV2Fault(fault) => Some(*fault),
+                OpenMode::MigrateV3Fault(fault) => Some(*fault),
+                OpenMode::MigrateV4Fault(fault) => Some(*fault),
+                OpenMode::MigrateV5Fault(fault) => Some(*fault),
+                OpenMode::MigrateV6Fault(fault) => Some(*fault),
+                OpenMode::MigrateV7Fault(fault) => Some(*fault),
+                OpenMode::MigrateV8Fault(fault) | OpenMode::ColdV8Fault(_, fault) => Some(*fault),
                 _ => None,
             },
         };
+        let cold_request = match &mode {
+            OpenMode::ColdV8(request) => Some(request),
+            #[cfg(test)]
+            OpenMode::ColdV8Fault(request, _) => Some(request),
+            _ => None,
+        };
+        if let Some(request) = cold_request {
+            s.migrate_cold_v8(request)?;
+            return Ok(s);
+        }
         s.check_queue_deadlines(version < 3)?;
         if source_version.is_some() {
             s.atomic(|store| {
@@ -399,19 +464,28 @@ impl Store {
                         "stop activity using source version before lifecycle migration",
                     ));
                 }
-                store.conn.execute_batch(include_str!("migration_v8.sql"))?;
+                if version < 8 {
+                    store.conn.execute_batch(include_str!("migration_v8.sql"))?;
+                }
+                if version < 5 {
+                    // These source formats have no D15 admission interval. Only this
+                    // already-authorized same-boot migration may use the current sample.
+                    store.conn.execute(
+                        "UPDATE meta SET monotonic_ms=?1,unix_ms=?2,unix_upper_ms=?3 WHERE id=1",
+                        params![
+                            store.clock.monotonic_ms,
+                            store.clock.utc_lower_ms(),
+                            store.clock.utc_upper_ms()
+                        ],
+                    )?;
+                }
+                store.conn.execute_batch(include_str!("migration_v9.sql"))?;
                 store.write_clock(&store.clock)?;
                 store.check_queue_deadlines(false)?;
                 Ok(())
             })?;
         }
-        s.check_quotas()?;
-        s.check_reservations()?;
-        s.check_control_invariants()?;
-        s.check_activity_invariants()?;
-        s.check_data_invariants()?;
-        s.check_business_invariants()?;
-        s.check_outbound_invariants()?;
+        s.check_invariants()?;
         s.reset_control_rate_on_open()?;
 
         Ok(s)
@@ -434,10 +508,32 @@ impl Store {
     }
     fn writable(&self) -> Result<()> {
         self.readable()?;
-        if self.time_uncertain {
+        if self.time_uncertain
+            || (self.schema_version()? >= 9
+                && self
+                    .conn
+                    .query_row("SELECT frozen FROM current_clock", [], |r| {
+                        r.get::<_, bool>(0)
+                    })?)
+        {
             return Err(Error::new(Code::TimeUncertain, "store clock"));
         }
         Ok(())
+    }
+    fn schema_version(&self) -> Result<i64> {
+        Ok(self
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))?)
+    }
+    fn check_invariants(&self) -> Result<()> {
+        self.check_quotas()?;
+        self.check_reservations()?;
+        self.check_control_invariants()?;
+        self.check_activity_invariants()?;
+        self.check_data_invariants()?;
+        self.check_business_invariants()?;
+        self.check_outbound_invariants()?;
+        self.check_clock_domains()
     }
     /// Advances only within the verified boot coordinate; never infers downtime.
     pub fn advance_clock(&mut self, clock: Clock) -> Result<()> {
@@ -448,21 +544,21 @@ impl Store {
     }
     fn atomic<T>(&mut self, apply: impl FnOnce(&Self) -> Result<T>) -> Result<T> {
         self.writable()?;
+        self.transact(apply, true)
+    }
+    fn transact<T>(&mut self, apply: impl FnOnce(&Self) -> Result<T>, ordinary: bool) -> Result<T> {
+        self.readable()?;
         self.conn.execute_batch("BEGIN IMMEDIATE;")?;
         let result = apply(self).and_then(|v| {
-            let now: i64 = self.conn.query_row(
-                "SELECT max(monotonic_ms,?1) FROM meta WHERE id=1",
-                [self.clock.monotonic_ms],
-                |r| r.get(0),
-            )?;
-            self.reconcile_business_policy(now)?;
-            self.check_business_invariants()?;
-            self.check_outbound_invariants()?;
-            self.check_quotas()?;
-            self.check_reservations()?;
-            self.check_control_invariants()?;
-            self.check_activity_invariants()?;
-            self.check_data_invariants()?;
+            if ordinary {
+                let now: i64 = self.conn.query_row(
+                    "SELECT max(monotonic_ms,?1) FROM current_clock",
+                    [self.clock.monotonic_ms],
+                    |r| r.get(0),
+                )?;
+                self.reconcile_business_policy(now)?;
+            }
+            self.check_invariants()?;
             Ok(v)
         });
         #[cfg(test)]
@@ -490,10 +586,26 @@ impl Store {
                 return Err(e);
             }
         };
-        // Revision overflow is a failed transaction, never a wrapping generation.
-        if let Err(e)=self.conn.execute("UPDATE meta SET revision=revision+1,monotonic_ms=max(monotonic_ms,?1),unix_ms=CASE WHEN ?2 IS NULL THEN unix_ms ELSE max(coalesce(unix_ms,?2),?2) END,unix_upper_ms=CASE WHEN ?3 IS NULL THEN unix_upper_ms ELSE max(coalesce(unix_upper_ms,?3),?3) END WHERE id=1 AND revision<9223372036854775807",params![self.clock.monotonic_ms,self.clock.utc_lower_ms(),self.clock.utc_upper_ms()])
-            .and_then(|count|if count==1 {Ok(count)} else {Err(rusqlite::Error::InvalidQuery)}) {
-            self.halted=true; return Err(Error::source_error(Code::OutcomeUnknown,"commit revision",e));
+        // Revision/floor writes belong to this transaction. Maintenance never advances old coordinates.
+        let revision = self.conn.execute(
+            "UPDATE meta SET revision=revision+1 WHERE id=1 AND revision<9223372036854775807",
+            [],
+        );
+        let floor = if ordinary {
+            self.conn.execute("UPDATE clock_domains SET monotonic_ms=max(monotonic_ms,?1),unix_ms=CASE WHEN ?2 IS NULL THEN unix_ms ELSE max(coalesce(unix_ms,?2),?2) END,unix_upper_ms=CASE WHEN ?3 IS NULL THEN unix_upper_ms ELSE max(coalesce(unix_upper_ms,?3),?3) END WHERE domain_id=(SELECT current_domain FROM meta WHERE id=1) AND frozen=0",params![self.clock.monotonic_ms,self.clock.utc_lower_ms(),self.clock.utc_upper_ms()])
+        } else {
+            Ok(1)
+        };
+        if !matches!((&revision, &floor), (Ok(1), Ok(1))) {
+            self.halted = true;
+            return Err(Error::source_error(
+                Code::OutcomeUnknown,
+                "commit revision",
+                revision
+                    .err()
+                    .or_else(|| floor.err())
+                    .unwrap_or(rusqlite::Error::InvalidQuery),
+            ));
         }
         if let Err(e) = self.conn.execute_batch("COMMIT;") {
             self.halted = true;

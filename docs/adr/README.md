@@ -12,3 +12,4 @@ ADR 记录已经接受并会长期影响实现的架构选择。研究候选、�
 | [0006](0006-node-identity-and-control-profile.md) | Node 活动身份与控制证明 profile | Accepted |
 | [0007](0007-node-envelope-and-control-budget.md) | Node 数据 envelope 与控制传播预算 | Accepted |
 | [0008](0008-node-activity-lifecycle.md) | Node 活动作用域与有界归档 | Accepted |
+| [0009](0009-node-clock-domains.md) | Node 跨 boot 时钟域与新活动 | Accepted |

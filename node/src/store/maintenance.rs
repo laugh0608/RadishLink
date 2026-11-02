@@ -49,7 +49,7 @@ impl Store {
             ));
         }
         let invalid: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.role!='destination' OR m.state NOT IN ('committed','delivered') OR EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence')) OR EXISTS(SELECT 1 FROM messages m WHERE m.role='destination' AND m.policy_stopped=0 AND m.deadline>(SELECT monotonic_ms FROM meta WHERE id=1) AND NOT EXISTS(SELECT 1 FROM receipt_intents i WHERE i.message_key=m.key) AND NOT EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence'))",
+            "SELECT EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.role!='destination' OR m.state NOT IN ('committed','delivered') OR EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence')) OR EXISTS(SELECT 1 FROM messages m WHERE m.role='destination' AND m.policy_stopped=0 AND m.domain_id=(SELECT current_domain FROM meta WHERE id=1) AND m.deadline>(SELECT monotonic_ms FROM current_clock WHERE id=1) AND NOT EXISTS(SELECT 1 FROM receipt_intents i WHERE i.message_key=m.key) AND NOT EXISTS(SELECT 1 FROM queues q WHERE q.message_key=m.key AND q.kind='evidence'))",
             [], |r| r.get(0))?;
         if invalid {
             return Err(Error::new(
@@ -121,7 +121,7 @@ impl Store {
 
     pub(super) fn write_clock(&self, clock: &Clock) -> Result<()> {
         self.conn.execute(
-            "UPDATE meta SET monotonic_ms=?1,unix_ms=?2,unix_upper_ms=?3 WHERE id=1",
+            "UPDATE clock_domains SET monotonic_ms=?1,unix_ms=?2,unix_upper_ms=?3 WHERE domain_id=(SELECT current_domain FROM meta WHERE id=1) AND frozen=0",
             params![
                 clock.monotonic_ms,
                 clock.utc_lower_ms(),
@@ -145,7 +145,7 @@ impl Store {
     }
 
     pub(super) fn cleanup_due(&self, clock: &Clock) -> Result<MaintenanceReport> {
-        let mut statement = self.conn.prepare("SELECT key FROM messages WHERE payload IS NOT NULL AND deadline<=?1 ORDER BY deadline,key LIMIT ?2")?;
+        let mut statement = self.conn.prepare("SELECT key FROM messages WHERE payload IS NOT NULL AND domain_id=(SELECT current_domain FROM meta WHERE id=1) AND deadline<=?1 ORDER BY deadline,key LIMIT ?2")?;
         let keys: Vec<String> = statement
             .query_map(params![clock.monotonic_ms, MAINTENANCE_BATCH], |r| r.get(0))?
             .collect::<std::result::Result<_, _>>()?;
@@ -164,10 +164,10 @@ impl Store {
             )?;
         }
         let expired_evidence = self.conn.execute(
-            "DELETE FROM queues WHERE rowid IN (SELECT q.rowid FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.deadline<=?1 ORDER BY m.deadline,m.key,q.neighbor LIMIT ?2)",
+            "DELETE FROM queues WHERE rowid IN (SELECT q.rowid FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.domain_id=(SELECT current_domain FROM meta WHERE id=1) AND m.deadline<=?1 ORDER BY m.deadline,m.key,q.neighbor LIMIT ?2)",
             params![clock.monotonic_ms, MAINTENANCE_BATCH])?;
         let expired_receipt_intents = self.conn.execute(
-            "DELETE FROM receipt_intents WHERE message_key IN (SELECT i.message_key FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1 ORDER BY m.deadline,m.key LIMIT ?2)",
+            "DELETE FROM receipt_intents WHERE message_key IN (SELECT i.message_key FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.domain_id=(SELECT current_domain FROM meta WHERE id=1) AND m.deadline<=?1 ORDER BY m.deadline,m.key LIMIT ?2)",
             params![clock.monotonic_ms, MAINTENANCE_BATCH])?;
         let deleted_history = match clock.utc_lower_ms() {
             Some(wall) => self.conn.execute("DELETE FROM history WHERE sequence IN (SELECT sequence FROM history WHERE expires<=?1 ORDER BY expires,sequence LIMIT ?2)", params![wall, MAINTENANCE_BATCH])?,
@@ -176,7 +176,7 @@ impl Store {
         let stopped_evidence=self.conn.execute("DELETE FROM queues WHERE rowid IN (SELECT q.rowid FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.policy_stopped=1 AND m.policy_revision IS NOT NULL ORDER BY m.key,q.neighbor LIMIT ?1)",[MAINTENANCE_BATCH])?;
         let stopped_receipt_intents=self.conn.execute("DELETE FROM receipt_intents WHERE message_key IN (SELECT i.message_key FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.policy_stopped=1 AND m.policy_revision IS NOT NULL ORDER BY m.key LIMIT ?1)",[MAINTENANCE_BATCH])?;
         let stopped_due:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.policy_stopped=1 AND m.policy_revision IS NOT NULL) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.policy_stopped=1 AND m.policy_revision IS NOT NULL)",[],|r|r.get(0))?;
-        let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2) OR EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.deadline<=?1) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.deadline<=?1)", params![clock.monotonic_ms, clock.utc_lower_ms()], |r| r.get(0))?;
+        let more_due: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE payload IS NOT NULL AND domain_id=(SELECT current_domain FROM meta WHERE id=1) AND deadline<=?1) OR EXISTS(SELECT 1 FROM history WHERE expires<=?2) OR EXISTS(SELECT 1 FROM queues q JOIN messages m ON m.key=q.message_key WHERE q.kind='evidence' AND m.domain_id=(SELECT current_domain FROM meta WHERE id=1) AND m.deadline<=?1) OR EXISTS(SELECT 1 FROM receipt_intents i JOIN messages m ON m.key=i.message_key WHERE m.domain_id=(SELECT current_domain FROM meta WHERE id=1) AND m.deadline<=?1)", params![clock.monotonic_ms, clock.utc_lower_ms()], |r| r.get(0))?;
         Ok(MaintenanceReport {
             expired_payloads: keys.len(),
             expired_evidence,

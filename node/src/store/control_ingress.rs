@@ -35,6 +35,7 @@ impl Bucket {
 struct Pending {
     id: u64,
     activity: ActivityId,
+    domain: ClockDomainId,
     neighbor: CredentialRef,
     revision: i64,
     bytes: Arc<[u8]>,
@@ -102,6 +103,7 @@ pub struct ControlVerificationJob {
     owner: Arc<()>,
     id: u64,
     activity: ActivityId,
+    domain: ClockDomainId,
     neighbor: CredentialRef,
     revision: i64,
     bytes: Arc<[u8]>,
@@ -216,9 +218,11 @@ impl Store {
             .checked_add(1)
             .ok_or_else(|| Error::new(Code::Quota, "control ingress ticket exhausted"))?;
         self.ingress.next_id = id;
+        let domain = self.current_domain_id()?;
         self.ingress.pending.push_back(Pending {
             id,
             activity,
+            domain,
             neighbor,
             revision,
             bytes: Arc::from(bytes),
@@ -236,7 +240,12 @@ impl Store {
             let pending = &self.ingress.pending[index];
             let context = self.control_ingress_context(pending.activity, pending.neighbor);
             let refusal = match context {
-                Ok((_, revision)) if revision == pending.revision => None,
+                Ok((_, revision))
+                    if revision == pending.revision
+                        && pending.domain == self.current_domain_id()? =>
+                {
+                    None
+                }
                 Ok(_) => Some(Error::new(Code::Conflict, "queued control policy changed")),
                 Err(e) if matches!(e.code, Code::Conflict | Code::Expired) => Some(e),
                 Err(e) => return Err(e),
@@ -254,6 +263,7 @@ impl Store {
                     owner: self.ingress.owner.clone(),
                     id: pending.id,
                     activity: pending.activity,
+                    domain: pending.domain,
                     neighbor: pending.neighbor,
                     revision: pending.revision,
                     bytes: pending.bytes.clone(),
@@ -266,7 +276,9 @@ impl Store {
         })
     }
     fn release_control_job(&mut self, job: &ControlVerificationJob) -> Result<Pending> {
-        if !Arc::ptr_eq(&job.owner, &self.ingress.owner) {
+        if !Arc::ptr_eq(&job.owner, &self.ingress.owner)
+            || job.domain != self.current_domain_id()?
+        {
             return Err(Error::new(
                 Code::Conflict,
                 "control verification owner changed",

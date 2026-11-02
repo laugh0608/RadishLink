@@ -226,7 +226,7 @@ impl Store {
     /// Called inside the same transaction as revocation/retirement/clock changes.
     /// Keep payload and history; mark all affected output responsibilities terminal.
     pub(super) fn reconcile_business_policy(&self, now: i64) -> Result<()> {
-        self.conn.execute("UPDATE messages AS m SET policy_stopped=1 WHERE m.policy_stopped=0 AND (
+        self.conn.execute("UPDATE messages AS m SET policy_stopped=1 WHERE m.policy_stopped=0 AND m.domain_id=(SELECT current_domain FROM meta WHERE id=1) AND (
             NOT EXISTS(SELECT 1 FROM message_data d JOIN current_control_activity a ON a.activity=d.activity_id
                 JOIN current_control_bindings o ON o.credential=d.origin_credential_ref AND o.participant=d.origin_id AND o.state='active'
                 JOIN current_control_bindings t ON t.credential=d.destination_credential_ref AND t.participant=d.destination_id AND t.state='active'
@@ -241,7 +241,7 @@ impl Store {
         let invalid:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM messages m LEFT JOIN message_data d ON d.message_key=m.key WHERE
             (m.policy_revision IS NULL AND (m.local_credential IS NOT NULL OR m.policy_stopped!=1)) OR
             (m.policy_revision IS NOT NULL AND (m.local_credential IS NULL OR d.message_key IS NULL OR
-                NOT EXISTS(SELECT 1 FROM control_activity a JOIN control_bindings l ON l.activity=a.activity AND l.credential=m.local_credential AND l.participant=a.local_participant WHERE a.activity=d.activity_id AND a.policy_revision>=m.policy_revision AND
+                NOT EXISTS(SELECT 1 FROM control_activity a JOIN control_bindings l ON l.activity=a.activity AND l.credential=m.local_credential AND l.participant=a.local_participant WHERE a.activity=d.activity_id AND a.domain_id=m.domain_id AND d.domain_id=m.domain_id AND a.policy_revision>=m.policy_revision AND
                 ((m.role='origin' AND l.participant=d.origin_id AND l.credential=d.origin_credential_ref) OR
                  (m.role='destination' AND l.participant=d.destination_id AND l.credential=d.destination_credential_ref) OR
                  (m.role='relay' AND l.participant!=d.origin_id AND l.participant!=d.destination_id))) OR

@@ -5,6 +5,7 @@ const NEW: ActivityId = [42; 32];
 /// Test-only reconstruction from the unchanged historical SQL, never a product downgrade.
 /// Fixtures must contain at most the original activity; stopping is an explicit test input.
 pub(super) fn strip_v8(s: &Store, stopped: bool) {
+    super::clock_domain_tests::strip_v9(s);
     let tables = [
         (
             "control_activity",
@@ -476,7 +477,7 @@ fn migration_faults_leave_whole_source_or_whole_v8() {
             if fault == TestFault::BeforeCommit {
                 7
             } else {
-                8
+                9
             }
         );
     }
@@ -529,7 +530,7 @@ fn every_switch_write_failure_rolls_back_archive_pointer_scopes_and_rate() {
         "BEFORE INSERT ON control_activity",
         "BEFORE UPDATE OF current_activity ON meta",
         "BEFORE UPDATE ON control_output_rate",
-        "BEFORE UPDATE OF monotonic_ms ON meta",
+        "BEFORE UPDATE OF monotonic_ms ON clock_domains",
     ] {
         let w = Workspace::new();
         let mut s = w.create();
@@ -758,7 +759,7 @@ fn process_exit_recovers_entire_switch_and_migration() {
                 if operation == "migration" && !committed {
                     7
                 } else {
-                    8
+                    9
                 }
             );
             drop(c);

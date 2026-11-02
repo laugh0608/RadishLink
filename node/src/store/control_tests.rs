@@ -101,7 +101,7 @@ fn v4_reservation_is_inside_existing_totals_and_rejects_small_limits_before_crea
     let u = s.control_usage().unwrap();
     assert_eq!(u.reserved_bytes, 1048576);
     assert_eq!(u.reserved_records, 576);
-    assert_eq!(u.used_records, 0);
+    assert_eq!(u.used_records, 1);
     assert_eq!((s.limits.control_bytes - u.reserved_bytes) / 4096, 1792);
     let w = Workspace::new();
     let limits = Limits {
@@ -147,7 +147,7 @@ fn v3_migration_requires_explicit_call_and_rolls_back_capacity_failure() {
         let v: i64 = c
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(v, if enough { 8 } else { 3 });
+        assert_eq!(v, if enough { 9 } else { 3 });
         let has: bool = c
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='control_activity')",
@@ -324,7 +324,7 @@ fn report_capacity_and_full_business_budget_do_not_block_owner_or_exit() {
     // Fill the business byte ceiling in one synthetic fixture transaction.
     s.atomic(|s| {
         s.conn.execute_batch("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1792)
-            INSERT INTO messages(key,origin_ref,core,role,state,payload,deadline,retain_until,hops,source_neighbor) SELECT printf('bulk-%d',i),printf('origin-%d',i%4),x'01','relay','stored',x'02',100000,200000,1,'A' FROM n;
+            INSERT INTO messages(key,origin_ref,core,role,state,payload,deadline,retain_until,hops,source_neighbor,domain_id) SELECT printf('bulk-%d',i),printf('origin-%d',i%4),x'01','relay','stored',x'02',100000,200000,1,'A',(SELECT current_domain FROM meta WHERE id=1) FROM n;
             INSERT INTO control_reservations SELECT key,4096 FROM messages;")?;Ok(())
     }).unwrap();
     let mut overflow = relay("overflow");
@@ -595,7 +595,7 @@ fn v3_migration_faults_and_unknown_versions_preserve_source() {
             if fault == TestFault::BeforeCommit {
                 3
             } else {
-                8
+                9
             }
         );
         let s = if v == 3 {
@@ -688,7 +688,7 @@ fn process_exit_recovers_whole_migration_exit_and_consumed_budget() {
                 w.reopen(2001)
             };
             match operation {
-                "migrate" => assert_eq!(s.control_usage().unwrap().used_records, 0),
+                "migrate" => assert_eq!(s.control_usage().unwrap().used_records, 1),
                 "intent" => assert_eq!(
                     s.control_binding_state(cred(1, 1)).unwrap(),
                     Some(if committed {

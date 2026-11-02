@@ -156,7 +156,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 
 ## 近期工作包与决策顺序
 
-截至 2026-10-28，D15/D16 自有持久边界、业务政策、共享外发、控制入站及 D17 同 boot 活动生命周期已提交，当前 schema v8，最新实现 `c7008eb`，该批最终串行 172 库测试 + 2 CLI 测试通过。提交沿革与文档自审集中见[当天回顾](2026-10-28-progress.md)。2026-11-02 的[跨 boot 新写域/历史坐标与回收草案](../architecture/node-activity-lifecycle.md#跨-boot-新活动与长期回收评审2026-11-02draft)及锁诊断已提交为 `bdaa125`，未 push。随后[锁生命周期修复](../testing/node-service-reliability.md#store-owner-关闭与锁释放修复2026-11-02)在工作区完成，默认并行 179 库 + 2 CLI 测试与本机子进程探针通过；历史个例未补造逐次归因，Linux/真实环境未验证。下一项仍为草案四项新选择与实施范围评审，真实运行/安全门未开放。
+截至 2026-10-28，D15/D16 自有持久边界、业务政策、共享外发、控制入站及 D17 同 boot 活动生命周期已提交，当时为 schema v8，最新实现 `c7008eb`，该批最终串行 172 库测试 + 2 CLI 测试通过，沿革见[当天回顾](2026-10-28-progress.md)。2026-11-02 的设计/锁诊断与[锁修复](../testing/node-service-reliability.md#store-owner-关闭与锁释放修复2026-11-02)分别提交为 `bdaa125`、`9a57466`，均未 push；该批默认并行 179 库 + 2 CLI 测试与本机子进程探针通过，Linux/真实环境未验证。所有者随后接受 [ADR 0009 D18](../adr/0009-node-clock-domains.md)四项选择并授权合成离线实施；当前 schema v9、域化查询、先隔离后新建、显式冷迁移及原额度计费已完成，默认并行 199 库 + 2 CLI 测试、fmt/Clippy 通过，详见[实施记录](../testing/node-activity-lifecycle.md#d18-跨-boot-时钟域与-schema-v92026-11-02)。D18 按所有者要求本地提交，真实运行/安全门未开放；接续聚焦就绪集合/传输公平及 framing、工作池与输出授权交接的有界实施包，不重复 D18 决策。
 
 下表于 2026-10-09 按接续决定更新；2026-10-18 同步 I5 RPC/生命周期、初始化/容量声明、初始化/暂存内部接线、执行合同/原生证据候选及宿主写入裁决/原生生命周期的离线进展，2026-10-24 同步使用量、BOM 与内部 ARM64 评审输入。表中角色是决策职责，不表示已指派外部人员；所有者在启动相应工作包时确认执行者、投入上限和复核日期。日期未定时明确保持待定；到期缺输入应选择补证、调整范围或暂停，不无限延长取证。
 
@@ -164,7 +164,7 @@ P0 不要求 HaLow 距离通过，但正式退出仍要求应用层安全和三�
 | --- | --- | --- | --- |
 | 最高 | [首个用户场景](../product-definition.md)、[地区预检](../regulatory/radio-compliance.md) | 3–5 人、6–8 小时活动、背包携带、上海与整套最高 3000 元已确认；10 月 24 日按所有者委托补操作频率、断连容忍及携带规划值，仍需场景反馈和具体无线 SKU/配置书面路径 | 规划值是预算起点，专业方核对法规；场地可选不等于 RF 通过 |
 | 已确认范围 | [阶段顺序修订记录](../roadmap.md#阶段顺序修订记录2026-09-26) | 首台 E0 文字/语音样机不等待 P2；产品、依赖图、硬件与媒体验收同步 | 所有者已选择；安全、升级恢复、HW/RF 门不变，阶段未通过 |
-| 当前先行 | [Node 服务架构与关键选型](../architecture/node-service-design.md) | ADR 0004—0008 已接受，schema v8；11 月 2 日跨 boot/回收 Draft 与诊断已提交，后续 owner 关闭/解锁修复完成本机离线验证，179 库 + 2 CLI 默认并行测试通过。真实接线和 G1/G2 仍停止 | 所有者审阅时钟域、两步转换、计费及 v8 冷启动迁移后再决定合成实施；长期回收先维持满额拒绝。新图资源/网络监督与可信平台仍缺，实际 storage trait/签验须许可证/R2/Phase B 前置，离线基础不替代运行/HW 证据 |
+| 当前先行 | [Node 服务架构与关键选型](../architecture/node-service-design.md) | ADR 0004—0009 已接受；schema v9 跨 boot 时钟域、两步事务与显式迁移完成合成离线验证，199 库 + 2 CLI 默认并行测试通过。先补就绪集合枚举/传输公平的接入方案，联合核对 framing、工作池停止/Join 与输出授权，形成下一有界包 | D18 仅覆盖 Node 自有内部边界，旧权限不恢复，长期回收维持满额拒绝。新图资源/网络监督与可信平台仍缺，真实接线、storage trait/签验须原许可证/R2/Phase B 及运行前置，离线基础不替代运行/HW 证据 |
 | 高 | [E2EE 决策包](../security/e2ee-sw-g2-decision-package.md)及现有 R1d 处置 | 优先固定 mls-rs 0.56.0；10 月 24 日已整理内部 Linux ARM64 输入与拟议产物/命令，下一步冻结实际复制范围和复核责任，分别处理 debug_tree 与 r-efi，满足新证据轨/R2 条件 | 分渠道方向已接受，专业意见与新合同仍待完成；不放宽现行 gate，不进入 Phase B |
 | 高 | [手机身份](../mobile/companion-app.md)、[路由边界](../architecture/network-and-routing.md)与安全状态 | Node 身份/会话/历史及手机界面职责已选择；继续证明首次信任、撤销、hop 映射、事务和 relay-clear proof | 系统/安全评审；方向接受不等于密码实现或 SW-G2 通过 |
 | 高 | [文字闭环设计](../architecture/minimal-text-slice.md)、[SW-G3 修订包](../testing/sw-g3-revision-2-review.md)与 [I5 三进程闭环包](../testing/sw-g4-synthetic-i5-plan.md) | I1–I5-I 已提交并通过各自离线验证；[资源隔离设计](../testing/sw-g4-synthetic-i5-resource-isolation.md)保留整批 768 MiB，证据计费、容量探测及受限双构建 helper 离线通过；10 月 18 日 [RPC/生命周期内部接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#受监督-rpc-与单次生命周期离线接线2026-10-18)通过离线验收、提交为 `17a142e`，未 push；第一包新增[初始化合同与容量账本离线评审](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化合同与容量账本离线评审2026-10-18)，已提交为 `e6d50ff`，未 push；第二包已完成[合成初始化、受控暂存与收尾接线](../testing/sw-g4-synthetic-i5-environment-feasibility.md#初始化受控暂存与收尾内部接线2026-10-18)，已提交为 `4281fb0`，未 push；第四包已完成[原生初始化与 bootstrap 离线实施](../testing/sw-g4-synthetic-i5-native-initialization.md)；第五包新增[宿主写入裁决与原生生命周期离线接入](../testing/sw-g4-synthetic-i5-host-delivery.md)，当前 Mac/UTM 全域写入仍阻塞；仍须补齐真实 FD loader、输入、Linux 父监督验收、运行合同的真实绑定和完整硬额度，再完成运行接入、daemon 隔离及环境验收后评审入口重开 | 当前 preflight/run 停止；测试文件存储不替代生产数据库/安全联合提交，不宣称正式 V1/V2/V3 通过 |
@@ -231,3 +231,7 @@ D11—D14 已提交为 `5d2ebfc`。按本次接续请求完成[数据 envelope �
 ## Node D17 接受与实施（2026-10-28）
 
 所有者审阅[活动生命周期方案](../architecture/node-activity-lifecycle.md)后明确“接受，实施”，正式决策见 [ADR 0008](../adr/0008-node-activity-lifecycle.md)。本批接受旧控制实际计费占用业务余额、满额拒绝和首批仅同 boot 切换；保留旧历史/身份/去重与安全状态隔离，不提高配置限额。schema v8 与显式迁移、切换事务、任务收束、动作续代及失败恢复已经完成有限离线验证，详见[实施记录](../testing/node-activity-lifecycle.md)。这不构成跨 boot 恢复、长期自动回收或真实密码/网络入口授权。
+
+## Node D18 接受与实施（2026-11-02）
+
+所有者接受单库时钟域、先隔离再原子建立新活动、每域 4096 bytes / 1 记录且总额不增加，以及显式 schema v9 迁移，正式决策见 [ADR 0009](../adr/0009-node-clock-domains.md)。Node 自有维护事务、查询域关联、预算与合成故障矩阵已完成，验证与失败修正见[实施记录](../testing/node-activity-lifecycle.md#d18-跨-boot-时钟域与-schema-v92026-11-02)。旧 boot 的坐标、消息和安全事实保留，旧权限不恢复；缺可信新 UTC 或容量时保持隔离，新活动须全新绑定。普通 Service/CLI 无新增恢复入口，可信 boot/UTC、真实配对、完整防回滚、实际密码、网络/设备/VM 和真实数据迁移仍未验证或未执行，原停止线不变。交接后所有者另行明确授权本地提交，未授权 push。
