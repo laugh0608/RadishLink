@@ -24,17 +24,19 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 - `model`、`retry`：进程内记录及 I1 重试规则移植，不是产品 wire 或认证结果。
 - `framing`：ADR 0007 的 u32be 前缀、每邻居一个 ≤64 KiB frame、最多四邻居和固定 10 秒组装期限；仅内部缓冲边界，尚未接入 transport/Service，详见[离线验证记录](../docs/testing/node-framing-and-graph-inputs.md)。
 - `data`：D15 原始 core/解析字段、完整身份、u64 epoch 与可信 UTC 区间的有界运算；不解码 CBOR 或验证密码。
-- `store`：schema v8、显式 v1/v2/v3/v4/v5/v6/v7 迁移、单拥有者、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与事件批调度。
-- `service`：容量 32 的命令队列、可克隆 Client、专属状态线程；支持平台时钟源周期维护，查询已提交事实；关闭接纳后排空已接纳命令并 Join，业务发送仍拒绝。
+- `store`：schema v9、显式 v1..v8 迁移、单拥有者与时钟域、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与内部外发周期。
+- `service`：容量 32 的命令队列、可克隆 Client、专属状态线程；支持平台时钟源周期维护，查询已提交事实；关闭接纳后排空已接纳命令并 Join，传播 Store 关闭错误，业务发送仍拒绝。
 - `error`：稳定错误分类与受控诊断原因；默认 Display/Debug 不回显底层输入。
 
 `Store` 写方法是内部集成基础：其调用者将来必须先完成授权、消息认证、proof 验证和安全状态准备。当前测试直接提供不透明合成字节；这些字节没有密码学意义。不能将这些方法直接暴露给 CLI、HTTP 或网络，也不能将 `core_binding` 当作本模块计算/验证的哈希。
 
 `Store::create` 只允许全新目录，`Store::open` 不创建或重置缺失/损坏的库。目录必须为 canonical 0700，状态/锁文件为单链接 0600；这些检查不证明卷已加密或能够抵抗同用户/root 的并发路径替换。平台接入仍须验证受控父目录、用户身份、解锁和锁定生命周期。
 
-schema 当前为 8，config/retry 仍为 1，未知版本拒绝。普通 open 遇到 v1/v2/v3/v4/v5/v6/v7 返回 MigrationRequired，须按实际来源显式调用 `Store::migrate_v1`、`Store::migrate_v2`、`Store::migrate_v3`、`Store::migrate_v4`、`Store::migrate_v5`、`Store::migrate_v6` 或 `Store::migrate_v7` 到当前版本。迁移为旧中继补预留、缩短旧 proof queue 至原消息 deadline、终结已到期证明并保留目标端交付事实；不重置 retry 预算。容量不足整笔拒绝，已有 v8 不重复执行，不能通过改版本号降级或静默重建。旧消息缺 D15 字段或可信政策快照，保留查询/到期维护但禁止继续输出，不从新帧补造缺失认证内容。版本化记录与动作 generation 不是可信硬件抗回滚机制。
+`Store::close(self)` 先确认 SQLite 关闭，再显式释放已取得的 owner 锁；`Service::stop` 在状态线程 Join 后传播关闭/解锁错误。SQLite 关闭失败时保留连接与锁到进程退出，不用锁重试、延时或提前 unlock 伪造关闭成功。Drop 只能给出固定操作名/错误码诊断，需确认关闭成功时必须检查 close/stop 的结果，详见[锁生命周期修复](../docs/testing/node-service-reliability.md#store-owner-关闭与锁释放修复2026-11-02)。
 
-历史默认 7 天，新历史按可信 UTC 上界起算、可信下界删除，由受信平台时钟推进；启动/Clock 命令和可选周期维护将时钟推进与有界清理一起提交，到期内容立即从查询过滤。`Service::start_with_clock` 的周期为 100 ms–60 s，平台必须提供可信且有界的 `ClockSource`；现有测试用合成源，Linux 时钟信任与休眠恢复后端尚未接入。不同 boot、单调时钟回退或可信 UTC 任一端回退、区间超宽或来源丢失进入 `TIME_UNCERTAIN`，保留可读状态并拒绝写入，不能通过新的时间值自动解除隔离。提交结果不确定时停止查询/写入，须重开并按动作键查询，不自动重发。
+schema 当前为 9，config/retry 仍为 1，未知版本拒绝。普通 open 对 v1..v8 返回 MigrationRequired；按实际源版本显式调用 `Store::migrate_v1`..`Store::migrate_v8`，沿原兼容链、同 boot 和旧活动停用前置到当前版本。旧中继预留、原消息 deadline、proof 终结及交付事实保持，不重置 retry；容量不足或损坏整笔拒绝，已有 v9 不重复迁移，不能改版本号降级或静默重建。旧消息缺 D15 字段或可信政策快照时不补造认证，输出仍隔离。冷启动 v8 仅可用显式 `Store::migrate_v8_isolated` 将结构迁移和原域隔离共同提交，不假扮旧 Clock，也不同时建立新活动；更早冷库不走此捷径。版本化记录与动作 generation 不是可信硬件抗回滚机制。
+
+历史默认 7 天，新历史按可信 UTC 上界起算、可信下界删除，由受信平台时钟推进；启动/Clock 命令和可选周期维护将时钟推进与有界清理一起提交，到期内容立即从查询过滤。`Service::start_with_clock` 的周期为 100 ms–60 s，平台必须提供可信且有界的 `ClockSource`；现有测试用合成源，Linux 时钟信任与休眠恢复后端尚未接入。不同 boot、单调时钟回退或可信 UTC 任一端回退、区间超宽或来源丢失进入 `TIME_UNCERTAIN`，保留可读状态并拒绝普通写入，不能通过新的时间值自动解除原域隔离。D18 显式维护只允许隔离旧域后建立全新上下文，不恢复旧会话。提交结果不确定时停止查询/写入，须重开并按持久事实核对，不自动重发。
 
 依赖固定图、许可追溯及更新责任见 [THIRD_PARTY.md](THIRD_PARTY.md)。未接入 Tokio、HTTP/TLS、mls-rs、加密卷或 systemd，未修改原有 Go harness、密码 spike 或 I5 运行入口。
 
@@ -42,9 +44,9 @@ schema 当前为 8，config/retry 仍为 1，未知版本拒绝。普通 open �
 
 T-C 只保存 `Receive.receipt_intent`，不接收预生成的送达签名；提交后可用内部 `receipt_intent` 读取，再由 `finalize_receipt` 原子转换成待发证明。这些接口没有签验或身份授权能力，不暴露给 Service/CLI/网络。意图与中继预留都按一个控制记录及 4096 bytes 计费；转换失败保留意图，重复转换不重置队列。两条 proof 返回路径均使用原消息 deadline，到期维护各批最多清理 256 个 intent 和 256 个 proof，保留历史与去重。目标端 committed 表示 T-C 已提交，payload 到期后转为 delivered，仍表示已交付，不能因证明未返回而改成 expired。
 
-D16 在原 8 MiB / 4096 控制总额度内固定保留 1 MiB / 576 记录，全局记录额度也预留 576 槽；业务 proof 按完整 4096-byte 责任计费，无旧活动归档时默认字节维度上限为 1792 条。迁移空间不足保留旧库；不通过删除 custody 或增大配置放行。`Usage.security_control` 报告专用预留和实际使用，`records` 包括业务、当前控制和归档实际记录，`reserved_control_*` 仍为业务证明预留。这些不是物理磁盘硬边界。
+D16 在原 8 MiB / 4096 控制总额度内固定保留 1 MiB / 576 记录，全局记录额度也预留 576 槽；业务 proof 按完整 4096-byte 责任计费，无旧活动或旧域归档时默认字节维度上限为 1792 条。迁移空间不足保留旧库；不通过删除 custody 或增大配置放行。`Usage.security_control` 报告专用预留和实际使用，`records` 包括业务、当前控制和归档实际记录，`reserved_control_*` 仍为业务证明预留。这些不是物理磁盘硬边界。
 
-内部控制接口保存当前活动、五人四代绑定、退出/报告固定槽、Retiring 意图和邻居责任。`process_control_batch` 复用 Batch 合并和原子提交边界，消费八个 D16 时槽与两次有间隔恢复机会，已错过时槽跳过；每邻居最多十次尝试/控制 ACK。同 boot 重开从空桶开始且不返还持久次数；新 boot 拒绝输出。schema v8 已实现内部同 boot 切换，仍无公开重配/清理入口，不删除旧活动 marker 恢复额度。业务身份/活动/撤销已有内部关联；kind 2/3 入站限速与有界等待已有内部实现，真实签验与实际传输统一授权门仍待接入；详见控制持久化记录及其中保留的测试失败。
+内部控制接口保存当前活动、五人四代绑定、退出/报告固定槽、Retiring 意图和邻居责任。`process_control_batch` 复用 Batch 合并和原子提交边界，消费八个 D16 时槽与两次有间隔恢复机会，已错过时槽跳过；每邻居最多十次尝试/控制 ACK。同 boot 重开从空桶开始且不返还持久次数；新 boot 普通重开仍拒绝原活动输出。D17 同 boot 切换与 D18 新域维护均无公开重配/清理入口，不删除旧活动 marker 恢复额度。业务身份/活动/撤销已有内部关联；kind 2/3 入站限速与有界等待已有内部实现，真实签验与实际传输统一授权门仍待接入；详见控制持久化记录及其中保留的测试失败。
 
 D15 新消息保存原始 core 和完整身份；epoch 为固定 8-byte big-endian BLOB。重复接收同步收紧消息/队列期限，时间准入与内部输出均检查 UTC 上界和同 boot deadline。调用方仍须提供严格解码/认证后的匹配字段及新鲜可信采样；完整身份已接到 D16 内部撤销/活动检查。
 
@@ -52,8 +54,14 @@ schema v6 政策关联见[业务政策关联记录](../docs/testing/node-busines
 
 schema v7 引入的[共享外发调度](../docs/testing/node-outbound-scheduling.md)复用既有 Store 事务。`process_outbound_batch` 每轮至多 128 个事件，统一 receipt/退出/报告/两类 ACK 的 4 frames/s、8192 bytes/s 额度；退出优先，责任按持久游标轮转，同 boot 重开空桶。数据 ACK 每消息四个 participant 槽、每槽十次，不因换键恢复；v6 旧消息不补造 ACK 预算。原 queue/control 批处理委托新入口，单责任 receipt 也共享扣费；全局公平仍要求未来拥有者公平汇总完整就绪集合与真实传输接线。
 
+[外发拥有者工作包](../docs/architecture/node-outbound-owner.md)已接入只读候选遍历与同步离线周期。`scan_outbound_page` 在当前域/活动内按稳定键返回至多 128 个引用，不返回正文或 ACK。`process_outbound_cycle` 每步重新完整读取至多 80 个退出责任，另取数据/普通控制各 16 个候选及至多 16 个显式 ACK 输入；检查 revision、可信坐标与显式已捕获观察后进入原事务，成功后才推进位置并关闭本步毫秒。工作片不改变速率或预算；旧拥有者/活动/域拒绝，重开不恢复输入和决定。周期报告及 `validate_business_output` 都不是一次消费或最终发送许可，真实输入收集、验证 worker 与通道交接仍未接入。
+
+周期 expected_revision / cutoff_revision 是 Store 提交修订，`validate_business_output` 的 expected_revision 是政策修订；二者不能互传。输出交接须另行绑定当前权限、精确通道及新鲜时间，不能由周期截点替代。
+
 [控制入站准入](../docs/testing/node-control-ingress.md)由同一 Store 持有：已核验邻居每秒 1 个/burst 2、全局每秒 4 个/burst 4；原始对象限 512 bytes，等待和已分发任务合计最多 16 个。未验证数据不写 SQL，重开丢弃内存队列并空桶起算；相同 participant 换键不重置额度。结果须匹配原字节、活动、来源通道与政策修订，再与控制接纳共同提交；没有实际解析器、验证器或网络入口，该入站批次未改变 schema；后续活动生命周期将其升级为 v8。
 
 [活动生命周期](../docs/testing/node-activity-lifecycle.md)按 [ADR 0008 D17](../docs/adr/0008-node-activity-lifecycle.md)实现。`preflight_activity_switch` 报告归档代价和在途任务；旧活动明确停用且全部任务收束后，`switch_control_activity` 原子归档并建立新上下文。当前活动仍保留完整预留，旧控制计入业务控制余额，满额拒绝。`activity_status` 用于查询持久后继关系；旧记录和业务次数保留，旧权限不恢复。`Usage.archived_control_*` 单列归档实占。
 
-活动迁移须旧活动已停用；运行中拒绝整笔迁移，不能用 SQL 改标记绕过。旧版 session 隔离，新的状态按 `(activity,session)` 定位；旧动作 scope 退休，`renew_action_scope` 以预期旧代数显式续代并绑定当前活动，保留旧动作事实。迁移的额外页面/journal 预算和真实用户数据操作另审。跨 boot 新活动、长期回收及真实 worker/transport/UI 配对仍未完成。
+普通同 boot 活动迁移须旧活动已停用；不能用 SQL 改标记绕过，v8 冷迁移只能走前述显式迁移并隔离路径。旧版 session 隔离，新的状态按 `(activity,session)` 定位；旧动作 scope 退休，`renew_action_scope` 以预期旧代数显式续代并绑定当前活动，保留旧动作事实。迁移的额外页面/journal 预算和真实用户数据操作另审。
+
+[ADR 0009 D18](../docs/adr/0009-node-clock-domains.md)在单库维护 `clock_domains`，meta 仅指向当前域。先 `isolate_clock_domain` 冻结原坐标并停用旧权限，再用 `establish_clock_domain` 原子建立新域与空新活动；新可信 UTC 端点不回退、完整请求引用、身份/sequence、任务和容量均须通过。每域 4096 bytes / 1 记录，当前域占原固定预留、旧域进入原业务余额且只计一次，总额不增加。历史数据按原域校验，不拿新 boot 的单调数值删除旧 payload；旧会话、绑定和 job 不继承，缺时间或容量保持隔离。真实可信平台、重配、自动长期回收及 worker/transport/UI 接线仍未完成。

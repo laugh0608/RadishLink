@@ -91,3 +91,5 @@ COSE_Sign1 是标准封装方向，采用成熟实现；应用仍须验证签名
 ## 2026-10-28 内部接入进展
 
 [D15 持久映射](../testing/node-data-persistence.md)、[业务政策关联](../testing/node-business-policy.md)、[共享外发](../testing/node-outbound-scheduling.md)和[有界入站等待](../testing/node-control-ingress.md)已有有限离线验证。[ADR 0008 D17](../adr/0008-node-activity-lifecycle.md)实现同 boot 新活动与旧会话/动作隔离；[ADR 0009 D18](../adr/0009-node-clock-domains.md)于 2026-11-02 进一步实现内部跨 boot 时钟域、先隔离后建立全新活动及 schema v9 迁移，见[合成验证](../testing/node-activity-lifecycle.md#d18-跨-boot-时钟域与-schema-v92026-11-02)。可信 boot/UTC 来源、防回滚和真实重配仍未完成，旧状态没有取得新权限。D6 的真实密码 storage trait 联合事务、实际签验与传输授权交接继续等待原安全门，以上进展不构成 SW-G2 通过。
+
+同日的[同步离线周期](../architecture/node-outbound-owner.md#第二批已实施同步离线拥有者周期)要求调用者先供应已捕获/核验输入，内部截点和有界工作片不实施真实认证。周期 expected_revision / cutoff_revision 是 Store 提交修订，`validate_business_output` 的 expected_revision 是政策修订，不得互换；现有复核不提供一次消费或最终 I/O 能力。日终接续先设计输出绑定、撤销/到期、换通道和重复消费的交接矩阵，见[接下来的事项](../status/2026-11-02-progress.md#接下来的事项)，不解锁真实密码或通道。
