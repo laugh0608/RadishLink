@@ -75,7 +75,7 @@ git diff --check
 
 - 范围：所有者要求按计划推进跨 boot 设计及 Store 锁异常诊断；本节记录工程诊断，不授权修改锁行为或接受跨 boot 新语义。
 - 基线：`ee20ab3`，Node 实现为 `c7008eb` / schema v8；macOS 27.0.1（26A434）、aarch64-apple-darwin、Rust 1.97.1（8bab26f4f）。
-- 结论：**已定位并复现“并发启动子进程暂时持有继承锁”的机制；历史两次个例没有逐次时序证据，修复尚未实施。** 本次未修改任何 Node 源码、测试、manifest 或 lockfile。
+- 诊断批次结论：**已定位并复现“并发启动子进程暂时持有继承锁”的机制；历史两次个例没有逐次时序证据，当时尚未修复。** 该批未修改任何 Node 源码、测试、manifest 或 lockfile；随后修复见[下节](#store-owner-关闭与锁释放修复2026-11-02)。
 
 ### 失败来源与排查
 
@@ -130,4 +130,54 @@ RUSTUP_AUTO_INSTALL=0 rustc +1.97.1 --edition=2024 .cache/node/2026-11-02/store_
 
 修复验收须同时证明：真实第二拥有者仍立即 Busy；连接/工作尚存时不能释放所有权；受控继承窗口和普通并发 spawn 不再阻止合法重开；失败/异常退出和原 COMMIT 故障恢复仍成立。随后运行对应精准回归、默认并行全量、fmt/Clippy 与仓库检查。历史个例仍保留其当时不确定性，不将新修复追溯写成旧运行已稳定；Linux 部署证据另验。
 
-本轮文档同步后执行 `./scripts/check-repo.sh`（309 文件）与 `git diff --check`，均退出 0；独立核对新增相对链接/锚点及草案逻辑计费计算通过。Node 源码未变，未另跑 fmt/Clippy、CLI、正式实验或真实环境验收。六份文档留在 `dev` 工作区待审阅，未提交/push，未改变远程状态；本任务测试与诊断子进程均已结束，无新增后台服务。
+设计/诊断批次交接时执行 `./scripts/check-repo.sh`（309 文件）与 `git diff --check`，均退出 0；独立核对新增相对链接/锚点及草案逻辑计费计算通过。该批 Node 源码未变，未另跑 fmt/Clippy、CLI、正式实验或真实环境验收。当时六份文档留在 `dev` 工作区待审阅，未提交/push，未改变远程状态；测试与诊断子进程均已结束，无新增后台服务。
+
+## Store owner 关闭与锁释放修复（2026-11-02）
+
+### 范围与实现
+
+所有者随后要求“提交工作区更改，下一步要推进什么，继续推进”。先将设计/诊断六份文档提交为 `bdaa125`，未 push；接续范围为已定位的 owner 生命周期修复及合成离线回归。跨 boot 草案仍为 Draft，未接受或实施其新语义。本批沿用 ADR 0004 的单库/单拥有者边界；schema v8、协议、依赖和真实入口保持。
+
+`store/connection.rs` 将已成功取得的 owner 文件锁与 SQLite 连接纳入一个私有 `StoreConnection`。Store 只持有该资源边界；其内部 Deref 用于沿用原有 SQL 调用，不创建第二个存储入口。create/open 在路径、格式或初始化失败时也沿同一释放顺序退出。未取得锁的句柄不进入拥有者守卫，第二拥有者的失败绝不执行 unlock。
+
+- 成功关闭先使用 `Connection::close` 确认 SQLite 关闭，再显式 `File::unlock`；即使还有复制/继承的文件描述符，也不再依赖其最后一次 close 才释放锁。旧复制句柄随后关闭，不影响新 Store 独立取得的锁。
+- `Store::close(self)` 返回关闭/解锁错误及原始 source；服务排空已接纳的工作后调用它，worker 返回 Result，`Service::stop` 在 Join 后传播该错误。关闭准入或仍有持有中的工作不表示锁已释放。
+- SQLite close 失败时不解锁、不重试，也不将旧连接交给新拥有者；连接及 owner 文件句柄保持到进程退出，调用方收到 `StoreUnavailable: close SQLite connection` 及真实原因。这是明确的 fail-closed 资源保留，须由后续进程监督处理，不可据此报告数据卷已完全关闭；未新增自动重启或平台能力。
+- SQLite 已关闭但 unlock 失败时返回 `StoreUnavailable: release store owner lock`，保留 I/O source；文件描述符按正常生命周期关闭，不重新打开资源或加锁重试。
+- 普通 Drop 与线程 unwind 仍执行同一顺序。析构无法返回 Result，失败只输出固定操作名/错误码的诊断并保持上述保守资源边界；不打印 SQL、路径、正文或 source。需确认关闭成功的调用方必须使用显式 close/stop，不能把 Drop 当确认结果。显式 stop 已处理的错误不再由 Service Drop 重复执行。
+
+### 回归与失败记录
+
+新增七项测试，另增强已有服务排空用例：存活的复制句柄下普通 Drop/显式 close/服务 stop 仍可重开；失败的第二拥有者不得解锁真实拥有者；初始化失败、线程 unwind、服务工作未完成时的 Busy；真实 SQLite close 失败保留锁和 source；模拟 unlock I/O 失败由 stop 返回。SQLite 失败用例仅在合成临时库中保留一个未结束 statement，相关连接/锁由测试进程退出回收，不操作真实用户数据。
+
+| 阶段 / 退出码 | 实际结果与处置 |
+| --- | --- |
+| 修复前新增定向回归 / 101 | `dropped_owner_releases_lock_while_a_duplicate_handle_survives` 在原代码上失败，重开报 `Busy: store owner lock`；保留 `lock-fix-before.log` |
+| 首轮资源边界六项定向 / 0 | 6/6 通过，包含 close 失败与 stop 错误传播 |
+| 修复后原失败回归 / 0 | 1/1 通过；复制句柄仍存活时成功重开，真实第二拥有者仍 Busy |
+| 首轮 Clippy / 101 | 新代码两处嵌套 if 触发 collapsible_if；按建议改为 let chain，未添加 allow 或放宽检查 |
+| 最终 fmt/Clippy / 0 | 格式与 all-targets `-D warnings` 通过 |
+| 默认并行全量 / 0 | **179 库测试 + 2 CLI 测试通过**，库测试 97.18 秒；含原 COMMIT 故障、迁移、服务 panic/排空及历史两个失败用例，未用串行化替代 |
+| 修复后 Store，无子进程 / 0 | 500 次 open，Busy=0，最终可 open |
+| 修复后 Store，普通 spawn / 0 | 4 线程各 128 次 `/usr/bin/true`，500 次 open，Busy=0；相同规模的修复前诊断为 Busy=8，计数不作为性能/稳定概率保证 |
+| 修复后 Store，受控 fork / 0 | 子进程停留在 pre_exec 时已可重开（during=None），之后仍可 open；原 probe 的同场景为 Busy |
+
+上述 probe 使用默认并行全量生成的当前非 test 库；只改变原探针对修复后结果的断言，并新增 Busy=0 断言，没有修改采样规模或 spawn 方式。旧探针及 hash 保留；修复后源码 `store_lock_probe_after.rs` 的 SHA-256 为 `a70c42c7f81805314ba3cba8e3e76facb2899a2cb575248ed078200c4fb267d7`。
+
+逐项日志在 `.cache/node/2026-11-02/` 留存。最终命令：
+
+```bash
+RUSTUP_AUTO_INSTALL=0 cargo +1.97.1 fmt --manifest-path node/Cargo.toml -- --check
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 clippy --offline --locked --manifest-path node/Cargo.toml --all-targets -- -D warnings
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
+RUSTUP_AUTO_INSTALL=0 rustc +1.97.1 --edition=2024 .cache/node/2026-11-02/store_lock_probe_after.rs --extern radishlink_node=.cache/node/target/debug/deps/libradishlink_node-9a35482a649e9e5a.rlib -L dependency=.cache/node/target/debug/deps -o .cache/node/2026-11-02/store-lock-probe-after
+.cache/node/2026-11-02/store-lock-probe-after no-spawn "$PWD/.cache/node/2026-11-02/store-after-no-spawn"
+.cache/node/2026-11-02/store-lock-probe-after spawn-overlap "$PWD/.cache/node/2026-11-02/store-after-spawn-overlap"
+.cache/node/2026-11-02/store-lock-probe-after fork-window "$PWD/.cache/node/2026-11-02/store-after-fork-window"
+./scripts/check-repo.sh
+git diff --check
+```
+
+探针路径同样已消费，重跑须使用新的精确任务路径。结果只覆盖当前 macOS 合成离线环境与所列并发机制；历史个例未补造逐次归因，Linux/真实设备、真实签验/网络、物理掉电与进程监督仍未验证。没有新依赖、schema 迁移、跨 boot 解锁、VM/设备/服务启动或远程写入；构建缓存、合成探针与日志按原约定保留。
+
+最终仓库检查（310 文件）、diff 与新增链接/锚点核对通过；Cargo.lock hash 不变。本批修复范围为五个 Node 文件及四份文档，基于此前设计/诊断提交 `bdaa125`；所有者随后要求本地提交，具体提交与工作区状态以当次 Git 交接为准。没有 push/远程修改；本任务测试和探针进程均结束，没有新增后台进程。

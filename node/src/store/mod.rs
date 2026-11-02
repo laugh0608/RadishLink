@@ -14,7 +14,9 @@ use std::{
 };
 
 mod activity;
+mod connection;
 pub use activity::{ActivityPreflight, ActivityStatus, ActivitySwitch};
+use connection::StoreConnection;
 #[cfg(test)]
 mod activity_tests;
 mod outbound;
@@ -60,8 +62,7 @@ const DB_PAGES: i64 = 32768; // 128 MiB at the required 4096-byte page size; jou
 
 pub struct Store {
     ingress: control_ingress::ControlIngress,
-    conn: Connection,
-    _lock: File,
+    conn: StoreConnection,
     limits: Limits,
     clock: Clock,
     time_uncertain: bool,
@@ -124,21 +125,6 @@ fn private_directory(path: &Path) -> Result<()> {
     }
     Ok(())
 }
-fn lock(directory: &Path, create: bool) -> Result<File> {
-    let path = directory.join("owner.lock");
-    if !create {
-        private_file(&path)?;
-    }
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create_new(create)
-        .mode(0o600)
-        .open(&path)?;
-    file.try_lock()
-        .map_err(|e| Error::source_error(Code::Busy, "store owner lock", e))?;
-    Ok(file)
-}
 fn configure(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=0; PRAGMA cache_size=-2048;")?;
     // No journal-mode conversion on reopen: changing it could modify an unsupported database.
@@ -171,7 +157,7 @@ impl Store {
         }
         fs::DirBuilder::new().mode(0o700).create(directory)?;
         private_directory(directory)?;
-        let owner = lock(directory, true)?;
+        let mut conn = StoreConnection::acquire(directory, true)?;
         let db = directory.join("node.sqlite3");
         OpenOptions::new()
             .write(true)
@@ -179,7 +165,7 @@ impl Store {
             .mode(0o600)
             .open(&db)?
             .sync_all()?;
-        let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        conn.open_database(&db)?;
         configure(&conn)?;
         conn.execute_batch("BEGIN IMMEDIATE;")?;
         conn.execute_batch(include_str!("schema.sql"))?;
@@ -208,7 +194,6 @@ impl Store {
         Ok(Self {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             conn,
-            _lock: owner,
             limits,
             clock,
             time_uncertain: false,
@@ -219,6 +204,11 @@ impl Store {
     }
     pub fn open(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::Current)
+    }
+    /// Consumes the owner, closes SQLite, then explicitly releases its file lock.
+    /// A failed SQLite close retains both resources until process exit and returns its cause.
+    pub fn close(self) -> Result<()> {
+        self.conn.close()
     }
     /// Explicit maintenance operation; ordinary open never silently migrates a store.
     pub fn migrate_v1(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
@@ -281,7 +271,7 @@ impl Store {
         limits.validate()?;
         clock.validate()?;
         private_directory(directory)?;
-        let owner = lock(directory, false)?;
+        let mut conn = StoreConnection::acquire(directory, false)?;
         let db = directory.join("node.sqlite3");
         private_file(&db)?;
         for name in [
@@ -296,7 +286,7 @@ impl Store {
                 Err(e) => return Err(e.into()),
             }
         }
-        let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        conn.open_database(&db)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
         if ![1, 2, 3, 4, 5, 6, 7, 8].contains(&version) || app != APP_ID {
@@ -359,7 +349,6 @@ impl Store {
         let mut s = Self {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             conn,
-            _lock: owner,
             limits,
             clock,
             time_uncertain,

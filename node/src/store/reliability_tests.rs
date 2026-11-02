@@ -1,6 +1,33 @@
 use super::tests::{Workspace, clock, destination, relay, send};
 use super::*;
 
+#[test]
+fn dropped_owner_releases_lock_while_a_duplicate_handle_survives() {
+    let w = Workspace::new();
+    let store = w.create();
+    // Like a forked child's inherited descriptor, this reference keeps flock alive.
+    let inherited = store.conn.duplicate_owner().unwrap();
+    drop(store);
+    let reopened = Store::open(&w.dir, Limits::default(), clock(1)).unwrap();
+    assert_eq!(
+        Store::open(&w.dir, Limits::default(), clock(1))
+            .err()
+            .unwrap()
+            .code,
+        Code::Busy
+    );
+    drop(inherited);
+    assert_eq!(
+        Store::open(&w.dir, Limits::default(), clock(1))
+            .err()
+            .unwrap()
+            .code,
+        Code::Busy
+    );
+    drop(reopened);
+    drop(w.reopen(1));
+}
+
 fn make_v1(s: &Store) {
     super::tests::strip_v4(s);
     // schema.sql is unchanged from 2936c6e; remove exactly the later additions.

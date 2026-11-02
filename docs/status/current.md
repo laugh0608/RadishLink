@@ -56,7 +56,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 2026-10-28 已完成并提交 D15/D16 持久边界、业务政策关联、共享外发、控制入站及 D17 同 boot 活动生命周期，当前为 schema v8，最新实现 `c7008eb`。该批最终串行 172 库测试 + 2 CLI 测试、fmt/Clippy 通过；只覆盖自有合成离线边界，生产 run 仍拒绝。截至该批并行 `store owner lock` Busy 根因未确认。六个实现提交、代码/文档核对及原[接下来的事项](2026-10-28-progress.md#接下来的事项)见[当天回顾](2026-10-28-progress.md)。
 
-2026-11-02 已形成[跨 boot 新活动与长期回收评审草案](../architecture/node-activity-lifecycle.md#跨-boot-新活动与长期回收评审2026-11-02draft)：显式时钟域、先隔离再建立新上下文、域元数据计费及 v8 冷启动迁移均待审阅；schema 和跨 boot 隔离未改变。[锁诊断](../testing/node-service-reliability.md#store-锁并发诊断2026-11-02)已用未修改 Store 复现并发子进程继承锁窗口；历史个例缺逐次时序，修复未实施。本次默认并行 172 库测试通过，CLI 未重跑；不构成真实运行或安全门通过。
+2026-11-02 已形成[跨 boot 新活动与长期回收评审草案](../architecture/node-activity-lifecycle.md#跨-boot-新活动与长期回收评审2026-11-02draft)：显式时钟域、先隔离再建立新上下文、域元数据计费及 v8 冷启动迁移均待审阅；schema 和跨 boot 隔离未改变。设计/诊断包已提交为 `bdaa125`，未 push。随后完成[Store owner 关闭与锁释放修复](../testing/node-service-reliability.md#store-owner-关闭与锁释放修复2026-11-02)：先关闭 SQLite 再显式解锁，SQLite 关闭失败保留所有权并传播错误；默认并行 179 库测试 + 2 CLI 测试、fmt/Clippy 及实际子进程探针通过，保持 schema v8。本机已复现的继承锁窗口得到针对性修复，历史个例缺逐次时序、Linux/真实环境仍未验证；不构成真实运行或安全门通过。
 
 [帧边界与 G0 输入准备](../testing/node-framing-and-graph-inputs.md)仅覆盖 4 邻居/64 KiB/10 秒组装及 7957-byte 可复现审阅包。framing 未接入 transport/Service；D15/D16 内部持久字段已实施，业务身份与活动/撤销已在内部事务关联；共享外发/轮转及 kind 2/3 入站限速/有界等待已完成内部接线，真实输入路由/验证工作池、就绪集合枚举/传输公平、跨 boot 新活动与真实配对/签验仍缺，严格 CBOR/MLS 未接入；[新图 G1/G2](../testing/node-security-graph-review-package.md)缺真实硬资源、网络和进程监督证据，未执行。许可证/R2、Phase B、可信平台和真实运行停止线不变。
 
@@ -68,7 +68,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
-1. 开发优先：D15/D16 与 D17 同 boot 内部边界已有限离线实施。下一步审阅[跨 boot 草案](../architecture/node-activity-lifecycle.md#跨-boot-新活动与长期回收评审2026-11-02draft)的四项新选择及合成实施范围；长期回收建议继续满额拒绝。[锁诊断](../testing/node-service-reliability.md#store-锁并发诊断2026-11-02)已具备可复现机制，后续另定拥有者关闭/解锁修复与回归范围。草案和诊断均不解锁跨 boot 或实际功能接入，许可证/R2/Phase B 前置保持。硬件查价已按所有者反馈核算并收口；采购预算取舍不阻塞独立设计或离线开发，Mac 串口候选仍未安装或连接设备。
+1. 开发优先：D15/D16 与 D17 同 boot 内部边界已有限离线实施，owner 锁生命周期修复已完成本机离线验证。下一步审阅[跨 boot 草案](../architecture/node-activity-lifecycle.md#跨-boot-新活动与长期回收评审2026-11-02draft)的时钟域、两步转换、域计费、v8 冷启动迁移四项新选择，再实施完整的查询域化/隔离/新活动事务与失败矩阵；长期回收建议继续满额拒绝。现有结果不解锁跨 boot 或实际功能接入，许可证/R2/Phase B 前置保持。硬件查价已按所有者反馈核算并收口；采购预算取舍不阻塞独立设计或离线开发，Mac 串口候选仍未安装或连接设备。
 2. 基于已整理的内部 Linux ARM64 产物评审表，冻结实际复制/留存范围、评审者与下一精确包；分别处置 `debug_tree` 固定源码正文/归属与 `r-efi` 的 MIT alternative。专业意见、新证据与执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 按已接受的活动身份、撤销与 COSE profile 准备实际首次信任/签验/联合事务的验证输入，继续核对手机授权、物理与覆盖层路由边界；不重复讨论 D11—D16，也不把已接受设计写成安全能力已实现。
 4. I5 后续先满足[路线 A 宿主资源门](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)，不把当前 Mac/UTM 改名或增加 guest 配额当作达标。资源条件变化后复核完整准备预算、真实输入与可信基座，冻结真实 FD loader、非 UTM 控制面和新版执行合同，再另行授权实现、原生环境验收及验签/APT。安装、冷构建、daemon/store 计费和正式 21 样本 I5-R 仍各有前置；不直接创建满额四盘后安装，不在域外先构建。V0 历史合同与 SW-G2 安全门不变。

@@ -39,7 +39,7 @@
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
 - [Node 第一批服务与事务基础](testing/node-service-foundation.md)：固定依赖、SQLite 联合事务、离线故障验证及生产接入边界。
-- [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、迁移、周期维护、安全接入核对与 Store 锁并发诊断。
+- [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、迁移、周期维护、安全接入核对与 Store 锁并发诊断/修复。
 - [Node 活动生命周期与有界归档](testing/node-activity-lifecycle.md)：schema v8、活动隔离、同 boot 切换、显式迁移及失败恢复。
 - [Node 控制入站准入与有界验签等待](testing/node-control-ingress.md)：邻居/全局限速、16 个等待及在途对象、任务关联与原子验证后接纳。
 - [Node 共享控制外发额度与责任轮转](testing/node-outbound-scheduling.md)：schema v7、混合控制计费、持久轮转、数据 ACK 次数及迁移故障验证。

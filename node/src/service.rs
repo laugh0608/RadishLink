@@ -61,7 +61,7 @@ pub struct Client {
 }
 pub struct Service {
     client: Client,
-    worker: Option<JoinHandle<()>>,
+    worker: Option<JoinHandle<Result<()>>>,
 }
 impl Deref for Service {
     type Target = Client;
@@ -216,6 +216,7 @@ impl Service {
                         Command::Panic => panic!("controlled state owner failure"),
                     }
                 }
+                store.close()
             })?;
         Ok(Self {
             client: Client { gate },
@@ -240,7 +241,7 @@ impl Service {
         if let Some(worker) = self.worker.take() {
             worker
                 .join()
-                .map_err(|_| Error::new(Code::Stopped, "state owner panicked"))?;
+                .map_err(|_| Error::new(Code::Stopped, "state owner panicked"))??;
         }
         if poisoned {
             return Err(Error::new(
@@ -253,7 +254,11 @@ impl Service {
 }
 impl Drop for Service {
     fn drop(&mut self) {
-        let _ = self.shutdown();
+        if self.worker.is_some()
+            && let Err(error) = self.shutdown()
+        {
+            eprintln!("RadishLink Service shutdown failed: {error}");
+        }
     }
 }
 

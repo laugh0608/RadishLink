@@ -26,6 +26,14 @@ fn full_queue_rejects_new_work_and_shutdown_drains_accepted_queries() {
         thread::yield_now();
     }
     assert_eq!(client.status().unwrap_err().code, Code::Stopped);
+    // Closing admission is not ownership release: the accepted owner work is still held.
+    assert_eq!(
+        Store::open(&w.dir, crate::config::Limits::default(), clock(0))
+            .err()
+            .unwrap()
+            .code,
+        Code::Busy
+    );
     release.send(()).unwrap();
     for rx in replies {
         assert!(rx.recv_timeout(Duration::from_secs(2)).unwrap().is_ok());
