@@ -31,6 +31,33 @@ pub struct OutboundScan {
     complete: bool,
 }
 
+impl OutboundScan {
+    /// Private staging only: an unsuccessful owner cycle must not publish a new position.
+    pub(super) fn staged(&self) -> Self {
+        Self {
+            owner: self.owner.clone(),
+            domain: self.domain,
+            activity: self.activity,
+            lane: self.lane,
+            last: self.last.clone(),
+            complete: self.complete,
+        }
+    }
+    pub(super) fn complete(&self) -> bool {
+        self.complete
+    }
+    pub(super) fn check_scope(&self, store: &Store) -> Result<()> {
+        store.writable()?;
+        if !Arc::ptr_eq(&self.owner, store.ingress.owner())
+            || self.domain != store.current_domain_id()?
+            || self.activity != store.current_activity_id()?
+        {
+            return Err(Error::new(Code::Conflict, "outbound scan scope"));
+        }
+        Ok(())
+    }
+}
+
 pub struct OutboundPage {
     pub domain: ClockDomainId,
     pub activity: ActivityId,
@@ -60,15 +87,19 @@ impl Store {
     /// Changes behind the position wait for a new scan; this is not a frozen ready set.
     /// Read errors leave the position untouched. A finished scan must be explicitly replaced.
     pub fn scan_outbound_page(&self, scan: &mut OutboundScan) -> Result<OutboundPage> {
-        self.writable()?;
-        if !Arc::ptr_eq(&scan.owner, self.ingress.owner())
-            || scan.domain != self.current_domain_id()?
-            || scan.activity != self.current_activity_id()?
-            || scan.complete
-        {
+        self.scan_outbound_limit(scan, scheduling::MAX_QUEUE_EVENTS)
+    }
+
+    pub(super) fn scan_outbound_limit(
+        &self,
+        scan: &mut OutboundScan,
+        limit: usize,
+    ) -> Result<OutboundPage> {
+        scan.check_scope(self)?;
+        if scan.complete || !(1..=scheduling::MAX_QUEUE_EVENTS).contains(&limit) {
             return Err(Error::new(
                 Code::Conflict,
-                "outbound scan scope or completion",
+                "outbound scan completion or limit",
             ));
         }
         self.control_live(&scan.activity, self.clock.monotonic_ms)?;
@@ -76,21 +107,21 @@ impl Store {
         let mut candidates = Vec::new();
         match scan.lane {
             OutboundLane::Data => {
-                self.scan_queues(scan, QueueKind::Data, &mut candidates)?;
+                self.scan_queues(scan, QueueKind::Data, limit, &mut candidates)?;
             }
             OutboundLane::Exit => {
-                self.scan_controls(scan, ControlKind::Exit, &mut candidates)?;
+                self.scan_controls(scan, ControlKind::Exit, limit, &mut candidates)?;
             }
             OutboundLane::OrdinaryControl => {
                 if !matches!(scan.last, Some(OutboundCandidate::Control { .. })) {
-                    self.scan_queues(scan, QueueKind::Evidence, &mut candidates)?;
+                    self.scan_queues(scan, QueueKind::Evidence, limit, &mut candidates)?;
                 }
-                if candidates.len() <= scheduling::MAX_QUEUE_EVENTS {
-                    self.scan_controls(scan, ControlKind::Report, &mut candidates)?;
+                if candidates.len() <= limit {
+                    self.scan_controls(scan, ControlKind::Report, limit, &mut candidates)?;
                 }
             }
         }
-        let complete = candidates.len() <= scheduling::MAX_QUEUE_EVENTS;
+        let complete = candidates.len() <= limit;
         if !complete {
             candidates.pop(); // one lookahead key, not another returned event
         }
@@ -112,6 +143,7 @@ impl Store {
         &self,
         scan: &OutboundScan,
         kind: QueueKind,
+        limit: usize,
         candidates: &mut Vec<OutboundCandidate>,
     ) -> Result<()> {
         let (message, neighbor) = match &scan.last {
@@ -131,7 +163,7 @@ impl Store {
             scan.activity.as_slice(),
             message,
             neighbor,
-            (scheduling::MAX_QUEUE_EVENTS + 1 - candidates.len()) as i64
+            (limit + 1 - candidates.len()) as i64
         ])?;
         while let Some(row) = rows.next()? {
             let message: String = row.get(0)?;
@@ -154,6 +186,7 @@ impl Store {
         &self,
         scan: &OutboundScan,
         kind: ControlKind,
+        limit: usize,
         candidates: &mut Vec<OutboundCandidate>,
     ) -> Result<()> {
         // Empty BLOB sorts before every valid 32/16-byte identifier, including all-zero IDs.
@@ -173,7 +206,7 @@ impl Store {
             kind.number(),
             object,
             neighbor,
-            (scheduling::MAX_QUEUE_EVENTS + 1 - candidates.len()) as i64
+            (limit + 1 - candidates.len()) as i64
         ])?;
         while let Some(row) = rows.next()? {
             let object: Vec<u8> = row.get(0)?;

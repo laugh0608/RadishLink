@@ -54,7 +54,7 @@
 
 | 接续项 | 牵头 / 协同 | 原任务与验收来源 |
 | --- | --- | --- |
-| 1. 就绪集合 / 传输公平及 framing、工作池、输出授权交接 | Node 本地服务；安全、消息协同 | [外发拥有者工作包](architecture/node-outbound-owner.md)、[共享外发](testing/node-outbound-scheduling.md)、[帧边界](testing/node-framing-and-graph-inputs.md)、D17 / D18 活动方案与实施记录；实际接续以 current 为准。锁风险见[运行可靠性诊断](testing/node-service-reliability.md#store-锁并发诊断2026-11-02)，内部离线证据不解除安全 / 运行门 |
+| 1. 输出决定的一次消费 / 撤销交接及真实输入边界 | Node 本地服务；安全、消息协同 | [外发拥有者工作包](architecture/node-outbound-owner.md)、[共享外发](testing/node-outbound-scheduling.md)、[帧边界](testing/node-framing-and-graph-inputs.md)、D17 / D18 活动方案与实施记录；实际接续以 current 为准。锁风险见[运行可靠性诊断](testing/node-service-reliability.md#store-锁并发诊断2026-11-02)，内部离线证据不解除安全 / 运行门 |
 | 2. 内部 Linux ARM64 产物与许可证处置 | 身份、安全与控制；验证主线协同 | SW-G2 决策包、R1d、debug_tree 与 r-efi 原评审，冻结实际复制 / 留存范围和复核责任；专业意见、新证据和 R2 条件不相互替代 |
 | 3. 首次信任、签验与联合事务验证输入 | 身份、安全与控制；Node、消息与终端协同 | 已接受 D11–D16、控制 profile、手机身份和路由边界；实际接入保留许可证 / Phase B / 可信平台前置，不重复讨论已接受设计 |
 | 4. I5 路线 A 资源条件与真实环境准备 | 验证工具与受控运行环境；Node / 供应链协同 | 路线 A 评估 → 预算与可信基座 → FD loader / 控制面 / 新执行合同 → 原生验收与各精确授权；资源不变时不重复盘点，I5-R 不因离线通过开放 |

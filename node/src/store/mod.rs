@@ -33,7 +33,15 @@ mod outbound;
 pub use outbound::{OutboundDecision, OutboundEvent, OutboundReport};
 mod outbound_scan;
 pub use outbound_scan::{OutboundCandidate, OutboundLane, OutboundPage, OutboundScan};
+mod outbound_cycle;
+pub use outbound_cycle::{
+    MAX_CYCLE_ACKS, OutboundAck, OutboundCycle, OutboundCycleInput, OutboundCycleReport,
+};
 mod control_ingress;
+#[cfg(test)]
+mod outbound_cycle_recovery_tests;
+#[cfg(test)]
+mod outbound_cycle_tests;
 #[cfg(test)]
 mod outbound_scan_tests;
 pub use control_ingress::{

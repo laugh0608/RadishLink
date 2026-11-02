@@ -45,7 +45,7 @@ pub(super) fn prepare_receipt(s: &mut Store, key: &str, bytes: usize) {
     s.finalize_receipt(key, &i.body, &vec![8; bytes], i.policy_revision)
         .unwrap();
 }
-fn object(issuer: u8, target: u8, id: u8) -> PreparedControl {
+pub(super) fn object(issuer: u8, target: u8, id: u8) -> PreparedControl {
     PreparedControl {
         fields: ControlPayload {
             activity: ACTIVITY,
