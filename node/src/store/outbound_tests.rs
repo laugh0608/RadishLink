@@ -2,7 +2,7 @@ use super::tests::{ACTIVITY, PEER_2, Workspace, clock, destination, relay, send,
 use super::*;
 use crate::retry::{Admission, LinkEvent, Reason, Signal};
 
-fn batch(now: i64) -> Batch {
+pub(super) fn batch(now: i64) -> Batch {
     Batch {
         now_ms: now,
         link: LinkEvent::Unchanged,
@@ -37,7 +37,7 @@ fn security_revision(s: &Store) -> i64 {
         .unwrap()
         .unwrap_or(0)
 }
-fn prepare_receipt(s: &mut Store, key: &str, bytes: usize) {
+pub(super) fn prepare_receipt(s: &mut Store, key: &str, bytes: usize) {
     let mut incoming = destination(key, security_revision(s));
     incoming.expected_policy_revision = s.business_policy_revision(ACTIVITY).unwrap();
     s.receive(incoming).unwrap();
@@ -75,7 +75,7 @@ fn control(id: u8) -> OutboundEvent {
         admission: Admission::Allow,
     })
 }
-fn add_control(s: &mut Store, issuer: u8, target: u8, id: u8) {
+pub(super) fn add_control(s: &mut Store, issuer: u8, target: u8, id: u8) {
     s.accept_control(
         object(issuer, target, id),
         &[ControlNeighbor {

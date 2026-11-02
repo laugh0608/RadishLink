@@ -52,6 +52,9 @@ pub(super) struct ControlIngress {
     pending: VecDeque<Pending>,
 }
 impl ControlIngress {
+    pub(super) fn owner(&self) -> &Arc<()> {
+        &self.owner
+    }
     pub(super) fn new(now: i64) -> Self {
         Self {
             owner: Arc::new(()),

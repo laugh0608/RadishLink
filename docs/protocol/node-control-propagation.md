@@ -103,3 +103,5 @@ LinkAckV1 = [1, 3, activity_id, ack_kind, object_ref,
 [D16 自有持久边界](../testing/node-control-persistence.md)已实现 schema v4、固定预留、对象/邻居状态、尝试/控制 ACK 预算及显式迁移，并完成合成验证。控制批处理复用现有 Store 事务、Batch 合并和状态拥有者边界，I1 RetryState 参数不变；没有新 runner 或公共发送入口。同日 [schema v7 共享外发调度](../testing/node-outbound-scheduling.md)已将 receipt/两类 ACK 与退出/报告接到同一内部额度及持久轮转，覆盖四槽/十次数据 ACK 与迁移；只证明有界调用批次，真实就绪集合枚举、时序/速率/公平、密码及平台恢复仍未验证。依赖、R2/Phase B、可信时钟、逐跳安全与物理资源门继续生效。
 
 2026-10-28 [ADR 0008 D17](../adr/0008-node-activity-lifecycle.md)已接受并完成 [schema v8 同 boot 活动切换](../testing/node-activity-lifecycle.md)。当前活动完整预留不变，旧控制按实际记录占用业务控制余额；空归档占 4096 bytes，保守组合上限 644096 bytes / 526 记录，容量不足拒绝新活动而不自动清理。旧对象与次数保留但不再获得当前输出权限；跨 boot 新活动与真实配对仍未实现。
+
+2026-11-02 [ADR 0009 D18](../adr/0009-node-clock-domains.md)及 schema v9 已完成内部跨 boot 域与全新活动，旧权限不恢复，真实可信平台/配对仍缺。[外发拥有者工作包](../architecture/node-outbound-owner.md)首批增加当前域/活动的只读责任候选分页，不改变本协议、控制总额、成功消费游标或 ACK 来源；实际全局就绪调度、传输公平与输出接线仍待验证。

@@ -9,6 +9,8 @@
 
 ## 已实现边界
 
+以下版本与测试数字保留 2026-10-28 批次时点；D18/schema v9 与当前责任遍历见 [current](../status/current.md)及[外发拥有者工作包](../architecture/node-outbound-owner.md)。候选位置复用本 Store 的运行者身份，但没有新增实际验证 worker 或改变本页 16 槽、限速及结果复核语义。
+
 新增 `node/src/store/control_ingress.rs`，由已有 Store 唯一拥有。限速器、待验证队列和任务标识只在该拥有者内存中存在；不建立另一份身份库、线程/工作池、服务或持久表。schema 保持 v7，依赖/lock、活动预算及原试验停止线不变。
 
 | 阶段 | 实际行为 |

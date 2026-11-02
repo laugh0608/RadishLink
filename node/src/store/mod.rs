@@ -31,7 +31,11 @@ use connection::StoreConnection;
 mod activity_tests;
 mod outbound;
 pub use outbound::{OutboundDecision, OutboundEvent, OutboundReport};
+mod outbound_scan;
+pub use outbound_scan::{OutboundCandidate, OutboundLane, OutboundPage, OutboundScan};
 mod control_ingress;
+#[cfg(test)]
+mod outbound_scan_tests;
 pub use control_ingress::{
     ControlIngressAdmission, ControlIngressUsage, ControlVerificationCompletion,
     ControlVerificationJob, ControlVerificationOutcome, ControlVerificationPoll,

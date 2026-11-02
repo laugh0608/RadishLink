@@ -31,7 +31,7 @@
 
 | 主要归属 | 子专题 / 原来源 | 实施、验收与证据入口 |
 | --- | --- | --- |
-| Node 本地服务与活动生命周期 | [Node 服务基线](architecture/node-service-design.md)、[活动生命周期](architecture/node-activity-lifecycle.md) | D1–D5 / D17–D18 与原 ADR；[服务基础](testing/node-service-foundation.md)、[运行可靠性](testing/node-service-reliability.md)、[活动与归档](testing/node-activity-lifecycle.md)，迁移 / 切换 / 崩溃分别验证 |
+| Node 本地服务与活动生命周期 | [Node 服务基线](architecture/node-service-design.md)、[活动生命周期](architecture/node-activity-lifecycle.md)、[外发拥有者接线](architecture/node-outbound-owner.md) | D1–D5 / D17–D18 与原 ADR；[服务基础](testing/node-service-foundation.md)、[运行可靠性](testing/node-service-reliability.md)、[活动与归档](testing/node-activity-lifecycle.md)，迁移 / 切换 / 崩溃分别验证 |
 | Node 本地服务与活动生命周期 | [数据持久化](testing/node-data-persistence.md)、[控制持久化](testing/node-control-persistence.md)、[证明生命周期](testing/node-receipt-lifecycle.md) | 原 schema、事务和恢复实施切片；协议约束来自 D15/D16 与安全主线，局部持久化不等于真实签验 / transport 闭环 |
 | 消息交付与网络路由 | [网络与路由](architecture/network-and-routing.md)、[消息语义](protocol/message-delivery-semantics.md)、[最小文字切片](architecture/minimal-text-slice.md) | SW-G1、SW-G3 与 I1–I5；原断链、确认丢失、去重、lifetime 和队列失败矩阵，不把探索协议迁作产品合同 |
 | 消息交付与网络路由 | [数据 envelope](protocol/node-data-envelope.md)、[控制传播](protocol/node-control-propagation.md)、[共享外发](testing/node-outbound-scheduling.md) | D15/D16、持久尝试与责任轮转；framing、实际路由、传输公平及安全接入各按原前置，不扩大内部接线结论 |
@@ -54,7 +54,7 @@
 
 | 接续项 | 牵头 / 协同 | 原任务与验收来源 |
 | --- | --- | --- |
-| 1. 就绪集合 / 传输公平及 framing、工作池、输出授权交接 | Node 本地服务；安全、消息协同 | [共享外发](testing/node-outbound-scheduling.md)、[帧边界](testing/node-framing-and-graph-inputs.md)、D17 / D18 活动方案与实施记录；D18 后的实际接续以 current 为准。锁风险见[运行可靠性诊断](testing/node-service-reliability.md#store-锁并发诊断2026-11-02)，内部离线证据不解除安全 / 运行门 |
+| 1. 就绪集合 / 传输公平及 framing、工作池、输出授权交接 | Node 本地服务；安全、消息协同 | [外发拥有者工作包](architecture/node-outbound-owner.md)、[共享外发](testing/node-outbound-scheduling.md)、[帧边界](testing/node-framing-and-graph-inputs.md)、D17 / D18 活动方案与实施记录；实际接续以 current 为准。锁风险见[运行可靠性诊断](testing/node-service-reliability.md#store-锁并发诊断2026-11-02)，内部离线证据不解除安全 / 运行门 |
 | 2. 内部 Linux ARM64 产物与许可证处置 | 身份、安全与控制；验证主线协同 | SW-G2 决策包、R1d、debug_tree 与 r-efi 原评审，冻结实际复制 / 留存范围和复核责任；专业意见、新证据和 R2 条件不相互替代 |
 | 3. 首次信任、签验与联合事务验证输入 | 身份、安全与控制；Node、消息与终端协同 | 已接受 D11–D16、控制 profile、手机身份和路由边界；实际接入保留许可证 / Phase B / 可信平台前置，不重复讨论已接受设计 |
 | 4. I5 路线 A 资源条件与真实环境准备 | 验证工具与受控运行环境；Node / 供应链协同 | 路线 A 评估 → 预算与可信基座 → FD loader / 控制面 / 新执行合同 → 原生验收与各精确授权；资源不变时不重复盘点，I5-R 不因离线通过开放 |

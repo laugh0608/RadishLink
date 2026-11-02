@@ -20,6 +20,7 @@
 - [网络与路由](architecture/network-and-routing.md)
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
 - [Node 新活动生命周期与重新配对评审包](architecture/node-activity-lifecycle.md)：D17 同 boot 与 D18 跨 boot 写域、显式迁移及有界归档。
+- [Node 外发遍历与状态拥有者接线工作包](architecture/node-outbound-owner.md)：有界候选遍历、批次与发送交接消费者合同。
 - [Node 数据 envelope](protocol/node-data-envelope.md)：不可变核心、MLS AAD、保守时间与 D15 已接受参数。
 - [Node 控制传播预算](protocol/node-control-propagation.md)：退出/报告有界转发、逐跳确认与 D16 已接受容量取舍。
 - [安全架构](security/security-architecture.md)

@@ -67,3 +67,39 @@ git diff --check
 本批随后提交为 `0a77399`；同日接续完成[入站限速与 16 对象验签等待](node-control-ingress.md)的自有有界准入。跨 boot 新活动、超 128 责任的真实枚举、签验结果与政策/通道绑定、实际发送交接仍分别待接入。许可证/R2/Phase B、G1/G2、可信平台、I5 与硬件/射频停止线保持。
 
 本批未启动服务、网络、VM、设备或正式实验，没有依赖安装、系统配置、采购、push 或远程修改。受控测试进程正常退出或按故障测试结束；临时库由测试清理，忽略目录保留本批构建缓存和测试日志。
+
+## 候选遍历接续（2026-11-02）
+
+- 基线：D18 已按所有者要求提交为 `8573e88`，提交后工作区干净，dev 相对本地 origin/dev ahead 3，未 push。
+- 范围：所有者要求继续下一步，完成[外发拥有者接线工作包](../architecture/node-outbound-owner.md)及首批只读候选遍历；沿用已有工具链、依赖和 schema v9，不改权限、wire、预算或历史迁移。
+- 结论：可以从当前域/活动发现保留的 queue / kind 2/3 邻居责任；不是全局就绪调度、跨重启访问公平、真实工作池或传输验收。
+
+`start_outbound_scan` 创建绑定运行者/域/活动的不可序列化位置；`scan_outbound_page` 通过稳定 keyset 与 LIMIT 返回至多 128 个引用，最多 1 个额外键判断尾页，不读出正文，不消费重试、令牌、修订或原成功消费游标。Exit、OrdinaryControl（receipt 后 report）和 Data 分开遍历；ACK 不从数据库补造。中途读取失败不推进位置，尾页 complete 后显式拒绝旧位置；新一轮重新开始，旧拥有者、旧活动与旧域位置拒绝。
+
+所有查询仍受当前活动和时间停止线约束。业务只选择 policy_stopped=0 的当前域/活动责任，控制只选择当前活动非 terminal 的原始责任；具体就绪、权限和期限由原事务算法判断。页后发生政策变化时，原批处理继续拒绝旧准备，不把发现时 revision 当作授权。只读候选保留合法提交之间的遍历位置，插入在位置之前的键等待下一轮；这是实时集合遍历，不是冻结快照。
+
+新增 8 项合成测试：130 条真实接纳并建立转发责任的多页遍历，分页之间仍用原事务调度到尾项；遍历位置前插入的新责任在下一轮可见；128 个 receipt 跨到零 ID 报告；退出/receipt/report/data 分组及不造 ACK；空集合和 terminal；其他 Store、同 boot 重开及同 boot 活动切换；D18 新域隔离/旧责任保留；发现后停止导致原事务整笔拒绝；receipt 已读而 control 查询失败时位置不前移。测试复用原合成准备 helper，不增加产品测试替身或旁路准入。
+
+| 验证 / 退出码 | 实际结果 |
+| --- | --- |
+| 首轮定向 / 101 | 4/6；两项测试仅 receive 中继消息却未 schedule_forward，实际没有数据队列，返回空页符合合同。补齐原入口准备步骤，不放宽扫描或调度逻辑 |
+| 扩展定向 / 0 | 8/8，通过完整分界与部分读失败矩阵 |
+| 默认并行全量 / 0 | 207 项库测试 + 2 项 CLI 测试通过（库测试 145.29 秒）；包含新增同 boot 切换用例，未出现 owner lock Busy |
+| 收尾定向 / 0 | 增强页间插入测试，并核对政策拒绝为 Conflict、读取故障为 StoreUnavailable；产品实现未再改变。8/8 通过（9.59 秒，outbound-scan-handoff.log），fmt 与 all-targets Clippy `-D warnings` 通过 |
+
+日志保留在忽略目录 `.cache/node/2026-11-02/outbound-scan-*.log`，不删除首次失败。执行命令：
+
+```bash
+RUSTUP_AUTO_INSTALL=0 cargo +1.97.1 fmt --manifest-path node/Cargo.toml -- --check
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 clippy --offline --locked --manifest-path node/Cargo.toml --all-targets -- -D warnings
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml store::outbound_scan_tests
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
+./scripts/check-repo.sh
+git diff --check
+```
+
+没有真实 worker、严格 CBOR/MLS、密码签验、socket 或输出许可接线。工作包已列明后续批次截点、工作量配额、ACK 来源、页间退出优先、交接复核和停止/Join；这些仍须各自实施与验证，不以 8 项内部测试声明全局公平成立。许可证/R2/Phase B、新图 G1/G2、可信平台与真实运行前置保持。本批更改留在工作区未提交，未 push，测试结束后无本任务后台进程；临时库由测试清理，原日志与构建缓存保留。
+
+收尾仓库检查通过（319 文件），51 个本地 Markdown 锚点及 `git diff --check` 通过。manifest/lock、全部 SQL、根入口与原调度算法未变；Cargo.lock SHA-256 仍为 `b5bb6b889765b5005bb20645ad5b1bf1b09573451dbad966cfa12d0ec68fbd24`。D18 的本地提交没有改写历史，也没有 fetch/push；dev 仍相对本地 origin/dev ahead 3。
+
+上述交接后，所有者明确要求“提交新的工作区更改，然后继续推进下一步”，候选遍历批次据此本地提交；不包含 push。后续开发与验证单独记录，不用提交授权扩大真实运行范围。

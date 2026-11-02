@@ -4,6 +4,8 @@
 
 ## 已实现的帧边界
 
+本页保留 2026-10-24 帧与 G0 批次的版本/未实现结论；后续 D15/D16 及 D18/schema v9 自有边界以 [current](../status/current.md)为准。2026-11-02 的[外发拥有者工作包](../architecture/node-outbound-owner.md)核对 framing 的交接消费者；首批只有只读责任候选遍历，没有将本页 framing 接到真实 Service/transport。
+
 [`framing::Ingress`](../../node/src/framing.rs) 提供已有授权邻接的应用帧组装，沿用 Node `Clock` 与错误分类。四字节 u32be 前缀只接受 body 1..65532 bytes，完整 frame 最大 65536 bytes；先校验长度再申请 body 容量，最多四邻居，每邻居仅一个未完成或待消费 frame。容量统计包含 prefix 与 Vec capacity，最多 256 KiB；不是进程 RSS、allocator 或逐跳通道缓冲的硬内存证明。
 
 从首个非空输入启动单帧 10000 ms 期限，零星字节、空输入和重复 open 均不延期。恰好到点拒绝并移除该流；维护返回需关闭的邻居集合。一次 push 只消费到首个完整帧，报告 consumed，剩余输入由调用者保留；已完成而未 take 时 Busy，不覆盖。take 转移 buffer 所有权，下游须有自己的容量准入；完成组装不会免除业务期限检查。
