@@ -19,7 +19,7 @@
 - [最小文字闭环实现前设计](architecture/minimal-text-slice.md)：待评审的用户路径、事务边界与失败矩阵。
 - [网络与路由](architecture/network-and-routing.md)
 - [覆盖层消息交付语义](protocol/message-delivery-semantics.md)
-- [Node 新活动生命周期与重新配对评审包](architecture/node-activity-lifecycle.md)：D17 已接受的活动作用域、归档计费、同 boot 切换及迁移验收。
+- [Node 新活动生命周期与重新配对评审包](architecture/node-activity-lifecycle.md)：D17 已接受的同 boot 作用域与归档，以及待评审的跨 boot 写域、迁移和长期回收。
 - [Node 数据 envelope](protocol/node-data-envelope.md)：不可变核心、MLS AAD、保守时间与 D15 已接受参数。
 - [Node 控制传播预算](protocol/node-control-propagation.md)：退出/报告有界转发、逐跳确认与 D16 已接受容量取舍。
 - [安全架构](security/security-architecture.md)
@@ -39,7 +39,7 @@
 - [无线电合规前置条件](regulatory/radio-compliance.md)
 - [外场验证计划](testing/field-validation-plan.md)
 - [Node 第一批服务与事务基础](testing/node-service-foundation.md)：固定依赖、SQLite 联合事务、离线故障验证及生产接入边界。
-- [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、schema 迁移、控制容量预留、周期维护及安全接入核对。
+- [Node 服务运行可靠性](testing/node-service-reliability.md)：生命周期、迁移、周期维护、安全接入核对与 Store 锁并发诊断。
 - [Node 活动生命周期与有界归档](testing/node-activity-lifecycle.md)：schema v8、活动隔离、同 boot 切换、显式迁移及失败恢复。
 - [Node 控制入站准入与有界验签等待](testing/node-control-ingress.md)：邻居/全局限速、16 个等待及在途对象、任务关联与原子验证后接纳。
 - [Node 共享控制外发额度与责任轮转](testing/node-outbound-scheduling.md)：schema v7、混合控制计费、持久轮转、数据 ACK 次数及迁移故障验证。
