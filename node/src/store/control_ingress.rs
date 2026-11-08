@@ -55,6 +55,12 @@ struct Pending {
     bytes: Arc<[u8]>,
     leased: bool,
 }
+
+struct RegisteredChannel {
+    binding: OutboundChannel,
+    closing: bool,
+}
+
 /// Runtime-only. Reopening creates empty buckets at the current trusted coordinate.
 /// The owner identity prevents a stale job from matching a reused local sequence number.
 pub(super) struct ControlIngress {
@@ -62,7 +68,7 @@ pub(super) struct ControlIngress {
     started: i64,
     global: Bucket,
     peers: BTreeMap<ParticipantId, Bucket>,
-    channels: BTreeMap<ParticipantId, OutboundChannel>,
+    channels: BTreeMap<ParticipantId, RegisteredChannel>,
     next_instance: u64,
     next_id: u64,
     pending: VecDeque<Pending>,
@@ -78,7 +84,7 @@ impl ControlIngress {
             global: Bucket::empty(now),
             peers: BTreeMap::new(),
             channels: BTreeMap::new(),
-            next_instance: 0,
+            next_instance: OutboundChannel::REGISTERED_INSTANCE_START,
             next_id: 0,
             pending: VecDeque::new(),
         }
@@ -87,19 +93,23 @@ impl ControlIngress {
         !self.channels.is_empty()
     }
     pub(super) fn registered_channels(&self) -> impl Iterator<Item = OutboundChannel> + '_ {
-        self.channels.values().copied()
+        self.channels.values().map(|entry| entry.binding)
     }
     pub(super) fn discard_waiting(&mut self) {
         self.pending.retain(|pending| pending.leased);
     }
     pub(super) fn require_channel(&self, channel: &OutboundChannel) -> Result<()> {
-        if self.channels.get(&channel.peer) != Some(channel) {
-            return Err(Error::new(
+        match self.channels.get(&channel.peer) {
+            Some(entry) if entry.binding == *channel && !entry.closing => Ok(()),
+            Some(entry) if entry.binding == *channel => Err(Error::new(
+                Code::Conflict,
+                "control ingress channel closing",
+            )),
+            _ => Err(Error::new(
                 Code::Conflict,
                 "control ingress channel instance changed",
-            ));
+            )),
         }
-        Ok(())
     }
     fn charge(&mut self, participant: ParticipantId, now: i64) -> Result<bool> {
         if !self.peers.contains_key(&participant) && self.peers.len() == 4 {
@@ -298,7 +308,13 @@ impl Store {
             peer,
             peer_credential: neighbor,
         };
-        self.ingress.channels.insert(peer, binding);
+        self.ingress.channels.insert(
+            peer,
+            RegisteredChannel {
+                binding,
+                closing: false,
+            },
+        );
         self.ingress.next_instance = instance;
         Ok(ControlIngressChannel {
             owner: self.ingress.owner.clone(),
@@ -307,14 +323,38 @@ impl Store {
         })
     }
 
-    /// Records that this exact instance is closed. The caller owns transport closure.
-    /// In-flight verification remains charged until its lease is returned or cancelled.
+    /// Fences this exact instance before the owner closes its transport. The registration
+    /// still occupies its slot, and a worker must return or cancel each existing lease.
+    pub fn begin_control_ingress_channel_close(
+        &mut self,
+        channel: &ControlIngressChannel,
+    ) -> Result<()> {
+        self.registered_control_channel(channel)?.closing = true;
+        self.discard_acks_on_channel(&channel.binding);
+        self.discard_handoff_on_channel(&channel.binding);
+        Ok(())
+    }
+
+    /// Records confirmed closure of this exact instance. The caller owns transport closure.
+    /// An already closed transport may be confirmed directly, including during owner shutdown.
     pub fn close_control_ingress_channel(&mut self, channel: &ControlIngressChannel) -> Result<()> {
-        self.control_ingress_channel(channel)?;
+        self.registered_control_channel(channel)?;
         self.ingress.channels.remove(&channel.binding.peer);
         self.discard_acks_on_channel(&channel.binding);
         self.note_owner_channel_closed(channel.binding);
         Ok(())
+    }
+
+    fn registered_control_channel(
+        &mut self,
+        channel: &ControlIngressChannel,
+    ) -> Result<&mut RegisteredChannel> {
+        self.require_control_channel_owner(channel)?;
+        self.ingress
+            .channels
+            .get_mut(&channel.binding.peer)
+            .filter(|entry| entry.binding == channel.binding)
+            .ok_or_else(|| Error::new(Code::Conflict, "control ingress channel instance changed"))
     }
 
     pub(super) fn control_ingress_channel(

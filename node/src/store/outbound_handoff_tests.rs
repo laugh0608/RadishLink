@@ -77,6 +77,87 @@ fn bucket(s: &Store) -> (i64, i64) {
 }
 
 #[test]
+fn closing_withdraws_partial_output_and_fences_future_binding() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    data(&mut s, 1);
+    let source = s
+        .register_control_ingress_channel(ACTIVITY, test_credential(1), test_credential(2))
+        .unwrap();
+    let mut cycle = s.start_outbound_cycle().unwrap();
+    let at = input(&s, 1000, vec![ack()]);
+    s.process_outbound_cycle_with_handoff(
+        &mut cycle,
+        at,
+        |_| Ok(batch(1000)),
+        |event| match event {
+            OutboundEvent::DataAck { .. } => Some(source.binding()),
+            _ => binding(event),
+        },
+    )
+    .unwrap();
+    let first = s.next_outbound_handoff().unwrap();
+    assert_eq!(first.channel, source.binding());
+    assert_eq!(
+        step(&mut s, &first, 1000, |_, _| OutboundWrite::Written(8))
+            .result
+            .unwrap(),
+        OutboundWriteProgress::Partial(8)
+    );
+    let continuation = s.next_outbound_handoff().unwrap();
+    let revision = s.revision().unwrap();
+    let charged = (bucket(&s), ack_budget(&s));
+
+    s.begin_control_ingress_channel_close(&source).unwrap();
+    assert_eq!(
+        step(&mut s, &continuation, 1000, |_, _| panic!(
+            "closing must stop the partial frame"
+        ))
+        .result
+        .unwrap_err()
+        .code,
+        Code::Conflict
+    );
+    let unrelated = s.next_outbound_handoff().unwrap();
+    assert_eq!(unrelated.channel, channel(3));
+    assert_eq!(
+        step(&mut s, &unrelated, 1000, |_, left| OutboundWrite::Written(
+            left
+        ))
+        .result
+        .unwrap(),
+        OutboundWriteProgress::Complete
+    );
+    let bind_old = |store: &mut Store, cycle: &mut OutboundCycle| {
+        store
+            .process_outbound_cycle_with_handoff(
+                cycle,
+                input(store, 1001, vec![ack()]),
+                |_| Ok(batch(1001)),
+                |_| Some(source.binding()),
+            )
+            .err()
+            .unwrap()
+    };
+    assert_eq!(
+        bind_old(&mut s, &mut cycle).operation,
+        "control ingress channel closing"
+    );
+    s.close_control_ingress_channel(&source).unwrap();
+    let replacement = s
+        .register_control_ingress_channel(ACTIVITY, test_credential(1), test_credential(2))
+        .unwrap();
+    assert_ne!(source.binding(), replacement.binding());
+    assert_eq!(
+        bind_old(&mut s, &mut cycle).operation,
+        "control ingress channel instance changed"
+    );
+    assert_eq!(s.revision().unwrap(), revision);
+    assert_eq!((bucket(&s), ack_budget(&s)), charged);
+    assert!(s.next_outbound_handoff().is_none());
+}
+
+#[test]
 fn all_five_paths_use_committed_decisions_and_charge_only_once() {
     let w = Workspace::new();
     let mut s = w.create();

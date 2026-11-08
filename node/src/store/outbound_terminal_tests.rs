@@ -61,7 +61,7 @@ fn bucket(s: &Store) -> (i64, i64) {
 }
 
 #[test]
-fn late_custody_withdraws_partial_at_same_coordinate_then_commits_after_close() {
+fn late_custody_withdraws_partial_at_same_coordinate_then_commits_while_closing() {
     let w = Workspace::new();
     let mut s = w.create();
     data(&mut s, 1);
@@ -127,9 +127,10 @@ fn late_custody_withdraws_partial_at_same_coordinate_then_commits_after_close() 
     assert_eq!(s.revision().unwrap(), revision);
     assert!(!s.message("q000").unwrap().unwrap().custody_observed);
 
+    s.begin_control_ingress_channel_close(&channel).unwrap();
+    s.commit_outbound_terminal(clock(1001)).unwrap();
     s.close_control_ingress_channel(&channel).unwrap();
     let replacement = register(&mut s, 3);
-    s.commit_outbound_terminal(clock(1001)).unwrap();
     assert_eq!(s.revision().unwrap(), revision + 1);
     assert_eq!(bucket(&s), charged);
     let view = s.message("q000").unwrap().unwrap();

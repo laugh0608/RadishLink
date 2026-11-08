@@ -282,6 +282,7 @@ fn activity_switch_rejects_registered_channel_until_closed() {
         .register_control_ingress_channel(ACTIVITY, test_credential(1), test_credential(2))
         .unwrap();
     s.stop_control_activity(ACTIVITY).unwrap();
+    s.begin_control_ingress_channel_close(&old).unwrap();
     let err = s.switch_control_activity(request(&s)).unwrap_err();
     assert_eq!(err.code, Code::Busy);
     assert_eq!(err.operation, "activity control ingress channels remain");

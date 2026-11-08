@@ -10,6 +10,7 @@ pub(super) type BindChannel<'a> = dyn FnMut(&OutboundEvent) -> Option<OutboundCh
 
 /// Facts captured by the authenticated owner. An instance changes on every reconnect,
 /// even when both credentials are unchanged. This type does not authenticate a channel.
+/// Caller-assigned synthetic instances use the lower half of the instance number space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OutboundChannel {
     pub instance: u64,
@@ -17,6 +18,14 @@ pub struct OutboundChannel {
     pub local_credential: CredentialRef,
     pub peer: ParticipantId,
     pub peer_credential: CredentialRef,
+}
+
+impl OutboundChannel {
+    pub(super) const REGISTERED_INSTANCE_START: u64 = 1 << 63;
+
+    fn is_registered(self) -> bool {
+        self.instance >= Self::REGISTERED_INSTANCE_START
+    }
 }
 
 /// Shape of a synthetic frame. A partial frame must keep exactly this descriptor.
@@ -207,15 +216,19 @@ impl Store {
             )
         });
         for (event, binding) in explicit.chain(registered) {
-            if let Some(channel) = binding.channel
-                && instances
+            if let Some(channel) = binding.channel {
+                if channel.is_registered() {
+                    self.ingress.require_channel(&channel)?;
+                }
+                if instances
                     .insert(channel.instance, channel)
                     .is_some_and(|old| old != channel)
-            {
-                return Err(Error::new(
-                    Code::Conflict,
-                    "outbound channel instance has conflicting bindings",
-                ));
+                {
+                    return Err(Error::new(
+                        Code::Conflict,
+                        "outbound channel instance has conflicting bindings",
+                    ));
+                }
             }
             if bindings
                 .insert(event.responsibility(), binding)
@@ -268,6 +281,15 @@ impl Store {
             .pending
             .front()
             .and_then(|item| item.partial.map(|_| item.channel))
+    }
+
+    pub(super) fn discard_handoff_on_channel(&mut self, channel: &OutboundChannel) {
+        if let Some(batch) = &mut self.handoff.batch {
+            batch.pending.retain(|item| &item.channel != channel);
+            if batch.pending.is_empty() {
+                self.handoff.batch = None;
+            }
+        }
     }
 
     /// Ordered owner-side invalidation after an authenticated terminal input, even when
@@ -390,7 +412,7 @@ impl Store {
         current: Option<OutboundChannel>,
     ) -> Result<()> {
         let channel = item.channel;
-        if item.registered_ack {
+        if channel.is_registered() {
             self.ingress.require_channel(&channel)?;
         }
         if current != Some(channel) || channel.local != local || channel.peer == local {

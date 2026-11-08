@@ -37,6 +37,23 @@ fn start_partial(s: &mut Store, channel: OutboundChannel) -> OutboundHandoffRequ
 }
 
 #[test]
+fn owner_shutdown_keeps_a_locally_closing_instance_until_confirmation() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let channel = register(&mut s, 2);
+    s.begin_control_ingress_channel_close(&channel).unwrap();
+    assert_eq!(s.begin_owner_shutdown().channels, vec![channel.binding()]);
+    assert_eq!(
+        s.finish_owner_shutdown(Ok(())).unwrap_err().operation,
+        "owner shutdown channels remain"
+    );
+    s.close_control_ingress_channel(&channel).unwrap();
+    assert!(s.begin_owner_shutdown().channels.is_empty());
+    s.finish_owner_shutdown(Ok(())).unwrap();
+    s.close().unwrap();
+}
+
+#[test]
 fn stopping_withdraws_output_and_waiting_work_but_retains_the_lease_and_join_cause() {
     let w = Workspace::new();
     let mut s = w.create();

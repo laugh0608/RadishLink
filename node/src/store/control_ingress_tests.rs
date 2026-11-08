@@ -1,4 +1,4 @@
-use super::tests::{ACTIVITY, Workspace, clock, relay, test_credential};
+use super::tests::{ACTIVITY, Workspace, clock, destination, relay, test_credential};
 use super::*;
 use ControlIngressAdmission as Admission;
 
@@ -177,6 +177,71 @@ fn waiting_from_closed_instance_is_discarded_instead_of_leased_on_reconnect() {
 }
 
 #[test]
+fn closing_fences_ingress_and_late_results_before_confirmation() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    s.advance_clock(clock(2000)).unwrap();
+    let old = register(&mut s, 2);
+    assert_eq!(
+        s.receive_destination_on_channel(&old, destination("committed", 0))
+            .unwrap()
+            .1,
+        OutboundAckAdmission::Queued
+    );
+    s.queue_control_candidate_on_channel(&old, &[7]).unwrap();
+    let running = job(&mut s);
+    s.queue_control_candidate_on_channel(&old, &[8]).unwrap();
+    let revision = s.revision().unwrap();
+
+    s.begin_control_ingress_channel_close(&old).unwrap();
+    s.begin_control_ingress_channel_close(&old).unwrap();
+    assert!(s.outbound_acks.is_empty());
+    assert_eq!(s.control_ingress_usage().verifying, 1);
+    let poll = s.next_control_verification().unwrap();
+    assert!(poll.job.is_none());
+    assert_eq!(poll.discarded.len(), 1);
+    assert_eq!(
+        poll.discarded[0].operation,
+        "control ingress channel closing"
+    );
+    for error in [
+        s.queue_control_candidate_on_channel(&old, &[9])
+            .unwrap_err(),
+        s.receive_destination_on_channel(&old, destination("late", 1))
+            .unwrap_err(),
+        s.complete_control_verification_with_ack(running, verified(object(4, 3, 7)), &[])
+            .unwrap_err(),
+    ] {
+        assert_eq!(error.operation, "control ingress channel closing");
+    }
+    assert_eq!(s.control_ingress_usage().verifying, 0);
+    assert_eq!(s.control_usage().unwrap().objects, 0);
+    assert!(s.message("late").unwrap().is_none());
+    assert!(
+        s.message("committed")
+            .unwrap()
+            .unwrap()
+            .receipt_intent_pending
+    );
+    assert_eq!(s.revision().unwrap(), revision);
+
+    s.close_control_ingress_channel(&old).unwrap();
+    let current = register(&mut s, 2);
+    assert_eq!(
+        s.begin_control_ingress_channel_close(&old)
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    assert_eq!(
+        s.receive_destination_on_channel(&current, destination("committed", 0))
+            .unwrap()
+            .1,
+        OutboundAckAdmission::Queued
+    );
+}
+
+#[test]
 fn reconnect_preserves_all_sixteen_slots_and_original_peer_bucket() {
     let w = Workspace::new();
     let mut s = w.create();
@@ -198,6 +263,16 @@ fn reconnect_preserves_all_sixteen_slots_and_original_peer_bucket() {
     }
     let mut jobs: Vec<_> = (0..16).map(|_| job(&mut s)).collect();
     let old = &channels[0];
+    s.begin_control_ingress_channel_close(old).unwrap();
+    assert_eq!(s.control_ingress_usage().verifying, 16);
+    assert_eq!(s.ingress.registered_channels().count(), 4);
+    assert_eq!(
+        s.register_control_ingress_channel(ACTIVITY, test_credential(1), test_credential(2))
+            .err()
+            .unwrap()
+            .code,
+        Code::Conflict
+    );
     s.close_control_ingress_channel(old).unwrap();
     let new = register(&mut s, 2);
     assert_eq!(s.control_ingress_usage().object_bytes, 8192);
@@ -244,6 +319,12 @@ fn reopened_owner_rejects_old_channel_even_when_instance_number_matches() {
     let mut s = w.reopen(1000);
     let new = register(&mut s, 2);
     assert_eq!(old.binding(), new.binding());
+    assert_eq!(
+        s.begin_control_ingress_channel_close(&old)
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
     assert_eq!(
         s.close_control_ingress_channel(&old).unwrap_err().code,
         Code::Conflict
