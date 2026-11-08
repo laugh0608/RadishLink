@@ -86,3 +86,45 @@
 | 关闭确认前后各用同凭据重连，向新实例投递旧就绪、重复关闭确认和旧验证回调，另覆盖 FD 复用 | 确认前拒绝替代实例；确认后只允许新实例的合法工作提交，旧通知不抢占新槽，旧回调不改写新实例或归还新额度。 | Store 覆盖同凭据重连、旧结果释放和旧等待项清理；真实 FD 复用及 I/O 回调次序待测。 |
 
 本次以 Rust `1.97.1` 对 `node/Cargo.toml` 运行 `cargo test --offline --locked --lib` 的四组筛选，`framing::tests` 12 项、`store::control_ingress_tests` 18 项、`store::outbound_handoff_tests` 14 项、`store::owner_shutdown_tests` 2 项均通过。真实接线仍需要已审查的依赖图、可用 Linux ARM64 台架、可信时间和上述传输观测。HW1 当前优先评审的 Armbian 镜像及其信任缺口以[首轮评审记录](../hardware/hardware-validation-plan.md#首轮范围与镜像信任评审2026-11-08)为准。
+
+## 有线传输依赖候选
+
+2026-11-08，基于 `61dcb75` 的接入方案，首选评审 **Tokio `1.54.1` + rustls `0.23.46`，逐跳 TLS 使用 `ring` provider**。范围是单一拥有者驱动的有线 TCP/TLS 1.3 双向认证，当前已有 [Node 依赖](../../node/Cargo.toml)作为比较基线。下列 TOML 仅固定候选直接依赖，实际接入须通过完整图与[台架准入](../testing/node-security-integration-acceptance.md#linux-arm64-接线准入)。
+
+```toml
+[dependencies]
+tokio = { version = "=1.54.1", default-features = false, features = ["net", "rt", "time"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "ring"] }
+```
+
+| 候选 feature | 本入口用途与裁剪 |
+| --- | --- |
+| Tokio `net` | `TcpListener` / `TcpStream`、就绪及 `try_read` / `try_write`。Linux 上声明边包括 `mio`、`socket2`、`libc`，实际版本由整图确认。使用固定 slice 和标准库 `Read` / `Write` 适配器，省去 `io-util`。 |
+| Tokio `rt`、`time` | 用 `Builder::new_current_thread()` 显式启用 I/O 与计时驱动，唤醒握手截止、半帧维护和关闭检查。`time` 用于唤醒，授权期限仍由拥有者复核可信时钟。候选省去 `rt-multi-thread`、`macros`、`sync`、`signal`、`test-util` 和 `full`，实际若需扩大再核对整图。 |
+| rustls `std`、`ring` | `std` 提供本入口所用的同步 I/O 接口，`ring` 同时选入 `rustls-webpki/ring`。显式关闭默认 features，使 `tls12`、`logging`、`aws_lc_rs`、`prefer-post-quantum` 不随默认配置开启。`brotli`、`zlib`、`fips` 和 `custom-provider` 也不纳入。首轮直接驱动 rustls 的 I/O 原语，`tokio-rustls 0.26.6` 只作上节源码对照。 |
+
+这些是按接口用途推导的直接 features。将来须分目标和宿主查看实际合并结果，确认间接边没有重新打开默认或额外 features。见 [Tokio 固定 manifest](https://github.com/tokio-rs/tokio/blob/tokio-1.54.1/tokio/Cargo.toml)和 [rustls 固定 manifest](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/Cargo.toml)。
+
+### Provider 与认证配置
+
+- 用 `rustls::crypto::ring::default_provider()` 的同一实例配置 `ClientConfig`、`ServerConfig` 和双方 WebPKI verifier 的 `builder_with_provider`，协议版本显式限于 `TLS13`。证书验证使用活动对应的受控信任材料，服务端要求客户端证书。拥有者另按当前活动、participant 和精确凭据复核登记，证书链通过只满足其中一项。实际证书用途、命名与凭据映射待接线评审确认。见 [CryptoProvider 固定源码](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/crypto/mod.rs)和 [客户端证书验证器](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/webpki/client_verifier.rs)。
+- 首轮拟禁用会话恢复和 0-RTT，每次重连走完整双向握手。客户端用 `Resumption::disabled()` 并关闭 `enable_early_data`，服务端 `send_tls13_tickets = 0`、不保留恢复状态且 `max_early_data_size = 0`。rustls `TimeProvider` 接受单个 `UnixTime`，可信 UTC 区间及其与证书有效期、D15 原截止的保守判断须由接线合同分别处理，时间失信则拒绝。见 [客户端配置](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/client/client_conn.rs)、[服务端配置](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/server/server_conn.rs)和 [TimeProvider](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/time_provider.rs)。
+- 选择 `ring` 优先评审的依据是 TLS 1.3 所需能力可从固定源码定位，crates.io 包的 ARM64 路径用 `cc` 构建 C 和随包汇编，发布包已有生成产物。需审查本机目标 C 工具链、汇编/链接器、系统头和 glibc ABI、随机源及随包原生代码。rustls 到 `ring` 的依赖边开启 `ring` 的默认 features，须把 `alloc` 和 `dev_urandom_fallback` 的实际生效范围列入审阅。见 [ring provider 源码](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/crypto/ring/mod.rs)、[ring 固定构建说明](https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/BUILDING.md)和 [ring 发布索引](https://index.crates.io/ri/ng/ring)。
+- rustls 和候选 `rustls-webpki` 的 AWS-LC 路径要求 `aws-lc-rs ^1.18`。现有 D14/MLS 图输入精确固定 `=1.16.3`，复用其版本不可行。AWS-LC 路径需另外评审实际 `aws-lc-sys`、native 链接和版本差量。当前 `ring` 仅用于逐跳候选，未来与 MLS 同进程时须重新评审整图和两套原生代码的链接及资源成本。见 [rustls 发布索引](https://index.crates.io/ru/st/rustls)、[rustls-webpki 发布索引](https://index.crates.io/ru/st/rustls-webpki)和 [D14 固定图](../testing/node-security-graph-review-package.md#唯一候选-manifest-输入)。
+
+### 版本证据与完整图准入
+
+2026-11-08 对照 crates.io API 与稀疏索引，以下版本当时均未 yanked。校验和是登记值，归档本体及其中的许可、归属与原生源码须在后续精确输入中核对。
+
+| 包 / 用途 | 声明许可 / Rust 最低版本 | crates.io 登记 SHA-256 |
+| --- | --- | --- |
+| [Tokio `1.54.1`](https://crates.io/crates/tokio/1.54.1)（直接） | MIT / `1.85` | `b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3` |
+| [rustls `0.23.46`](https://crates.io/crates/rustls/0.23.46)（直接） | Apache-2.0 OR ISC OR MIT / `1.71` | `48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf` |
+| [ring `0.17.14`](https://crates.io/crates/ring/0.17.14)（预期传递版本） | Apache-2.0 AND ISC / `1.66.0` | `a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7` |
+| [rustls-webpki `0.103.16`](https://crates.io/crates/rustls-webpki/0.103.16)（预期传递版本） | ISC / `1.71` | `4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281` |
+
+Tokio `1.54.1` 覆盖 `Interval` 竞态的修复并处于 `AsyncFd` 公告给出的已修复版本范围，候选接口使用 `TcpStream`。rustls `0.23.46` 覆盖 TLS 1.3 记录边界公告的修复，也覆盖 10 月发布的四条 rustls 公告所列修复。见 [Tokio 竞态](https://rustsec.org/advisories/RUSTSEC-2026-0384.html)、[AsyncFd](https://rustsec.org/advisories/RUSTSEC-2026-0386.html)、[TLS 1.3 记录边界](https://rustsec.org/advisories/RUSTSEC-2026-0285.html)和 [rustls 公告](https://rustsec.org/packages/rustls.html)。
+
+rustls 声明 `rustls-webpki ^0.103.14`，该范围可解析到证书验证公告影响的版本。后续候选锁须至少达到该 `0.103` 系列的修复版 `0.103.16`，漂移时复核公告和整图。`ring 0.17.14` 处于 AES 公告的修复范围，也不属于旧系列未维护公告的范围。见 [证书验证公告](https://rustsec.org/advisories/RUSTSEC-2026-0382.html)、[ring AES 公告](https://rustsec.org/advisories/RUSTSEC-2025-0009.html)和 [ring 维护公告](https://rustsec.org/advisories/RUSTSEC-2025-0010.html)。
+
+后续先审定隔离解析输入，以 Node 基线加上述两条直接依赖，与现有锁比较新增、删减和版本变动。分别保留 Linux `aarch64-unknown-linux-gnu` 运行图、实际准备宿主的 build/宏依赖和测试图，核对原生 `links`、系统库、归档校验和、实际 feature 并集、许可正文及随包归属。逐包公告审查须绑定数据源 revision 和日期，维护责任须覆盖传递包及原生代码。两项预期传递版本用于核对候选锁，当前不增加直接依赖来强制求解。范围漂移或证据缺失须回到评审。此次只读元数据及源码，完整依赖图、来源和采用仍待评审，D14 的 G1/G2 与许可证/R2/Phase B 各有独立范围。
