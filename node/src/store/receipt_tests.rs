@@ -1,4 +1,4 @@
-use super::tests::{Workspace, clock, destination, relay, send};
+use super::tests::{ACTIVITY, PEER_2, PEER_3, Workspace, binding, clock, destination, relay, send};
 use super::*;
 use crate::retry::{Admission, LinkEvent, Reason, Signal};
 
@@ -570,10 +570,33 @@ fn receipt_crash_child() {
                 s.receive(destination("one", 0)).unwrap();
             }
             "convert" => finalize(&mut s, "one").unwrap(),
+            "relay-clear" => s
+                .finish_delivery(
+                    "one",
+                    &binding("one"),
+                    Some((PEER_2, b"synthetic proof")),
+                    5,
+                )
+                .unwrap(),
             _ => panic!("invalid crash operation"),
         }
     }
     panic!("expected controlled process exit");
+}
+
+fn run_receipt_crash(w: &Workspace, operation: &str, side: &str, exit: i32) {
+    let result = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "store::receipt_tests::receipt_crash_child",
+            "--nocapture",
+        ])
+        .env("RADISHLINK_RECEIPT_TEST_STORE", &w.dir)
+        .env("RADISHLINK_RECEIPT_TEST_SIDE", side)
+        .env("RADISHLINK_RECEIPT_TEST_OPERATION", operation)
+        .status()
+        .unwrap();
+    assert_eq!(result.code(), Some(exit), "{operation} {side} commit");
 }
 
 #[test]
@@ -590,18 +613,7 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
                 make_v2(&s);
             }
             drop(s);
-            let result = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "--exact",
-                    "store::receipt_tests::receipt_crash_child",
-                    "--nocapture",
-                ])
-                .env("RADISHLINK_RECEIPT_TEST_STORE", &w.dir)
-                .env("RADISHLINK_RECEIPT_TEST_SIDE", side)
-                .env("RADISHLINK_RECEIPT_TEST_OPERATION", operation)
-                .status()
-                .unwrap();
-            assert_eq!(result.code(), Some(exit));
+            run_receipt_crash(&w, operation, side, exit);
             if operation == "migration" {
                 assert_eq!(version(&w), if committed { SCHEMA_VERSION } else { 2 });
                 let s = if committed {
@@ -613,6 +625,20 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
             } else {
                 let s = w.reopen(2);
                 let view = s.message("one").unwrap();
+                let security: Option<(i64, Vec<u8>)> = s
+                    .conn
+                    .query_row(
+                        "SELECT revision,state FROM security_states WHERE activity=?1 AND session='session'",
+                        [ACTIVITY.as_slice()],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()
+                    .unwrap();
+                assert_eq!(
+                    security,
+                    (operation != "receive" || committed)
+                        .then(|| (1, 1_i64.to_le_bytes().to_vec()))
+                );
                 if operation == "receive" && !committed {
                     assert!(view.is_none());
                     assert!(s.history(0, 100).unwrap().is_empty());
@@ -626,6 +652,66 @@ fn process_exit_recovers_whole_intent_conversion_and_v2_migration() {
                     assert_eq!(s.history(0, 100).unwrap().len(), 1);
                 }
             }
+        }
+    }
+}
+
+#[test]
+fn process_exit_recovers_relay_clear_and_original_upstream_proof_together() {
+    for (side, exit, committed) in [("before", 71, false), ("after", 72, true)] {
+        let w = Workspace::new();
+        let mut s = w.create();
+        s.receive(relay("one")).unwrap();
+        s.schedule_forward("one", PEER_3).unwrap();
+        drop(s);
+
+        run_receipt_crash(&w, "relay-clear", side, exit);
+        let mut s = w.reopen(2);
+        let view = s.message("one").unwrap().unwrap();
+        assert_eq!(view.state, if committed { "delivered" } else { "stored" });
+        assert_eq!(view.source_neighbor.as_deref(), Some(PEER_2));
+        assert_eq!(view.payload_present, !committed);
+        assert_eq!(view.evidence_pending, committed);
+        assert_eq!(
+            s.usage().unwrap().reserved_control_count,
+            u64::from(!committed)
+        );
+        assert!(s.history(0, 10).unwrap().is_empty());
+        let (kind, neighbor, body): (String, String, Vec<u8>) = s
+            .conn
+            .query_row(
+                "SELECT kind,neighbor,body FROM queues WHERE message_key='one'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        let queue_count: i64 = s
+            .conn
+            .query_row(
+                "SELECT count(*) FROM queues WHERE message_key='one'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(queue_count, 1);
+        if committed {
+            assert_eq!(
+                (kind.as_str(), neighbor.as_str(), body.as_slice()),
+                ("evidence", PEER_2, b"synthetic proof".as_slice())
+            );
+            let saved = retry_json(&s, "one");
+            assert_eq!(saved["deadline_ms"], 10000);
+            s.finish_delivery(
+                "one",
+                &binding("one"),
+                Some((PEER_2, b"synthetic proof")),
+                5,
+            )
+            .unwrap();
+            assert_eq!(retry_json(&s, "one"), saved);
+        } else {
+            assert_eq!((kind.as_str(), neighbor.as_str()), ("data", PEER_3));
+            assert!(body.is_empty());
         }
     }
 }

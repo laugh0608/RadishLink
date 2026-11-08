@@ -51,6 +51,7 @@
 - [Node D16 控制持久化与尝试预算](testing/node-control-persistence.md)：schema v4、固定预留、活动/对象/邻居责任与离线迁移故障验证。
 - [Node 证明生命周期与恢复边界](testing/node-receipt-lifecycle.md)：提交后证明意图、schema v3、原消息截止时间与离线故障验证。
 - [Node 安全候选新图精确评审包](testing/node-security-graph-review-package.md)：固定输入、G1/G2 命令与来源/资源/证据合同，非执行授权。
+- [Node 安全接入与 Linux ARM64 验收准备](testing/node-security-integration-acceptance.md)：T-C/T-D 合成故障验证、实际安全用例与接线证据清单。
 - [Node 帧边界与新图离线输入验证](testing/node-framing-and-graph-inputs.md)：D15 接收缓存/超时实现、G0 输入准备与尚未满足的真实运行前置。
 - [三节点软件探索与验证规范](testing/t0-p0-software-validation.md)
 - [`SW-EXP-002` OpenMLS 受限 spike 执行授权包](testing/sw-g2-openmls-spike-authorization.md)：Phase A / Phase B 合同与历史结果。

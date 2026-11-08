@@ -260,6 +260,27 @@ cargo build --frozen --release --target aarch64-unknown-linux-gnu --manifest-pat
 
 本次没有改变首次信任、撤销、事务或 proof 的安全决定，没有发送上游消息、接收回复、创建新 R1 evidence、安装/构建候选或联系专业方。输入已更具体，但 R2、Phase B 和 SW-G2 仍为未通过状态。
 
+## 首份评审材料及复制边界（2026-11-08）
+
+本轮固定的是**仓库内只读评审输入**。维护者在现有工作区核对下列文件和证据索引，按原路径引用。新增第三方文件副本、候选产物与外部交付均为零，历史留存不迁移、不清理。核对基线为 `f0fa045018e150245eb9df01f078600f59a30d95`，本轮复算了 `tools/spikes/sw-g2-mls-rs/` 下的 manifest、lock 和拒绝 stub。
+
+| 对象 | SHA-256 |
+| --- | --- |
+| `Cargo.toml` | `82fa10b4985273e4edcd54451432144711981f599be0ec090496a898cfdc7fe0` |
+| `Cargo.lock` | `c6dfaaf0e89a580cbe7ae613fd3f05f2fc1f1b53eee1aff8b615ee50f9ca50c7` |
+| `src/main.rs` | `c34d2d22b69bfbaca6ee27e52aa652d4cd86f22e33e48777367e968bc106e18c` |
+
+| 对象 | 当前留存和评审范围 | 下一份执行包须补的字段 |
+| --- | --- | --- |
+| 仓库输入及评审索引 | 原路径留存上述三文件、本节及 R1c-R/R1d-L 和 X/R 合同的引用。交接内容限于这些引用、对象标识、摘要及待答问题；本轮未交付 | 所有者指定接收人、渠道与可阅范围。需要实际材料时逐文件审批，记录来源、摘要、接收端路径及留存终点 |
+| 既有 registry 归档、解包源码及原始取证 | 依原 D2/R1 合同留在原 evidence 根，本轮不复制 `.crate`、`AUTHORS` 正文、原始响应或缓存 | 逐对象说明在独立 ARM64 运行根是否必需、来自哪个已核验对象、谁可读、何时清理。两个包都要核对 target 外的输入复制 |
+| 未来 source/cache/vendor/build scratch | 本轮未创建、未转移；单独列出归档、解包源码、vendor、registry 与 build cache，不能将未决定的类别记为排除 | 列出实际写入目录、硬上限、保留者与退出时动作。默认提交评审的方案仅保留经核验的证据，不将整套 scratch 随二进制交付；复现或许可证留存例外须逐对象批准 |
+| 未来 ARM64 产物 | 当前无候选 executable、库、镜像或安装包。首个候选包只评审内部合成试验用 executable、链接/依赖清单、材料清单和证据 | 绑定确切运行根、所有者控制的使用者、每个输出及摘要、链接组成和保留终点；区分设备上最终内容与准备环境曾经复制的内容。未定即停止，不填推定的留存期限 |
+
+两份评审请求各自绑定[固定 package、checksum 和 commit](../testing/sw-g2-mls-rs-license-notice-review.md#r0-离线许可证缺口盘点)。`debug_tree` 由所有者指定公开账号并预审[已冻结的逐字 X 请求](../testing/sw-g2-mls-rs-debug-tree-upstream-clarification-plan.md)，材料是固定对象的适用 MIT 正文、holder、第三方例外和可核验回复身份。X 与 R 分别授权，回复接受后才能准备新证据。`r-efi` 由所有者指定有资格的独立法律评审者，首份材料为固定对象与 `AUTHORS` 的来源/摘要、上表范围及 R1d-L 的 UEFI 依赖边证据，具体待答是内部 Linux ARM64 用途中实际复制各类别时是否可选 MIT、完整 `AUTHORS` 的留存和随附条件。当前材料只含索引；如评审需要原文或源码，先补接收人与逐对象范围。实际目标 binary 和副本清单均未生成，不能以 target 推定其内容。
+
+法律评审与[非实现者 R2](../testing/sw-g2-mls-rs-license-notice-review.md#r2-非实现者复核)的负责人均待指定；R2 另以有效完整的新证据为进入条件。本轮没有外部发送、补证、候选运行或 gate 状态变动。Node 新产品图另走 [G1/G2](../testing/node-security-graph-review-package.md)，实际功能与接线按 [Node 安全接入验收](../testing/node-security-integration-acceptance.md)分别取证。
+
 ## Node 联合事务接入源码核对（2026-10-24）
 
 本节是 Node 服务运行可靠性任务中的只读工程核对，不是完整安全审计、许可证补证、R2 或 Phase B。实际读取 D2 run `20260902-130415-49997.8P5Td6` 留存的三个 crate 及解包源码；没有执行其 Cargo、复用该缓存构建、改动 archive、provider 或历史 evidence。三个归档 SHA-256 均与仓库固定 lock 一致，所读核心源码又与归档对应 entry 逐字比较一致：
