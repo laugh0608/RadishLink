@@ -51,6 +51,8 @@ pub use outbound_handoff::{
 };
 mod outbound_terminal;
 pub use outbound_terminal::{OutboundTerminalAck, OutboundTerminalAdmission};
+mod owner_shutdown;
+pub use owner_shutdown::OwnerShutdownWork;
 mod control_ingress;
 #[cfg(test)]
 mod outbound_cycle_recovery_tests;
@@ -60,6 +62,8 @@ mod outbound_cycle_tests;
 mod outbound_scan_tests;
 #[cfg(test)]
 mod outbound_terminal_tests;
+#[cfg(test)]
+mod owner_shutdown_tests;
 pub use control_ingress::{
     ControlIngressAdmission, ControlIngressChannel, ControlIngressUsage,
     ControlVerificationCompletion, ControlVerificationJob, ControlVerificationOutcome,
@@ -104,6 +108,7 @@ pub struct Store {
     handoff: outbound_handoff::HandoffState,
     outbound_terminal: Option<outbound_terminal::PendingTerminal>,
     outbound_acks: Vec<outbound_ack::PendingAck>,
+    owner_shutdown: Option<owner_shutdown::OwnerShutdown>,
     conn: StoreConnection,
     limits: Limits,
     clock: Clock,
@@ -245,6 +250,7 @@ impl Store {
             handoff: outbound_handoff::HandoffState::default(),
             outbound_terminal: None,
             outbound_acks: Vec::new(),
+            owner_shutdown: None,
             conn,
             limits,
             clock,
@@ -258,7 +264,7 @@ impl Store {
         Self::open_version(directory, limits, clock, OpenMode::Current)
     }
     /// Consumes the owner, closes SQLite, then explicitly releases its file lock.
-    /// A failed SQLite close retains both resources until process exit and returns its cause.
+    /// An unfinished owner shutdown or failed SQLite close retains both resources.
     pub fn close(self) -> Result<()> {
         self.conn.close()
     }
@@ -440,6 +446,7 @@ impl Store {
             handoff: outbound_handoff::HandoffState::default(),
             outbound_terminal: None,
             outbound_acks: Vec::new(),
+            owner_shutdown: None,
             conn,
             limits,
             clock,
@@ -545,6 +552,7 @@ impl Store {
         }
     }
     fn writable(&self) -> Result<()> {
+        self.require_owner_running()?;
         self.readable()?;
         if self.time_uncertain
             || (self.schema_version()? >= 9
@@ -589,6 +597,7 @@ impl Store {
         self.outbound_acks.clear();
     }
     fn transact<T>(&mut self, apply: impl FnOnce(&Self) -> Result<T>, ordinary: bool) -> Result<T> {
+        self.require_owner_running()?;
         self.readable()?;
         self.conn.execute_batch("BEGIN IMMEDIATE;")?;
         let result = apply(self).and_then(|v| {

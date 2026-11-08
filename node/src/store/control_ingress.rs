@@ -86,6 +86,12 @@ impl ControlIngress {
     pub(super) fn has_channels(&self) -> bool {
         !self.channels.is_empty()
     }
+    pub(super) fn registered_channels(&self) -> impl Iterator<Item = OutboundChannel> + '_ {
+        self.channels.values().copied()
+    }
+    pub(super) fn discard_waiting(&mut self) {
+        self.pending.retain(|pending| pending.leased);
+    }
     pub(super) fn require_channel(&self, channel: &OutboundChannel) -> Result<()> {
         if self.channels.get(&channel.peer) != Some(channel) {
             return Err(Error::new(
@@ -307,6 +313,7 @@ impl Store {
         self.control_ingress_channel(channel)?;
         self.ingress.channels.remove(&channel.binding.peer);
         self.discard_acks_on_channel(&channel.binding);
+        self.note_owner_channel_closed(channel.binding);
         Ok(())
     }
 

@@ -44,7 +44,6 @@ enum Command {
     Usage(Sender<Result<Usage>>),
     Submit(Sender<Result<()>>),
     Clock(Clock, Sender<Result<MaintenanceReport>>),
-    Stop,
     #[cfg(test)]
     Hold(Sender<()>, mpsc::Receiver<()>),
     #[cfg(test)]
@@ -53,6 +52,26 @@ enum Command {
 
 struct AdmissionGate {
     sender: Mutex<Option<SyncSender<Command>>>,
+}
+impl AdmissionGate {
+    /// Taking the sole sender closes admission and wakes an idle receiver without
+    /// consuming a slot. Already accepted commands remain readable until disconnect.
+    fn close(&self) -> bool {
+        match self.sender.lock() {
+            Ok(mut sender) => {
+                sender.take();
+                false
+            }
+            Err(poison) => {
+                poison.into_inner().take();
+                true
+            }
+        }
+    }
+
+    fn is_closed(&self) -> bool {
+        self.sender.lock().map_or(true, |sender| sender.is_none())
+    }
 }
 /// Cloneable query/control handle. It never owns or opens a database connection.
 #[derive(Clone)]
@@ -106,17 +125,10 @@ impl Service {
                 impl Drop for CloseAdmission {
                     fn drop(&mut self) {
                         // Poison remains observable to clients/stop, but cannot retain admission.
-                        match self.0.sender.lock() {
-                            Ok(mut sender) => {
-                                sender.take();
-                            }
-                            Err(poison) => {
-                                poison.into_inner().take();
-                            }
-                        };
+                        self.0.close();
                     }
                 }
-                let _close = CloseAdmission(worker_gate);
+                let admission = CloseAdmission(worker_gate);
                 let mut timer = timer;
                 let mut next_tick = timer
                     .as_ref()
@@ -124,7 +136,8 @@ impl Service {
                 let mut failure = None;
                 loop {
                     // Check on every iteration: a busy command queue cannot starve maintenance.
-                    if next_tick.is_some_and(|at| Instant::now() >= at) {
+                    if !admission.0.is_closed() && next_tick.is_some_and(|at| Instant::now() >= at)
+                    {
                         let (source, interval) =
                             timer.as_mut().expect("timer accompanies deadline");
                         match source.sample().and_then(|clock| store.maintain(clock)) {
@@ -206,7 +219,6 @@ impl Service {
                             }
                             let _ = reply.send(result);
                         }
-                        Command::Stop => break,
                         #[cfg(test)]
                         Command::Hold(entered, release) => {
                             let _ = entered.send(());
@@ -230,14 +242,7 @@ impl Service {
         self.shutdown()
     }
     fn shutdown(&mut self) -> Result<()> {
-        // Remove the sender under the same gate as try_send. All accepted commands precede Stop.
-        let (sender, poisoned) = match self.client.gate.sender.lock() {
-            Ok(mut gate) => (gate.take(), false),
-            Err(poison) => (poison.into_inner().take(), true),
-        };
-        if let Some(sender) = sender {
-            let _ = sender.send(Command::Stop);
-        }
+        let poisoned = self.client.gate.close();
         if let Some(worker) = self.worker.take() {
             worker
                 .join()

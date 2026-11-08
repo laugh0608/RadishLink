@@ -5,6 +5,7 @@ use std::ops::Deref;
 pub(super) struct StoreConnection {
     connection: Option<Connection>,
     owner: Option<File>,
+    shutdown_hold: bool,
     #[cfg(test)]
     fail_unlock: bool,
 }
@@ -28,6 +29,7 @@ impl StoreConnection {
         Ok(Self {
             connection: None,
             owner: Some(owner),
+            shutdown_hold: false,
             #[cfg(test)]
             fail_unlock: false,
         })
@@ -43,6 +45,9 @@ impl StoreConnection {
     }
 
     fn finish(&mut self) -> Result<()> {
+        if self.shutdown_hold && self.connection.is_some() {
+            return Err(Error::new(Code::Busy, "store owner shutdown unconfirmed"));
+        }
         if let Some(connection) = self.connection.take()
             && let Err((connection, error)) = connection.close()
         {
@@ -69,7 +74,11 @@ impl StoreConnection {
         Ok(())
     }
 
-    // A failed SQLite close must not hand ownership to another Store. Keep both
+    pub(super) fn hold_shutdown(&mut self, hold: bool) {
+        self.shutdown_hold = hold;
+    }
+
+    // An unconfirmed shutdown or failed SQLite close must not hand ownership over. Keep both
     // resources until process exit; never silently retry or unlock a live connection.
     fn retain_failed_close(&mut self) {
         if let Some(connection) = self.connection.take() {
@@ -120,6 +129,26 @@ mod tests {
         service::Service,
         store::tests::{Workspace, clock},
     };
+
+    #[test]
+    fn owner_shutdown_hold_prevents_connection_close_and_unlock_until_confirmed() {
+        let w = Workspace::new();
+        let mut store = w.create();
+        store.begin_owner_shutdown();
+        let err = store.conn.finish().unwrap_err();
+        assert_eq!(err.operation, "store owner shutdown unconfirmed");
+        assert!(store.conn.connection.is_some());
+        assert_eq!(
+            Store::open(&w.dir, Limits::default(), clock(0))
+                .err()
+                .unwrap()
+                .code,
+            Code::Busy
+        );
+        store.finish_owner_shutdown(Ok(())).unwrap();
+        store.close().unwrap();
+        w.reopen(0).close().unwrap();
+    }
     use std::error::Error as _;
 
     #[test]

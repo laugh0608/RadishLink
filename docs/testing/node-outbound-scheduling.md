@@ -184,3 +184,5 @@ RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 t
 七项新增用例覆盖错误实例或 relay 拒绝、旧视图/Known/Merged 拒绝造 ACK、控制原责任缺失、满 16 槽时第 17 条持久接纳保留、原共享速率和单次机会、截点前关闭/到期/issuer 撤销、交接后同凭据重连、明确回滚和提交未知。关闭与写入均使用离线结果，未实测传输。
 
 既有 Rust 1.97.1 和锁定依赖下，离线定向 `store::outbound_ack_tests` 7/7 通过。默认并行全量 251 项库测试和 2 项 CLI 测试通过，库测试耗时 152.46 秒。fmt、Clippy `--all-targets -- -D warnings`、仓库检查和 `git diff --check` 均通过。测试进程已退出，新改动留在工作区，未暂存、提交或推送。
+
+上述 ACK 描述符代码、用例和文档随后按所有者要求本地提交为 `ed0c8e2`。

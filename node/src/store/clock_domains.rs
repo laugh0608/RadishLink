@@ -332,6 +332,7 @@ impl Store {
         &mut self,
         request: NewClockDomainActivity,
     ) -> Result<ActivityStatus> {
+        self.require_owner_running()?;
         self.readable()?;
         request.validate()?;
         let assigned:Option<Vec<u8>>=self.conn.query_row("SELECT domain_id FROM clock_domains WHERE json_extract(transition,'$.reference')=?1",[&request.reference],|r|r.get(0)).optional()?;

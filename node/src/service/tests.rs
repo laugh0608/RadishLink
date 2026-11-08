@@ -3,6 +3,45 @@ use crate::model::HISTORY_MS;
 use crate::store::tests::{Workspace, clock, send};
 
 #[test]
+fn stop_signal_disconnects_full_mailbox_without_a_command_slot() {
+    let (sender, receiver) = mpsc::sync_channel(COMMAND_CAPACITY);
+    let client = Client {
+        gate: Arc::new(AdmissionGate {
+            sender: Mutex::new(Some(sender)),
+        }),
+    };
+    let (reply, _reply_rx) = mpsc::channel();
+    for _ in 0..COMMAND_CAPACITY {
+        client.enqueue(Command::Diagnostics(reply.clone())).unwrap();
+    }
+    assert_eq!(
+        client
+            .enqueue(Command::Diagnostics(reply.clone()))
+            .unwrap_err()
+            .code,
+        Code::Busy
+    );
+    assert!(!client.gate.close());
+    assert_eq!(
+        client
+            .enqueue(Command::Diagnostics(reply))
+            .unwrap_err()
+            .code,
+        Code::Stopped
+    );
+    for _ in 0..COMMAND_CAPACITY {
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            Command::Diagnostics(_)
+        ));
+    }
+    assert!(matches!(
+        receiver.try_recv(),
+        Err(mpsc::TryRecvError::Disconnected)
+    ));
+}
+
+#[test]
 fn full_queue_rejects_new_work_and_shutdown_drains_accepted_queries() {
     let w = Workspace::new();
     let service = Service::start(w.create()).unwrap();
