@@ -25,8 +25,13 @@ class ControlTests(unittest.TestCase):
                 path.parent.mkdir(exist_ok=True)
                 path.write_text("# synthetic source\n")
             script = repo / "scripts/inspect-sw-i5-guest.py"
-            script.write_text('def check_utm_config(): pass\ndef parse_execution(*args): return {"fixture":True}, b"{}", b""\ndef verify_case(*args): pass\n')
-            config = repo / "VirtualMachines/RadishLink-I5-Debian13-ARM64.utm/config.plist"
+            config = repo / "VirtualMachines/utms/RadishLink-I5-Debian13-ARM64.utm/config.plist"
+            script.write_text(
+                "from pathlib import Path\n"
+                f"def check_utm_config(): return Path({str(config)!r})\n"
+                'def parse_execution(*args): return {"fixture":True}, b"{}", b""\n'
+                "def verify_case(*args): pass\n"
+            )
             config.parent.mkdir(parents=True)
             config.write_bytes(b"synthetic config")
             binary = repo / "utmctl"

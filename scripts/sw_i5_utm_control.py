@@ -209,8 +209,7 @@ def main():
     spec = importlib.util.spec_from_file_location("i5_inventory", SCRIPT)
     collector = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(collector)
-    collector.check_utm_config()
-    config = Path.home() / "VirtualMachines/RadishLink-I5-Debian13-ARM64.utm/config.plist"
+    config = collector.check_utm_config()
     config_hash = hashlib.sha256(config.read_bytes()).hexdigest()
     if config_hash != record["config_sha256"]:
         raise ValueError("reviewed config changed")

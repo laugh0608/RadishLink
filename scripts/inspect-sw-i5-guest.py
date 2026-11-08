@@ -431,7 +431,7 @@ def validate_result(raw, nonce):
 def check_utm_config():
     if platform.system() != "Darwin":
         raise RuntimeError("UTM collection requires macOS")
-    path = Path.home() / "VirtualMachines" / (UTM_NAME + ".utm") / "config.plist"
+    path = Path.home() / "VirtualMachines" / "utms" / (UTM_NAME + ".utm") / "config.plist"
     config = plistlib.loads(path.read_bytes())
     if config.get("Information", {}).get("UUID") != UTM_UUID or \
             config.get("Information", {}).get("Name") != UTM_NAME:
@@ -440,6 +440,7 @@ def check_utm_config():
     if config.get("Network") != [] or sharing.get("ClipboardSharing") is not False or \
             sharing.get("DirectoryShareMode") != "None":
         raise RuntimeError("UTM config isolation required")
+    return path
 
 
 def probe_program(case_name):

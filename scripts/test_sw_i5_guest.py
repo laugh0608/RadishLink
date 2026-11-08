@@ -248,9 +248,13 @@ class UTMResultTests(unittest.TestCase):
     def test_config_refuses_wrong_target_or_enabled_sharing(self):
         good = {"Information": {"UUID": guest.UTM_UUID, "Name": guest.UTM_NAME},
                 "Network": [], "Sharing": {"ClipboardSharing": False, "DirectoryShareMode": "None"}}
+        home = Path("/synthetic-home")
+        config = home / "VirtualMachines/utms/RadishLink-I5-Debian13-ARM64.utm/config.plist"
         with patch.object(guest.platform, "system", return_value="Darwin"), \
-                patch.object(Path, "read_bytes", return_value=guest.plistlib.dumps(good)):
-            guest.check_utm_config()
+                patch.object(Path, "home", return_value=home), \
+                patch.object(Path, "read_bytes", autospec=True, return_value=guest.plistlib.dumps(good)) as read:
+            self.assertEqual(guest.check_utm_config(), config)
+            read.assert_called_once_with(config)
         for field, value in (("Information", {"UUID": "other"}), ("Network", [{}]),
                              ("Sharing", {"ClipboardSharing": True, "DirectoryShareMode": "None"}),
                              ("Sharing", {"ClipboardSharing": False, "DirectoryShareMode": "VirtFS"})):
