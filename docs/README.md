@@ -22,6 +22,7 @@
 - [Node 新活动生命周期与重新配对评审包](architecture/node-activity-lifecycle.md)：D17 同 boot 与 D18 跨 boot 写域、显式迁移及有界归档。
 - [Node 外发遍历与状态拥有者接线工作包](architecture/node-outbound-owner.md)：有界候选与同步离线周期、批次及发送交接消费者合同。
 - [Node 状态拥有者资源账本](architecture/node-owner-resource-ledger.md)：队列、字节、在途归属及真实接线前的资源与拒绝证据。
+- [Node 有界输入与通道关闭](architecture/node-bounded-ingress.md)：已认证实例的读取额度、下游拒绝、关闭确认与验收前置。
 - [Node 数据 envelope](protocol/node-data-envelope.md)：不可变核心、MLS AAD、保守时间与 D15 已接受参数。
 - [Node 控制传播预算](protocol/node-control-propagation.md)：退出/报告有界转发、逐跳确认与 D16 已接受容量取舍。
 - [安全架构](security/security-architecture.md)

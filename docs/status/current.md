@@ -68,7 +68,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 具体产物、决策责任和关闭标准统一放在[项目执行计划的近期工作包](project-execution-plan.md#近期工作包与决策顺序)。当前顺序为：
 
-1. 开发优先。[独立停止与拥有者收束的离线接入](../testing/node-service-reliability.md#独立停止与收束离线接续2026-11-08)已提交为 `1eeff29`。[资源账本](../architecture/node-owner-resource-ledger.md)已核对队列、字节、在途所有权与平台证据缺口。下一步评审认证实例至 framing 的有界输入合同，明确 read credit、下游拒绝和同一实例关闭；未确认平台与证据边界前不接真实入口。工作池、可信平台、许可证/R2/Phase B 和新图门保持，长期归档仍满额拒绝。
+1. 开发优先。独立停止与拥有者收束已提交为 `1eeff29`，[资源账本](../architecture/node-owner-resource-ledger.md)已提交为 `a02794a`。[有界输入评审稿](../architecture/node-bounded-ingress.md)已明确单帧读取额度、下游拒绝和原实例关闭确认。接续先核对 Linux ARM64 候选与逐跳 I/O 适配层能否封住握手/缓冲、时限和关闭边界；缺合格平台或证据则保留停止，转向下一项可独立推进的评审。工作池、可信平台、许可证/R2/Phase B 和新图门保持，长期归档仍满额拒绝。
 2. 基于已整理的内部 Linux ARM64 产物评审表，冻结实际复制/留存范围、评审者与下一精确包；分别处置 `debug_tree` 固定源码正文/归属与 `r-efi` 的 MIT alternative。专业意见、新证据与执行合同仍待完成，保留全部现行 STOP 和 R2 条件。
 3. 按已接受的活动身份、撤销与 COSE profile 准备实际首次信任/签验/联合事务的验证输入，继续核对手机授权、物理与覆盖层路由边界；不重复讨论 D11—D16，也不把已接受设计写成安全能力已实现。
 4. I5 后续先满足[路线 A 宿主资源门](../testing/sw-g4-synthetic-i5-linux-host-assessment.md)，不把当前 Mac/UTM 改名或增加 guest 配额当作达标。资源条件变化后复核完整准备预算、真实输入与可信基座，冻结真实 FD loader、非 UTM 控制面和新版执行合同，再另行授权实现、原生环境验收及验签/APT。安装、冷构建、daemon/store 计费和正式 21 样本 I5-R 仍各有前置；不直接创建满额四盘后安装，不在域外先构建。V0 历史合同与 SW-G2 安全门不变。
