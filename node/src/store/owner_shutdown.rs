@@ -33,6 +33,7 @@ impl Store {
             self.outbound_acks.clear();
             self.outbound_terminal = None;
             self.ingress.discard_waiting();
+            self.discard_inbound_reads();
             interrupted_output
         };
         OwnerShutdownWork {

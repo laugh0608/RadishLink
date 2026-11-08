@@ -5,6 +5,9 @@ use std::{
     sync::Arc,
 };
 
+mod read;
+pub use read::{InboundFrame, InboundReadProgress, InboundReadStep};
+
 pub const MAX_PENDING_CONTROLS: usize = 16;
 const MAX_CONTROL_BYTES: usize = 512;
 
@@ -59,6 +62,8 @@ struct Pending {
 struct RegisteredChannel {
     binding: OutboundChannel,
     closing: bool,
+    /// None until the frame slot is open, then one coalesced readiness bit.
+    read_ready: Option<bool>,
 }
 
 /// Runtime-only. Reopening creates empty buckets at the current trusted coordinate.
@@ -69,6 +74,8 @@ pub(super) struct ControlIngress {
     global: Bucket,
     peers: BTreeMap<ParticipantId, Bucket>,
     channels: BTreeMap<ParticipantId, RegisteredChannel>,
+    framing: Option<crate::framing::Ingress>,
+    last_read_peer: Option<ParticipantId>,
     next_instance: u64,
     next_id: u64,
     pending: VecDeque<Pending>,
@@ -84,6 +91,8 @@ impl ControlIngress {
             global: Bucket::empty(now),
             peers: BTreeMap::new(),
             channels: BTreeMap::new(),
+            framing: None,
+            last_read_peer: None,
             next_instance: OutboundChannel::REGISTERED_INSTANCE_START,
             next_id: 0,
             pending: VecDeque::new(),
@@ -313,6 +322,7 @@ impl Store {
             RegisteredChannel {
                 binding,
                 closing: false,
+                read_ready: None,
             },
         );
         self.ingress.next_instance = instance;
@@ -329,10 +339,25 @@ impl Store {
         &mut self,
         channel: &ControlIngressChannel,
     ) -> Result<()> {
-        self.registered_control_channel(channel)?.closing = true;
-        self.discard_acks_on_channel(&channel.binding);
-        self.discard_handoff_on_channel(&channel.binding);
+        self.registered_control_channel(channel)?;
+        self.fence_control_channel(channel.binding);
         Ok(())
+    }
+
+    fn fence_control_channel(&mut self, channel: OutboundChannel) {
+        let entry = self
+            .ingress
+            .channels
+            .get_mut(&channel.peer)
+            .filter(|entry| entry.binding == channel)
+            .expect("registered channel");
+        entry.closing = true;
+        entry.read_ready = None;
+        if let Some(framing) = &mut self.ingress.framing {
+            framing.close(&channel.peer);
+        }
+        self.discard_acks_on_channel(&channel);
+        self.discard_handoff_on_channel(&channel);
     }
 
     /// Records confirmed closure of this exact instance. The caller owns transport closure.
@@ -340,6 +365,9 @@ impl Store {
     pub fn close_control_ingress_channel(&mut self, channel: &ControlIngressChannel) -> Result<()> {
         self.registered_control_channel(channel)?;
         self.ingress.channels.remove(&channel.binding.peer);
+        if let Some(framing) = &mut self.ingress.framing {
+            framing.close(&channel.binding.peer);
+        }
         self.discard_acks_on_channel(&channel.binding);
         self.note_owner_channel_closed(channel.binding);
         Ok(())
@@ -366,6 +394,28 @@ impl Store {
         Ok((channel.activity, channel.binding))
     }
 
+    pub(super) fn check_registered_channel(
+        &self,
+        activity: ActivityId,
+        channel: &OutboundChannel,
+        now: i64,
+    ) -> Result<()> {
+        self.ingress.require_channel(channel)?;
+        let local = self.control_live(&activity, now)?;
+        self.reject_local_retirement()?;
+        if local != channel.local
+            || self.control_binding(&channel.local_credential, &local)? != BindingState::Active
+            || self.control_binding(&channel.peer_credential, &channel.peer)?
+                != BindingState::Active
+        {
+            return Err(Error::new(
+                Code::Conflict,
+                "registered channel binding changed",
+            ));
+        }
+        Ok(())
+    }
+
     fn require_control_channel_owner(&self, channel: &ControlIngressChannel) -> Result<()> {
         if !Arc::ptr_eq(&channel.owner, &self.ingress.owner) {
             return Err(Error::new(
@@ -374,6 +424,13 @@ impl Store {
             ));
         }
         Ok(())
+    }
+
+    pub(super) fn discard_inbound_reads(&mut self) {
+        self.ingress.framing = None;
+        for entry in self.ingress.channels.values_mut() {
+            entry.read_ready = None;
+        }
     }
 
     /// Admits candidate bytes with their exact source instance, in the original shared queue.

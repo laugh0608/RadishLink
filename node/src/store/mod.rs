@@ -67,7 +67,7 @@ mod owner_shutdown_tests;
 pub use control_ingress::{
     ControlIngressAdmission, ControlIngressChannel, ControlIngressUsage,
     ControlVerificationCompletion, ControlVerificationJob, ControlVerificationOutcome,
-    ControlVerificationPoll,
+    ControlVerificationPoll, InboundFrame, InboundReadProgress, InboundReadStep,
 };
 mod business_policy;
 #[cfg(test)]

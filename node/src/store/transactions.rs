@@ -220,7 +220,7 @@ impl Store {
         {
             return Err(Error::new(Code::Conflict, "relay final-hop credential"));
         }
-        self.check_registered_ack_channel(activity, &channel, self.clock.monotonic_ms)?;
+        self.check_registered_channel(activity, &channel, self.clock.monotonic_ms)?;
         let forward_to = next_hop.as_ref().map(credential_key);
         let (view, inserted) =
             self.receive_with_admission(receive, forward_to.as_deref(), Some(&upstream))?;

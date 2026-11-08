@@ -134,6 +134,20 @@ impl Ingress {
         self.streams.remove(neighbor);
     }
 
+    /// Remaining bytes in the current prefix or body. The owner checks time first.
+    pub(crate) fn read_credit(&self, neighbor: &Neighbor) -> Option<usize> {
+        let stream = self.streams.get(neighbor)?;
+        Some(match stream.expected {
+            Some(len) => len - stream.body.len(),
+            None => stream.prefix.len() - stream.prefix_len,
+        })
+    }
+
+    pub(crate) fn ready_capacity(&self, neighbor: &Neighbor) -> Option<usize> {
+        let stream = self.streams.get(neighbor)?;
+        stream.complete().then(|| stream.body.capacity())
+    }
+
     /// Consume at most the first frame. The caller retains any unconsumed input.
     /// Malformed/expired input removes this stream; Busy retains the ready frame.
     pub fn push(&mut self, neighbor: &Neighbor, clock: &Clock, input: &[u8]) -> Result<Progress> {

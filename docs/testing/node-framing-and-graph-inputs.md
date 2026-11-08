@@ -52,3 +52,13 @@ git diff --check
 2. **许可证与 R2**：所有者落实具资格的独立复核者及材料移交/留存范围，按已有 `debug_tree` / `r-efi` 处置路径处理；不会自动对外发送资料、联系上游或把新图/内部使用当专业意见。
 
 这些确认边界来自 [AGENTS.md](../../AGENTS.md) 的 L3 与外部状态约束，以及现行安全/许可证停止线。无需重复确认 D15/D16；独立离线开发仍可推进，但真实安全接入、G1/G2、R2、Phase B、ARM64 台架和 I5-R 均未完成或放行。
+
+## 有界入站离线验收（2026-11-08）
+
+Store 在登记后通过 `open_inbound_stream` 打开帧槽，通过 `mark_inbound_ready` 复核原句柄及拥有者并合并就绪。`poll_inbound` 每步先检查时间、到期和权限，再按轮转选择一个实例，读取后复核新采样才交给 framing。正常读取保留就绪至 `WouldBlock`，届时等待下一次通知。即使无就绪，轮询仍处理半帧到期。开槽失败、读故障或失效会关闭逻辑准入，原登记等调用者确认关闭。全局停机直接释放帧槽和就绪标记。见 [离线接线](../../node/src/store/control_ingress/read.rs)和[两步关闭](node-control-ingress.md#实例两步关闭离线验收2026-11-08)。
+
+每步前缀仅请求剩余字节，帧体按剩余量和 4096 bytes 的较小值请求。完整帧在该步按 backing capacity 请求下游预留。预留成功时移交原 backing，预留拒绝时返回 `Discarded` 并释放该帧。下一帧由后续轮转读取。这里用调用方提供的合成读取、时钟与预留回调验证顺序，真实 socket/TLS、可信时钟、严格解码与工作池另行验收。见 [接线合同](../architecture/node-bounded-ingress.md)。
+
+九项合成用例覆盖最大帧的分片和粘包、下游满额后读取下一帧、`WouldBlock` 与 9999/10000/10001 ms 边界、EOF、超读、非法长度、四实例轮转及停机、开槽失败、撤销与读取期间到期、两步关闭后旧就绪、重开复用实例号和读后时钟回退。
+
+本机使用已缓存的 Rust `1.97.1` 和既有 `Cargo.lock` 验证。`cargo test --offline --locked` 通过 295 项库测试和 2 项 CLI 测试，库测试耗时 162.70 秒。`cargo fmt --check`、离线锁定的全目标 Clippy（`-D warnings`）、`./scripts/check-repo.sh` 和 `git diff --check` 通过。

@@ -55,28 +55,6 @@ impl Store {
             .retain(|pending| &pending.channel != channel);
     }
 
-    pub(super) fn check_registered_ack_channel(
-        &self,
-        activity: ActivityId,
-        channel: &OutboundChannel,
-        now: i64,
-    ) -> Result<()> {
-        self.ingress.require_channel(channel)?;
-        let local = self.control_live(&activity, now)?;
-        self.reject_local_retirement()?;
-        if local != channel.local
-            || self.control_binding(&channel.local_credential, &local)? != BindingState::Active
-            || self.control_binding(&channel.peer_credential, &channel.peer)?
-                != BindingState::Active
-        {
-            return Err(Error::new(
-                Code::Conflict,
-                "outbound ACK channel binding changed",
-            ));
-        }
-        Ok(())
-    }
-
     pub(super) fn registered_control_ack_progress(
         &self,
         activity: ActivityId,
@@ -84,7 +62,7 @@ impl Store {
         object: ObjectRef,
         now: i64,
     ) -> Result<Option<ControlProgress>> {
-        self.check_registered_ack_channel(activity, channel, now)?;
+        self.check_registered_channel(activity, channel, now)?;
         let source_matches: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM current_control_objects
              WHERE reference=?1 AND ack_source_credential=?2)",
@@ -142,7 +120,7 @@ impl Store {
         } = pending;
         match target {
             AckTarget::Data(message) => {
-                self.check_registered_ack_channel(*activity, channel, clock.monotonic_ms)?;
+                self.check_registered_channel(*activity, channel, clock.monotonic_ms)?;
                 let neighbor = credential_key(&channel.peer_credential);
                 if !self.data_ack_eligible(message, &neighbor, clock, true)? {
                     return Err(Error::new(
