@@ -44,6 +44,36 @@ jobs:
             ./scripts/check-repo.sh
           fi
 
+  t0-offline-tests:
+    name: T0 Offline Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.10'
+          cache: false
+
+      - name: Run T0 offline tests
+        shell: bash
+        working-directory: tools/t0
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+          GOVCS: '*:off'
+        run: go test -mod=readonly -count=1 -timeout=3m ./...
+
   candidate-quality:
     name: Candidate Quality
     runs-on: ubuntu-latest
@@ -51,12 +81,14 @@ jobs:
     if: always()
     needs:
       - repo-hygiene
+      - t0-offline-tests
 
     steps:
       - name: Summarize candidate quality
         shell: bash
         env:
           REPO_HYGIENE_RESULT: ${{ needs.repo-hygiene.result }}
+          T0_OFFLINE_TESTS_RESULT: ${{ needs.t0-offline-tests.result }}
         run: |
           {
             echo "## Candidate Quality"
@@ -64,10 +96,11 @@ jobs:
             echo "| Check | Result |"
             echo "| --- | --- |"
             echo "| Repo Hygiene | ${REPO_HYGIENE_RESULT} |"
+            echo "| T0 Offline Tests | ${T0_OFFLINE_TESTS_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          if [[ "${REPO_HYGIENE_RESULT}" != "success" ]]; then
-            echo "Repository hygiene did not succeed." >&2
+          if [[ "${REPO_HYGIENE_RESULT}" != "success" || "${T0_OFFLINE_TESTS_RESULT}" != "success" ]]; then
+            echo "Candidate quality requires both checks to succeed." >&2
             exit 1
           fi
 

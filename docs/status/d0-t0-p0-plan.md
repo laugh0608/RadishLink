@@ -175,16 +175,17 @@ I3 提交为 `112f1e8` 后形成的[I4 场景与证据接入包](../testing/sw-g
 
 ## 已有工具的离线验证
 
-已有 Go 工具的单元测试不依赖生产技术栈冻结。具备满足 `tools/t0/go.mod` 的本地工具链时，可在对应的代码审阅/验证授权范围内使用：
+已有 Go 工具的单元测试不依赖生产技术栈冻结。PR 检查固定 Go 1.26.10。本地使用符合 `tools/t0/go.mod` 的已安装版本，记录实际版本；需要复现 CI 工具链时使用相同补丁版本。
 
 ```bash
 cd tools/t0
-GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./...
+GOENV=off GOTOOLCHAIN=local GOWORK=off GOPROXY=off GOSUMDB=off GOVCS='*:off' \
+  go test -mod=readonly -count=1 -timeout=3m ./...
 ```
 
-此入口只执行 Go 单元测试并写入构建缓存；不下载依赖、不启动 Docker，不替代 `run-sw-v0-harness.sh run`。工具链或缓存不满足时报告失败，依赖安装另行授权。2026-09-05 文档整理前的审阅已在 macOS ARM64 / Go 1.26.3 通过该测试；这不是 Linux ARM64、密码候选或产品场景证据。
+测试覆盖重试、持久恢复和证据校验，以及 `sw-v0-harness` 中使用合成数据的命令逻辑。I5 的 Docker 调用由 fixture 代替，真实 shell 入口仅以无工具 PATH 验证停止路径；受控子进程与写入限于测试夹具和 Go 缓存。没有测试文件的命令包只完成编译。该入口的结论限于本地 Go 回归，正式网络、Docker 与 CLI 全流程另走各自验收入口。
 
-CI 接入和 runner/monitor/finalizer 的重复职责维护列入[近期工作包](project-execution-plan.md#近期工作包与决策顺序)。2026-09-26 的 I1/I2 当轮未修改脚本、runner 或 workflow；后续 I4/I5-I 已扩展现有 harness 命令包，I5 新增独立 shell 入口与 Dockerfile，并拆分证据职责。workflow、旧 V0 runner 与 t0node 未变；全量离线回归通过不证明新增 shell、Docker 或真实 TCP 入口已运行。I1–I5-I 的历史提交见[2026-09-26 收尾记录](2026-09-26-progress.md)；资源隔离的历史实施见[2026-10-01 收尾记录](2026-10-01-progress.md)，补充盘点代码核对、验证边界与下一次接续见[2026-10-09 收尾记录](2026-10-09-progress.md)。
+2026-09-26 的 I1/I2 当轮未修改脚本、runner 或 workflow；后续 I4/I5-I 已扩展现有 harness 命令包，I5 新增独立 shell 入口与 Dockerfile，并拆分证据职责。截至 I5-I，workflow、旧 V0 runner 与 t0node 均沿用既有实现。I1–I5-I 的历史提交见[2026-09-26 收尾记录](2026-09-26-progress.md)，资源隔离的历史实施见[2026-10-01 收尾记录](2026-10-01-progress.md)，后续代码核对与验证边界见[2026-10-09 收尾记录](2026-10-09-progress.md)。本次 CI 接入见[仓库治理](../governance/repository-governance.md#已有工具的质量入口演进)。
 
 ## 授权与停止线
 
