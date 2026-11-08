@@ -145,6 +145,7 @@ impl Store {
             s.activity_status(request.activity)?.ok_or_else(||Error::new(Code::StoreCorrupt,"new activity missing"))
         }).inspect(|_| {
             self.ingress=control_ingress::ControlIngress::new(now);
+            self.outbound_terminal = None;
         })
     }
     /// Trusted owner explicitly renews a retired UI scope for the current activity.

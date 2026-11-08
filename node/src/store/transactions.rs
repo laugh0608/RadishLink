@@ -446,7 +446,7 @@ impl Store {
         neighbor: &str,
         batch: Batch,
     ) -> Result<Decision> {
-        self.handoff.require_drained()?;
+        self.require_outbound_ready()?;
         check_ref(key)?;
         check_ref(neighbor)?;
         if !["data", "evidence"].contains(&kind) || batch.now_ms != self.clock.monotonic_ms {

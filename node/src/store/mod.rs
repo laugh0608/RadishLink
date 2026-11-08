@@ -45,6 +45,8 @@ pub use outbound_handoff::{
     OutboundChannel, OutboundFrame, OutboundHandoffInput, OutboundHandoffRequest,
     OutboundHandoffStep, OutboundWrite, OutboundWriteProgress,
 };
+mod outbound_terminal;
+pub use outbound_terminal::{OutboundTerminalAck, OutboundTerminalAdmission};
 mod control_ingress;
 #[cfg(test)]
 mod outbound_cycle_recovery_tests;
@@ -52,6 +54,8 @@ mod outbound_cycle_recovery_tests;
 mod outbound_cycle_tests;
 #[cfg(test)]
 mod outbound_scan_tests;
+#[cfg(test)]
+mod outbound_terminal_tests;
 pub use control_ingress::{
     ControlIngressAdmission, ControlIngressChannel, ControlIngressUsage,
     ControlVerificationCompletion, ControlVerificationJob, ControlVerificationOutcome,
@@ -94,6 +98,7 @@ const DB_PAGES: i64 = 32768; // 128 MiB at the required 4096-byte page size; jou
 pub struct Store {
     ingress: control_ingress::ControlIngress,
     handoff: outbound_handoff::HandoffState,
+    outbound_terminal: Option<outbound_terminal::PendingTerminal>,
     conn: StoreConnection,
     limits: Limits,
     clock: Clock,
@@ -233,6 +238,7 @@ impl Store {
         Ok(Self {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             handoff: outbound_handoff::HandoffState::default(),
+            outbound_terminal: None,
             conn,
             limits,
             clock,
@@ -426,6 +432,7 @@ impl Store {
         let mut s = Self {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             handoff: outbound_handoff::HandoffState::default(),
+            outbound_terminal: None,
             conn,
             limits,
             clock,

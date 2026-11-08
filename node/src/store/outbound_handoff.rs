@@ -108,6 +108,15 @@ pub(super) struct HandoffState {
 }
 
 impl HandoffState {
+    pub(super) fn contains(&self, responsibility: &OutboundResponsibility) -> bool {
+        self.batch.as_ref().is_some_and(|batch| {
+            batch
+                .pending
+                .iter()
+                .any(|item| &item.responsibility == responsibility)
+        })
+    }
+
     pub(super) fn observed_after(&self, clock: &Clock) -> bool {
         self.last_clock
             .as_ref()

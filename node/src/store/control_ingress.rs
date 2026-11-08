@@ -304,10 +304,18 @@ impl Store {
     /// Records that this exact instance is closed. The caller owns transport closure.
     /// In-flight verification remains charged until its lease is returned or cancelled.
     pub fn close_control_ingress_channel(&mut self, channel: &ControlIngressChannel) -> Result<()> {
-        self.require_control_channel_owner(channel)?;
-        self.ingress.require_channel(&channel.binding)?;
+        self.control_ingress_channel(channel)?;
         self.ingress.channels.remove(&channel.binding.peer);
         Ok(())
+    }
+
+    pub(super) fn control_ingress_channel(
+        &self,
+        channel: &ControlIngressChannel,
+    ) -> Result<(ActivityId, OutboundChannel)> {
+        self.require_control_channel_owner(channel)?;
+        self.ingress.require_channel(&channel.binding)?;
+        Ok((channel.activity, channel.binding))
     }
 
     fn require_control_channel_owner(&self, channel: &ControlIngressChannel) -> Result<()> {

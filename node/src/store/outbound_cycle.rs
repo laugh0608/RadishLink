@@ -89,7 +89,7 @@ impl Store {
         bind: Option<&mut outbound_handoff::BindChannel<'_>>,
     ) -> Result<OutboundCycleReport> {
         self.validate_clock_advance(&input.clock)?;
-        self.handoff.require_drained()?;
+        self.require_outbound_ready()?;
         cycle.data.check_scope(self)?;
         cycle.ordinary.check_scope(self)?;
         if self.revision()? != input.expected_revision {

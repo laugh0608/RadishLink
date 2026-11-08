@@ -130,7 +130,7 @@ impl Store {
         events: Vec<OutboundEvent>,
     ) -> Result<OutboundReport> {
         self.validate_clock_advance(&clock)?;
-        self.handoff.require_drained()?;
+        self.require_outbound_ready()?;
         if events.is_empty() || events.len() > scheduling::MAX_QUEUE_EVENTS {
             return Err(Error::new(Code::InvalidInput, "outbound batch size"));
         }
