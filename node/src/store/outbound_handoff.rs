@@ -478,7 +478,17 @@ impl Store {
                 check_control_frame(input.frame, 127)
             }
             Responsibility::ControlAck(object, neighbor) => {
-                if self.control_progress(*object, *neighbor)?.is_none() {
+                let progress = if item.registered_ack {
+                    self.registered_control_ack_progress(
+                        *activity,
+                        &item.channel,
+                        *object,
+                        input.clock.monotonic_ms,
+                    )?
+                } else {
+                    self.control_progress(*object, *neighbor)?
+                };
+                if progress.is_none() {
                     return Err(Error::new(
                         Code::Conflict,
                         "outbound control ACK responsibility changed",

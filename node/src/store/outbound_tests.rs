@@ -551,7 +551,7 @@ fn migration_fault_and_corrupt_ack_or_cursor_are_rejected() {
             if fault == TestFault::BeforeCommit {
                 6
             } else {
-                9
+                SCHEMA_VERSION
             }
         );
     }
@@ -678,7 +678,7 @@ fn process_exit_recovers_all_mixed_charges_or_none_and_explicit_migration() {
                 assert_eq!(
                     conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                         .unwrap(),
-                    if committed { 9 } else { 6 }
+                    if committed { SCHEMA_VERSION } else { 6 }
                 );
             } else {
                 let (frames, bytes, last, cursor): (i64, i64, i64, Option<String>) = conn

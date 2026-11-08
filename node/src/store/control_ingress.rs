@@ -136,7 +136,7 @@ impl ControlIngressChannel {
 pub enum ControlIngressAdmission {
     Queued,
     AlreadyPending,
-    /// Exact persisted original bytes; no new custody, forwarding slot or ACK is implied.
+    /// Exact persisted original bytes. The channel API reports ACK admission separately.
     Known(ObjectRef),
     RateLimited,
     QueueFull,
@@ -341,7 +341,7 @@ impl Store {
         &mut self,
         channel: &ControlIngressChannel,
         bytes: &[u8],
-    ) -> Result<ControlIngressAdmission> {
+    ) -> Result<(ControlIngressAdmission, OutboundAckAdmission)> {
         self.require_control_channel_owner(channel)?;
         self.queue_control_source(
             channel.activity,
@@ -361,6 +361,7 @@ impl Store {
         bytes: &[u8],
     ) -> Result<ControlIngressAdmission> {
         self.queue_control_source(activity, ControlSource::Credential(neighbor), bytes)
+            .map(|(admission, _)| admission)
     }
 
     fn queue_control_source(
@@ -368,7 +369,7 @@ impl Store {
         activity: ActivityId,
         source: ControlSource,
         bytes: &[u8],
-    ) -> Result<ControlIngressAdmission> {
+    ) -> Result<(ControlIngressAdmission, OutboundAckAdmission)> {
         let IngressContext {
             peer,
             policy_revision: revision,
@@ -381,20 +382,55 @@ impl Store {
             ));
         }
         if !self.ingress.charge(peer, self.clock.monotonic_ms)? {
-            return Ok(ControlIngressAdmission::RateLimited);
+            return Ok((
+                ControlIngressAdmission::RateLimited,
+                OutboundAckAdmission::NotEligible,
+            ));
         }
         // The bounded saved object set is the only verified-byte cache; claimed object refs
         // and hashes from unverified input are never used to skip verification.
-        let known:Option<(Vec<u8>,bool)>=self.conn.query_row("SELECT o.reference,(o.kind=2 OR b.state='active') FROM current_control_objects o JOIN current_control_bindings b ON b.credential=o.issuer WHERE o.body=?1",[bytes],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let known: Option<(Vec<u8>, bool)> = {
+            let mut stmt = self.conn.prepare(
+                "SELECT o.reference,(o.kind=2 OR b.state='active')
+                 FROM current_control_objects o JOIN current_control_bindings b ON b.credential=o.issuer
+                 WHERE o.body=?1 LIMIT 2",
+            )?;
+            let mut rows = stmt.query([bytes])?;
+            let first = rows
+                .next()?
+                .map(|row| Ok::<_, rusqlite::Error>((row.get(0)?, row.get(1)?)))
+                .transpose()?;
+            if rows.next()?.is_some() {
+                return Err(Error::new(Code::Conflict, "ambiguous known control bytes"));
+            }
+            first
+        };
         if let Some((reference, allowed)) = known {
             if !allowed {
                 return Err(Error::new(Code::Conflict, "known control issuer inactive"));
             }
-            return Ok(ControlIngressAdmission::Known(
-                reference
-                    .try_into()
-                    .map_err(|_| Error::new(Code::StoreCorrupt, "known control reference"))?,
-            ));
+            let reference = reference
+                .try_into()
+                .map_err(|_| Error::new(Code::StoreCorrupt, "known control reference"))?;
+            let ack = if let ControlSource::Channel(channel) = source
+                && self
+                    .registered_control_ack_progress(
+                        activity,
+                        &channel,
+                        reference,
+                        self.clock.monotonic_ms,
+                    )?
+                    .is_some_and(|progress| progress.ack_attempts < 10)
+            {
+                self.queue_committed_ack(
+                    activity,
+                    channel,
+                    outbound_ack::AckTarget::Control(reference),
+                )
+            } else {
+                OutboundAckAdmission::NotEligible
+            };
+            return Ok((ControlIngressAdmission::Known(reference), ack));
         }
         if self.ingress.pending.iter().any(|p| {
             p.activity == activity
@@ -402,10 +438,16 @@ impl Store {
                 && p.revision == revision
                 && p.bytes.as_ref() == bytes
         }) {
-            return Ok(ControlIngressAdmission::AlreadyPending);
+            return Ok((
+                ControlIngressAdmission::AlreadyPending,
+                OutboundAckAdmission::NotEligible,
+            ));
         }
         if self.ingress.pending.len() == MAX_PENDING_CONTROLS {
-            return Ok(ControlIngressAdmission::QueueFull);
+            return Ok((
+                ControlIngressAdmission::QueueFull,
+                OutboundAckAdmission::NotEligible,
+            ));
         }
         let id = self
             .ingress
@@ -423,7 +465,10 @@ impl Store {
             bytes: Arc::from(bytes),
             leased: false,
         });
-        Ok(ControlIngressAdmission::Queued)
+        Ok((
+            ControlIngressAdmission::Queued,
+            OutboundAckAdmission::NotEligible,
+        ))
     }
     /// FIFO only after current authorization checks. Unverified bytes cannot claim exit priority.
     /// Removing a waiting stale item never replenishes rate tokens. Leased stale items still
@@ -548,6 +593,19 @@ impl Store {
                 "verified control differs from queued object",
             ));
         }
+        let ack_channel = match pending.source {
+            ControlSource::Channel(channel)
+                if queue_ack
+                    && neighbors
+                        .iter()
+                        .any(|neighbor| neighbor.participant == channel.peer)
+                    && !(object.fields.kind == ControlKind::Exit
+                        && object.fields.issuer == channel.peer_credential) =>
+            {
+                Some(channel)
+            }
+            _ => None,
+        };
         let admission = self.policy_atomic(|s| {
             let context = s.control_ingress_context(pending.activity, pending.source)?;
             if context.policy_revision != pending.revision {
@@ -556,16 +614,14 @@ impl Store {
                     "control verification policy changed",
                 ));
             }
-            s.accept_control_in_transaction(&object, neighbors)
+            s.accept_control_in_transaction(
+                &object,
+                neighbors,
+                ack_channel.map(|channel| channel.peer_credential),
+            )
         })?;
-        let ack = if queue_ack
-            && let ControlAdmission::Inserted(object_ref) = admission
-            && let ControlSource::Channel(channel) = pending.source
-            && neighbors
-                .iter()
-                .any(|neighbor| neighbor.participant == channel.peer)
-            && !(object.fields.kind == ControlKind::Exit
-                && object.fields.issuer == channel.peer_credential)
+        let ack = if let (ControlAdmission::Inserted(object_ref), Some(channel)) =
+            (admission, ack_channel)
         {
             self.queue_committed_ack(
                 pending.activity,

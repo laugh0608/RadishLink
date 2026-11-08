@@ -24,7 +24,7 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 - `model`、`retry`：进程内记录及 I1 重试规则移植，不是产品 wire 或认证结果。
 - `framing`：ADR 0007 的 u32be 前缀、每邻居一个 ≤64 KiB frame、最多四邻居和固定 10 秒组装期限；仅内部缓冲边界，尚未接入 transport/Service，详见[离线验证记录](../docs/testing/node-framing-and-graph-inputs.md)。
 - `data`：D15 原始 core/解析字段、完整身份、u64 epoch 与可信 UTC 区间的有界运算；不解码 CBOR 或验证密码。
-- `store`：schema v9、显式 v1..v8 迁移、单拥有者与时钟域、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与内部外发周期。
+- `store`：schema v10、显式 v1..v9 迁移、单拥有者与时钟域、T-A/B/C/D 持久操作、证明意图/容量预留、有界维护与内部外发周期。
 - `service`：容量 32 的命令队列、可克隆 Client、专属状态线程；支持平台时钟源周期维护，查询已提交事实；关闭接纳后排空已接纳命令并 Join，传播 Store 关闭错误，业务发送仍拒绝。
 - `error`：稳定错误分类与受控诊断原因；默认 Display/Debug 不回显底层输入。
 
@@ -34,7 +34,7 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 
 `Store::close(self)` 先确认 SQLite 关闭，再显式释放已取得的 owner 锁；`Service::stop` 在状态线程 Join 后传播关闭/解锁错误。SQLite 关闭失败时保留连接与锁到进程退出，不用锁重试、延时或提前 unlock 伪造关闭成功。Drop 只能给出固定操作名/错误码诊断，需确认关闭成功时必须检查 close/stop 的结果，详见[锁生命周期修复](../docs/testing/node-service-reliability.md#store-owner-关闭与锁释放修复2026-11-02)。
 
-schema 当前为 9，config/retry 仍为 1，未知版本拒绝。普通 open 对 v1..v8 返回 MigrationRequired；按实际源版本显式调用 `Store::migrate_v1`..`Store::migrate_v8`，沿原兼容链、同 boot 和旧活动停用前置到当前版本。旧中继预留、原消息 deadline、proof 终结及交付事实保持，不重置 retry；容量不足或损坏整笔拒绝，已有 v9 不重复迁移，不能改版本号降级或静默重建。旧消息缺 D15 字段或可信政策快照时不补造认证，输出仍隔离。冷启动 v8 仅可用显式 `Store::migrate_v8_isolated` 将结构迁移和原域隔离共同提交，不假扮旧 Clock，也不同时建立新活动；更早冷库不走此捷径。版本化记录与动作 generation 不是可信硬件抗回滚机制。
+schema 当前为 10，config/retry 仍为 1，未知版本拒绝。普通 open 对 v1..v9 返回 MigrationRequired。按实际源版本显式调用 `Store::migrate_v1`..`Store::migrate_v9`，沿原兼容链、同 boot 和旧活动停用前置到当前版本。迁移保留原中继预留、消息期限、重试、证明和交付事实。旧控制对象的 ACK 来源留空，旧消息缺 D15 字段或可信政策快照时继续隔离输出。容量不足或损坏整笔拒绝，禁止以改版本号降级或静默重建。冷启动 v8 使用显式 `Store::migrate_v8_isolated` 将结构迁移和原域隔离共同提交，建立新活动仍为独立操作。版本化记录与动作 generation 不是可信硬件抗回滚机制。
 
 历史默认 7 天，新历史按可信 UTC 上界起算、可信下界删除，由受信平台时钟推进；启动/Clock 命令和可选周期维护将时钟推进与有界清理一起提交，到期内容立即从查询过滤。`Service::start_with_clock` 的周期为 100 ms–60 s，平台必须提供可信且有界的 `ClockSource`；现有测试用合成源，Linux 时钟信任与休眠恢复后端尚未接入。不同 boot、单调时钟回退或可信 UTC 任一端回退、区间超宽或来源丢失进入 `TIME_UNCERTAIN`，保留可读状态并拒绝普通写入，不能通过新的时间值自动解除原域隔离。D18 显式维护只允许隔离旧域后建立全新上下文，不恢复旧会话。提交结果不确定时停止查询/写入，须重开并按持久事实核对，不自动重发。
 

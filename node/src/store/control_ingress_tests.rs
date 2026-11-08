@@ -64,7 +64,8 @@ fn reconnect_with_same_credentials_only_releases_old_lease_and_new_result_commit
     let exit = object(2, 2, 7);
     assert_eq!(
         s.queue_control_candidate_on_channel(&old_channel, &exit.cose)
-            .unwrap(),
+            .unwrap()
+            .0,
         Admission::Queued
     );
     let old_job = job(&mut s);
@@ -94,7 +95,8 @@ fn reconnect_with_same_credentials_only_releases_old_lease_and_new_result_commit
 
     assert_eq!(
         s.queue_control_candidate_on_channel(&current_channel, &exit.cose)
-            .unwrap(),
+            .unwrap()
+            .0,
         Admission::Queued
     );
     let current_job = job(&mut s);
@@ -148,13 +150,13 @@ fn waiting_from_closed_instance_is_discarded_instead_of_leased_on_reconnect() {
     s.advance_clock(clock(2000)).unwrap();
     let old = register(&mut s, 2);
     assert_eq!(
-        s.queue_control_candidate_on_channel(&old, &[7]).unwrap(),
+        s.queue_control_candidate_on_channel(&old, &[7]).unwrap().0,
         Admission::Queued
     );
     s.close_control_ingress_channel(&old).unwrap();
     let new = register(&mut s, 2);
     assert_eq!(
-        s.queue_control_candidate_on_channel(&new, &[7]).unwrap(),
+        s.queue_control_candidate_on_channel(&new, &[7]).unwrap().0,
         Admission::Queued
     );
     assert_eq!(s.control_ingress_usage().waiting, 2);
@@ -169,7 +171,7 @@ fn waiting_from_closed_instance_is_discarded_instead_of_leased_on_reconnect() {
     assert_eq!(fresh.cose(), &[7]);
     s.cancel_control_verification(fresh).unwrap();
     assert_eq!(
-        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap().0,
         Admission::RateLimited
     );
 }
@@ -190,7 +192,7 @@ fn reconnect_preserves_all_sixteen_slots_and_original_peer_bucket() {
             assert_eq!(
                 s.queue_control_candidate_on_channel(channel, &[now as u8; 512])
                     .unwrap(),
-                Admission::Queued
+                (Admission::Queued, OutboundAckAdmission::NotEligible)
             );
         }
     }
@@ -201,7 +203,7 @@ fn reconnect_preserves_all_sixteen_slots_and_original_peer_bucket() {
     assert_eq!(s.control_ingress_usage().object_bytes, 8192);
     s.advance_clock(clock(5000)).unwrap();
     assert_eq!(
-        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap().0,
         Admission::QueueFull
     );
     let first = jobs.remove(0);
@@ -216,12 +218,12 @@ fn reconnect_preserves_all_sixteen_slots_and_original_peer_bucket() {
     );
     assert_eq!(s.control_ingress_usage().verifying, 15);
     assert_eq!(
-        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap().0,
         Admission::RateLimited
     );
     s.advance_clock(clock(6000)).unwrap();
     assert_eq!(
-        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap().0,
         Admission::Queued
     );
     for job in jobs {
@@ -254,7 +256,7 @@ fn reopened_owner_rejects_old_channel_even_when_instance_number_matches() {
     );
     s.advance_clock(clock(2000)).unwrap();
     assert_eq!(
-        s.queue_control_candidate_on_channel(&new, &[7]).unwrap(),
+        s.queue_control_candidate_on_channel(&new, &[7]).unwrap().0,
         Admission::Queued
     );
     let new_job = job(&mut s);

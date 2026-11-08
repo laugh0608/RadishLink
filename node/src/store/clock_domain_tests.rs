@@ -3,7 +3,7 @@ use super::*;
 
 /// Reconstruct the actual historical v8 DDL for migration fixtures, not a product downgrade.
 pub(super) fn strip_v9(store: &Store) {
-    if store.schema_version().unwrap() != 9 {
+    if store.schema_version().unwrap() < 9 {
         return;
     }
     let count: i64 = store
@@ -237,7 +237,7 @@ fn stopped_v8_migration_is_explicit_and_source_version_is_checked() {
         Code::MigrationRequired
     );
     let s = Store::migrate_v8(&w.dir, Limits::default(), clock(1)).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 9);
+    assert_eq!(s.schema_version().unwrap(), SCHEMA_VERSION);
     assert!(s.activity_status(ACTIVITY).unwrap().unwrap().stopped);
     drop(s);
     assert_eq!(
@@ -566,7 +566,7 @@ fn cold_v8_migration_preserves_running_source_and_explicitly_isolates_it() {
     let mut s =
         Store::migrate_v8_isolated(&w.dir, Limits::default(), new_clock("boot-b", 1, 200000), r)
             .unwrap();
-    assert_eq!(s.schema_version().unwrap(), 9);
+    assert_eq!(s.schema_version().unwrap(), SCHEMA_VERSION);
     assert!(s.current_clock_domain().unwrap().frozen);
     assert!(s.message("old").unwrap().unwrap().payload_present);
     let r = next(&s, 2);

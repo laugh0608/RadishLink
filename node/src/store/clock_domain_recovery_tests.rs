@@ -28,7 +28,7 @@ fn migration_commit_faults_leave_whole_v8_or_whole_v9() {
             if fault == TestFault::BeforeCommit {
                 8
             } else {
-                9
+                SCHEMA_VERSION
             }
         );
         drop(c);
@@ -239,7 +239,7 @@ fn process_exit_on_both_commit_sides_preserves_migration_and_two_step_states() {
                 )
                 .unwrap()
             } else {
-                assert_eq!(v, 9);
+                assert_eq!(v, SCHEMA_VERSION);
                 Store::open(&w.dir, Limits::default(), new_clock("boot-b", 0, 200000)).unwrap()
             };
             let d = s.current_clock_domain().unwrap();

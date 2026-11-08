@@ -265,6 +265,25 @@ impl Store {
         if invalid {
             return Err(Error::new(Code::StoreCorrupt, "D16 persistent invariants"));
         }
+        let invalid_source: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM control_objects o
+             JOIN control_activity a ON a.activity=o.activity
+             LEFT JOIN control_bindings b ON b.credential=o.ack_source_credential
+             LEFT JOIN control_neighbors n ON n.activity=o.activity AND n.object=o.reference
+                 AND n.participant=b.participant
+             WHERE o.ack_source_credential IS NOT NULL
+               AND (b.activity IS NOT o.activity OR b.state='pending' OR n.object IS NULL
+                    OR b.participant=a.local_participant
+                    OR (o.kind=2 AND o.issuer=o.ack_source_credential)))",
+            [],
+            |r| r.get(0),
+        )?;
+        if invalid_source {
+            return Err(Error::new(
+                Code::StoreCorrupt,
+                "control ACK source invariant",
+            ));
+        }
         Ok(())
     }
 }

@@ -318,6 +318,7 @@ impl Store {
         self.transact(
             |s| {
                 s.conn.execute_batch(include_str!("migration_v9.sql"))?;
+                s.conn.execute_batch(include_str!("migration_v10.sql"))?;
                 // Check the source snapshot in its own coordinate, never by impersonating its Clock.
                 s.check_invariants()?;
                 s.apply_domain_isolation(request)

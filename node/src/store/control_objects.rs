@@ -74,12 +74,13 @@ impl Store {
         object: PreparedControl,
         neighbors: &[ControlNeighbor],
     ) -> Result<ControlAdmission> {
-        self.policy_atomic(|s| s.accept_control_in_transaction(&object, neighbors))
+        self.policy_atomic(|s| s.accept_control_in_transaction(&object, neighbors, None))
     }
     pub(super) fn accept_control_in_transaction(
         &self,
         object: &PreparedControl,
         neighbors: &[ControlNeighbor],
+        ack_source: Option<CredentialRef>,
     ) -> Result<ControlAdmission> {
         object.fields.validate()?;
         if object.cose.is_empty() || object.cose.len() > 512 || neighbors.len() > 4 {
@@ -160,7 +161,7 @@ impl Store {
             ));
         }
         self.conn.execute(
-            "INSERT INTO control_objects(activity,reference,kind,issuer,reporter,target,operation,reason,payload,body,accepted) VALUES((SELECT current_activity FROM meta WHERE id=1),?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO control_objects(activity,reference,kind,issuer,reporter,target,operation,reason,payload,body,accepted,ack_source_credential) VALUES((SELECT current_activity FROM meta WHERE id=1),?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             params![
                 f.reference.as_slice(),
                 f.kind.number(),
@@ -171,7 +172,8 @@ impl Store {
                 f.reason,
                 f.payload,
                 object.cose,
-                self.clock.monotonic_ms
+                self.clock.monotonic_ms,
+                ack_source.as_ref().map(|source| source.as_slice()),
             ],
         )?;
         // Create neighbor rows before applying exit so the issuer's former trusted channel

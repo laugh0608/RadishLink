@@ -138,7 +138,7 @@ fn lanes_keep_exits_receipts_reports_and_data_distinct_without_inventing_acks() 
             .unwrap(),
         rate
     );
-    assert_eq!(s.schema_version().unwrap(), 9);
+    assert_eq!(s.schema_version().unwrap(), SCHEMA_VERSION);
 }
 
 #[test]

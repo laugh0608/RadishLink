@@ -496,7 +496,7 @@ fn migration_faults_leave_whole_source_or_whole_v8() {
             if fault == TestFault::BeforeCommit {
                 7
             } else {
-                9
+                SCHEMA_VERSION
             }
         );
     }
@@ -778,7 +778,7 @@ fn process_exit_recovers_entire_switch_and_migration() {
                 if operation == "migration" && !committed {
                     7
                 } else {
-                    9
+                    SCHEMA_VERSION
                 }
             );
             drop(c);

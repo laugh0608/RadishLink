@@ -103,6 +103,7 @@ pub use maintenance::{MaintenanceReport, Usage};
 pub use scheduling::{QueueEvent, QueueKey, QueueKind, SchedulingReport};
 
 const APP_ID: i64 = 1380732491;
+const SCHEMA_VERSION: i64 = 10;
 const DB_PAGES: i64 = 32768; // 128 MiB at the required 4096-byte page size; journal is separate.
 
 pub struct Store {
@@ -139,6 +140,7 @@ enum OpenMode {
     MigrateV6,
     MigrateV7,
     MigrateV8,
+    MigrateV9,
     ColdV8(IsolateClockDomain),
     #[cfg(test)]
     ColdV8Fault(IsolateClockDomain, TestFault),
@@ -158,6 +160,8 @@ enum OpenMode {
     MigrateV7Fault(TestFault),
     #[cfg(test)]
     MigrateV8Fault(TestFault),
+    #[cfg(test)]
+    MigrateV9Fault(TestFault),
 }
 
 fn private_file(path: &Path) -> Result<()> {
@@ -242,6 +246,7 @@ impl Store {
             ],
         )?;
         conn.execute_batch(include_str!("migration_v9.sql"))?;
+        conn.execute_batch(include_str!("migration_v10.sql"))?;
         conn.execute_batch("COMMIT;")?;
         File::open(directory)?.sync_all()?;
         if let Some(parent) = directory.parent() {
@@ -298,9 +303,13 @@ impl Store {
     pub fn migrate_v7(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV7)
     }
-    /// Explicit same-boot, stopped v8 -> v9 migration.
+    /// Explicit same-boot, stopped v8 -> current migration.
     pub fn migrate_v8(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
         Self::open_version(directory, limits, clock, OpenMode::MigrateV8)
+    }
+    /// Explicit same-boot, stopped v9 -> current migration. Old ACK sources remain unknown.
+    pub fn migrate_v9(directory: &Path, limits: Limits, clock: Clock) -> Result<Self> {
+        Self::open_version(directory, limits, clock, OpenMode::MigrateV9)
     }
     /// Explicit cold v8 structural migration and isolation; never creates a new activity.
     pub fn migrate_v8_isolated(
@@ -327,6 +336,7 @@ impl Store {
             OpenMode::MigrateV6 => Some(6),
             OpenMode::MigrateV7 => Some(7),
             OpenMode::MigrateV8 | OpenMode::ColdV8(_) => Some(8),
+            OpenMode::MigrateV9 => Some(9),
             #[cfg(test)]
             OpenMode::ColdV8Fault(_, _) => Some(8),
             #[cfg(test)]
@@ -345,6 +355,8 @@ impl Store {
             OpenMode::MigrateV7Fault(_) => Some(7),
             #[cfg(test)]
             OpenMode::MigrateV8Fault(_) => Some(8),
+            #[cfg(test)]
+            OpenMode::MigrateV9Fault(_) => Some(9),
         };
         limits.validate()?;
         clock.validate()?;
@@ -367,10 +379,10 @@ impl Store {
         conn.open_database(&db)?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        if !(1..=9).contains(&version) || app != APP_ID {
+        if !(1..=SCHEMA_VERSION).contains(&version) || app != APP_ID {
             return Err(Error::new(Code::UnsupportedVersion, "store schema"));
         }
-        if version < 9 && source_version.is_none() {
+        if version < SCHEMA_VERSION && source_version.is_none() {
             return Err(Error::new(Code::MigrationRequired, "legacy store schema"));
         }
         if source_version.is_some_and(|source| version != source) {
@@ -464,6 +476,7 @@ impl Store {
                 OpenMode::MigrateV6Fault(fault) => Some(*fault),
                 OpenMode::MigrateV7Fault(fault) => Some(*fault),
                 OpenMode::MigrateV8Fault(fault) | OpenMode::ColdV8Fault(_, fault) => Some(*fault),
+                OpenMode::MigrateV9Fault(fault) => Some(*fault),
                 _ => None,
             },
         };
@@ -526,7 +539,12 @@ impl Store {
                         ],
                     )?;
                 }
-                store.conn.execute_batch(include_str!("migration_v9.sql"))?;
+                if version < 9 {
+                    store.conn.execute_batch(include_str!("migration_v9.sql"))?;
+                }
+                store
+                    .conn
+                    .execute_batch(include_str!("migration_v10.sql"))?;
                 store.write_clock(&store.clock)?;
                 store.check_queue_deadlines(false)?;
                 Ok(())

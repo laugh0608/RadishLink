@@ -27,7 +27,7 @@ pub(super) struct QueuedAckEvent {
 }
 
 impl Store {
-    /// Called after a successful receive COMMIT or a fresh data retransmission
+    /// Called after a successful receive COMMIT or a fresh retransmission
     /// matched against its committed responsibility.
     pub(super) fn queue_committed_ack(
         &mut self,
@@ -77,6 +77,28 @@ impl Store {
         Ok(())
     }
 
+    pub(super) fn registered_control_ack_progress(
+        &self,
+        activity: ActivityId,
+        channel: &OutboundChannel,
+        object: ObjectRef,
+        now: i64,
+    ) -> Result<Option<ControlProgress>> {
+        self.check_registered_ack_channel(activity, channel, now)?;
+        let source_matches: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM current_control_objects
+             WHERE reference=?1 AND ack_source_credential=?2)",
+            params![object.as_slice(), channel.peer_credential.as_slice()],
+            |row| row.get(0),
+        )?;
+        if !source_matches
+            || !self.control_output_allowed(&activity, &object, &channel.peer, now)?
+        {
+            return Ok(None);
+        }
+        self.control_progress(object, channel.peer)
+    }
+
     /// Freeze this step's views of the same slots. The original descriptors remain until
     /// a known successful dispatch transaction. A rollback does not synthesize a retry.
     pub(super) fn stage_queued_acks(
@@ -118,9 +140,9 @@ impl Store {
             channel,
             target,
         } = pending;
-        self.check_registered_ack_channel(*activity, channel, clock.monotonic_ms)?;
         match target {
             AckTarget::Data(message) => {
+                self.check_registered_ack_channel(*activity, channel, clock.monotonic_ms)?;
                 let neighbor = credential_key(&channel.peer_credential);
                 if !self.data_ack_eligible(message, &neighbor, clock, true)? {
                     return Err(Error::new(
@@ -134,13 +156,14 @@ impl Store {
                 })
             }
             AckTarget::Control(object) => {
-                if self.control_progress(*object, channel.peer)?.is_none()
-                    || !self.control_output_allowed(
-                        activity,
-                        object,
-                        &channel.peer,
+                if self
+                    .registered_control_ack_progress(
+                        *activity,
+                        channel,
+                        *object,
                         clock.monotonic_ms,
                     )?
+                    .is_none()
                 {
                     return Err(Error::new(
                         Code::Conflict,

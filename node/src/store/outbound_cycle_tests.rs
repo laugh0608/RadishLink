@@ -79,7 +79,7 @@ fn bounded_steps_visit_data_tail_without_control_work_starving_it() {
     for n in 0..33 {
         assert!(ordinary.contains(&format!("r{n:03}")));
     }
-    assert_eq!(s.schema_version().unwrap(), 9);
+    assert_eq!(s.schema_version().unwrap(), SCHEMA_VERSION);
 }
 
 #[test]
