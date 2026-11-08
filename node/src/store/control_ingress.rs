@@ -32,11 +32,25 @@ impl Bucket {
         Ok(())
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ControlSource {
+    Credential(CredentialRef),
+    Channel(OutboundChannel),
+}
+impl ControlSource {
+    fn neighbor(self) -> CredentialRef {
+        match self {
+            Self::Credential(neighbor) => neighbor,
+            Self::Channel(channel) => channel.peer_credential,
+        }
+    }
+}
+
 struct Pending {
     id: u64,
     activity: ActivityId,
     domain: ClockDomainId,
-    neighbor: CredentialRef,
+    source: ControlSource,
     revision: i64,
     bytes: Arc<[u8]>,
     leased: bool,
@@ -48,6 +62,8 @@ pub(super) struct ControlIngress {
     started: i64,
     global: Bucket,
     peers: BTreeMap<ParticipantId, Bucket>,
+    channels: BTreeMap<ParticipantId, OutboundChannel>,
+    next_instance: u64,
     next_id: u64,
     pending: VecDeque<Pending>,
 }
@@ -61,9 +77,23 @@ impl ControlIngress {
             started: now,
             global: Bucket::empty(now),
             peers: BTreeMap::new(),
+            channels: BTreeMap::new(),
+            next_instance: 0,
             next_id: 0,
             pending: VecDeque::new(),
         }
+    }
+    pub(super) fn has_channels(&self) -> bool {
+        !self.channels.is_empty()
+    }
+    fn require_channel(&self, channel: &OutboundChannel) -> Result<()> {
+        if self.channels.get(&channel.peer) != Some(channel) {
+            return Err(Error::new(
+                Code::Conflict,
+                "control ingress channel instance changed",
+            ));
+        }
+        Ok(())
     }
     fn charge(&mut self, participant: ParticipantId, now: i64) -> Result<bool> {
         if !self.peers.contains_key(&participant) && self.peers.len() == 4 {
@@ -83,6 +113,19 @@ impl ControlIngress {
         Ok(true)
     }
 }
+/// Runtime handle allocated by the Store after the caller supplies authenticated bindings.
+/// The handle records that instance; it performs no transport authentication itself.
+pub struct ControlIngressChannel {
+    owner: Arc<()>,
+    activity: ActivityId,
+    binding: OutboundChannel,
+}
+impl ControlIngressChannel {
+    pub fn binding(&self) -> OutboundChannel {
+        self.binding
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ControlIngressAdmission {
     Queued,
@@ -107,7 +150,7 @@ pub struct ControlVerificationJob {
     id: u64,
     activity: ActivityId,
     domain: ClockDomainId,
-    neighbor: CredentialRef,
+    source: ControlSource,
     revision: i64,
     bytes: Arc<[u8]>,
 }
@@ -119,7 +162,13 @@ impl ControlVerificationJob {
         self.activity
     }
     pub fn neighbor(&self) -> CredentialRef {
-        self.neighbor
+        self.source.neighbor()
+    }
+    pub fn channel(&self) -> Option<OutboundChannel> {
+        match self.source {
+            ControlSource::Credential(_) => None,
+            ControlSource::Channel(channel) => Some(channel),
+        }
     }
     pub fn policy_revision(&self) -> i64 {
         self.revision
@@ -141,15 +190,54 @@ pub enum ControlVerificationCompletion {
     Accepted(ControlAdmission),
 }
 
+struct IngressContext {
+    local: ParticipantId,
+    peer: ParticipantId,
+    policy_revision: i64,
+}
+
 impl Store {
     fn control_ingress_context(
         &self,
         activity: ActivityId,
-        neighbor: CredentialRef,
-    ) -> Result<(ParticipantId, i64)> {
+        source: ControlSource,
+    ) -> Result<IngressContext> {
         let local = self.control_live(&activity, self.clock.monotonic_ms)?;
         self.reject_local_retirement()?;
-        if !self.participant_active(&local)? {
+        let peer = match source {
+            ControlSource::Credential(neighbor) => self.control_ingress_peer(&local, &neighbor)?,
+            ControlSource::Channel(channel) => {
+                self.ingress.require_channel(&channel)?;
+                if local != channel.local
+                    || self.control_binding(&channel.local_credential, &local)?
+                        != BindingState::Active
+                    || self.control_binding(&channel.peer_credential, &channel.peer)?
+                        != BindingState::Active
+                {
+                    return Err(Error::new(
+                        Code::Conflict,
+                        "control ingress channel binding inactive",
+                    ));
+                }
+                channel.peer
+            }
+        };
+        if peer == local {
+            return Err(Error::new(Code::Conflict, "control ingress local channel"));
+        }
+        Ok(IngressContext {
+            local,
+            peer,
+            policy_revision: self.business_policy_revision(activity)?,
+        })
+    }
+
+    fn control_ingress_peer(
+        &self,
+        local: &ParticipantId,
+        neighbor: &CredentialRef,
+    ) -> Result<ParticipantId> {
+        if !self.participant_active(local)? {
             return Err(Error::new(
                 Code::Conflict,
                 "control ingress local binding inactive",
@@ -163,16 +251,91 @@ impl Store {
                 |r| r.get(0),
             )
             .optional()?;
-        let peer: ParticipantId = raw
-            .ok_or_else(|| Error::new(Code::Conflict, "control ingress neighbor inactive"))?
+        raw.ok_or_else(|| Error::new(Code::Conflict, "control ingress neighbor inactive"))?
             .try_into()
-            .map_err(|_| Error::new(Code::StoreCorrupt, "ingress participant size"))?;
-        if peer == local {
-            return Err(Error::new(Code::Conflict, "control ingress local channel"));
-        }
-        Ok((peer, self.business_policy_revision(activity)?))
+            .map_err(|_| Error::new(Code::StoreCorrupt, "ingress participant size"))
     }
-    /// Current Store clock must already be advanced by the trusted owner. Does not write SQL.
+
+    /// Registers a new instance from caller-authenticated endpoints. Close the old
+    /// instance before reconnecting, even when both credentials are unchanged.
+    pub fn register_control_ingress_channel(
+        &mut self,
+        activity: ActivityId,
+        local_credential: CredentialRef,
+        neighbor: CredentialRef,
+    ) -> Result<ControlIngressChannel> {
+        let IngressContext { local, peer, .. } =
+            self.control_ingress_context(activity, ControlSource::Credential(neighbor))?;
+        if self.control_binding(&local_credential, &local)? != BindingState::Active {
+            return Err(Error::new(
+                Code::Conflict,
+                "control ingress local channel credential inactive",
+            ));
+        }
+        if self.ingress.channels.contains_key(&peer) {
+            return Err(Error::new(
+                Code::Conflict,
+                "control ingress peer already registered",
+            ));
+        }
+        if self.ingress.channels.len() >= crate::framing::MAX_NEIGHBORS {
+            return Err(Error::new(Code::Quota, "control ingress channel count"));
+        }
+        let instance =
+            self.ingress.next_instance.checked_add(1).ok_or_else(|| {
+                Error::new(Code::Quota, "control ingress channel instance exhausted")
+            })?;
+        let binding = OutboundChannel {
+            instance,
+            local,
+            local_credential,
+            peer,
+            peer_credential: neighbor,
+        };
+        self.ingress.channels.insert(peer, binding);
+        self.ingress.next_instance = instance;
+        Ok(ControlIngressChannel {
+            owner: self.ingress.owner.clone(),
+            activity,
+            binding,
+        })
+    }
+
+    /// Records that this exact instance is closed. The caller owns transport closure.
+    /// In-flight verification remains charged until its lease is returned or cancelled.
+    pub fn close_control_ingress_channel(&mut self, channel: &ControlIngressChannel) -> Result<()> {
+        self.require_control_channel_owner(channel)?;
+        self.ingress.require_channel(&channel.binding)?;
+        self.ingress.channels.remove(&channel.binding.peer);
+        Ok(())
+    }
+
+    fn require_control_channel_owner(&self, channel: &ControlIngressChannel) -> Result<()> {
+        if !Arc::ptr_eq(&channel.owner, &self.ingress.owner) {
+            return Err(Error::new(
+                Code::Conflict,
+                "control ingress channel owner changed",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Admits candidate bytes with their exact source instance, in the original shared queue.
+    pub fn queue_control_candidate_on_channel(
+        &mut self,
+        channel: &ControlIngressChannel,
+        bytes: &[u8],
+    ) -> Result<ControlIngressAdmission> {
+        self.require_control_channel_owner(channel)?;
+        self.queue_control_source(
+            channel.activity,
+            ControlSource::Channel(channel.binding),
+            bytes,
+        )
+    }
+
+    /// Credential-only preparation for existing internal callers. A channel input uses
+    /// `queue_control_candidate_on_channel`. Current Store clock must already be advanced.
     /// Frame assembly and strict envelope routing are separate prerequisites; the supplied
     /// body is opaque COSE bytes, never parsed to trust a self-reported kind or priority.
     pub fn queue_control_candidate(
@@ -181,7 +344,20 @@ impl Store {
         neighbor: CredentialRef,
         bytes: &[u8],
     ) -> Result<ControlIngressAdmission> {
-        let (peer, revision) = self.control_ingress_context(activity, neighbor)?;
+        self.queue_control_source(activity, ControlSource::Credential(neighbor), bytes)
+    }
+
+    fn queue_control_source(
+        &mut self,
+        activity: ActivityId,
+        source: ControlSource,
+        bytes: &[u8],
+    ) -> Result<ControlIngressAdmission> {
+        let IngressContext {
+            peer,
+            policy_revision: revision,
+            ..
+        } = self.control_ingress_context(activity, source)?;
         if bytes.is_empty() || bytes.len() > MAX_CONTROL_BYTES {
             return Err(Error::new(
                 Code::InvalidInput,
@@ -206,7 +382,7 @@ impl Store {
         }
         if self.ingress.pending.iter().any(|p| {
             p.activity == activity
-                && p.neighbor == neighbor
+                && p.source == source
                 && p.revision == revision
                 && p.bytes.as_ref() == bytes
         }) {
@@ -226,7 +402,7 @@ impl Store {
             id,
             activity,
             domain,
-            neighbor,
+            source,
             revision,
             bytes: Arc::from(bytes),
             leased: false,
@@ -241,10 +417,10 @@ impl Store {
         let mut discarded = Vec::new();
         while let Some(index) = self.ingress.pending.iter().position(|p| !p.leased) {
             let pending = &self.ingress.pending[index];
-            let context = self.control_ingress_context(pending.activity, pending.neighbor);
+            let context = self.control_ingress_context(pending.activity, pending.source);
             let refusal = match context {
-                Ok((_, revision))
-                    if revision == pending.revision
+                Ok(context)
+                    if context.policy_revision == pending.revision
                         && pending.domain == self.current_domain_id()? =>
                 {
                     None
@@ -267,7 +443,7 @@ impl Store {
                     id: pending.id,
                     activity: pending.activity,
                     domain: pending.domain,
-                    neighbor: pending.neighbor,
+                    source: pending.source,
                     revision: pending.revision,
                     bytes: pending.bytes.clone(),
                 }),
@@ -320,6 +496,9 @@ impl Store {
         let ControlVerificationOutcome::Verified(object) = outcome else {
             unreachable!()
         };
+        if let ControlSource::Channel(channel) = pending.source {
+            self.ingress.require_channel(&channel)?;
+        }
         if object.cose.as_slice() != pending.bytes.as_ref()
             || object.fields.activity != pending.activity
         {
@@ -329,8 +508,8 @@ impl Store {
             ));
         }
         let admission = self.policy_atomic(|s| {
-            let (_, revision) = s.control_ingress_context(pending.activity, pending.neighbor)?;
-            if revision != pending.revision {
+            let context = s.control_ingress_context(pending.activity, pending.source)?;
+            if context.policy_revision != pending.revision {
                 return Err(Error::new(
                     Code::Conflict,
                     "control verification policy changed",

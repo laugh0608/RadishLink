@@ -48,6 +48,225 @@ fn fill(s: &mut Store) {
         }
     }
 }
+
+fn register(s: &mut Store, peer: u8) -> ControlIngressChannel {
+    s.register_control_ingress_channel(ACTIVITY, test_credential(1), test_credential(peer))
+        .unwrap()
+}
+
+#[test]
+fn reconnect_with_same_credentials_only_releases_old_lease_and_new_result_commits() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    s.receive(relay("one")).unwrap();
+    s.advance_clock(clock(2000)).unwrap();
+    let old_channel = register(&mut s, 4);
+    let exit = object(2, 2, 7);
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&old_channel, &exit.cose)
+            .unwrap(),
+        Admission::Queued
+    );
+    let old_job = job(&mut s);
+    assert_eq!(old_job.channel(), Some(old_channel.binding()));
+    assert_eq!(
+        s.register_control_ingress_channel(ACTIVITY, test_credential(1), test_credential(4))
+            .err()
+            .unwrap()
+            .code,
+        Code::Conflict
+    );
+    s.close_control_ingress_channel(&old_channel).unwrap();
+    let current_channel = register(&mut s, 4);
+    assert!(current_channel.binding().instance > old_channel.binding().instance);
+    assert_eq!(
+        s.close_control_ingress_channel(&old_channel)
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&old_channel, &exit.cose)
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&current_channel, &exit.cose)
+            .unwrap(),
+        Admission::Queued
+    );
+    let current_job = job(&mut s);
+    assert_eq!(current_job.channel(), Some(current_channel.binding()));
+    assert_eq!(current_job.policy_revision(), old_job.policy_revision());
+    assert_eq!(s.control_ingress_usage().verifying, 2);
+    let revision = s.revision().unwrap();
+    let err = s
+        .complete_control_verification(old_job, verified(object(2, 2, 7)), &[])
+        .unwrap_err();
+    assert_eq!(err.operation, "control ingress channel instance changed");
+    assert_eq!(s.control_ingress_usage().verifying, 1);
+    assert_eq!(s.revision().unwrap(), revision);
+    assert_eq!(s.control_usage().unwrap().objects, 0);
+    assert!(!s.message("one").unwrap().unwrap().policy_stopped);
+    assert!(s.next_outbound_handoff().is_none());
+
+    assert_eq!(
+        s.complete_control_verification(
+            current_job,
+            verified(exit),
+            &[ControlNeighbor {
+                participant: [3; 16],
+                link: Link::Up
+            }]
+        )
+        .unwrap(),
+        ControlVerificationCompletion::Accepted(ControlAdmission::Inserted([7; 32]))
+    );
+    assert_eq!(s.revision().unwrap(), revision + 1);
+    assert!(s.message("one").unwrap().unwrap().policy_stopped);
+    assert_eq!(
+        s.control_binding_state(test_credential(2)).unwrap(),
+        Some(BindingState::Blocked)
+    );
+    assert_eq!(
+        s.control_progress([7; 32], [3; 16])
+            .unwrap()
+            .unwrap()
+            .ack_attempts,
+        0
+    );
+    assert!(s.next_outbound_handoff().is_none());
+    assert_eq!(s.control_ingress_usage().verifying, 0);
+}
+
+#[test]
+fn waiting_from_closed_instance_is_discarded_instead_of_leased_on_reconnect() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    s.advance_clock(clock(2000)).unwrap();
+    let old = register(&mut s, 2);
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&old, &[7]).unwrap(),
+        Admission::Queued
+    );
+    s.close_control_ingress_channel(&old).unwrap();
+    let new = register(&mut s, 2);
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&new, &[7]).unwrap(),
+        Admission::Queued
+    );
+    assert_eq!(s.control_ingress_usage().waiting, 2);
+    let poll = s.next_control_verification().unwrap();
+    assert_eq!(poll.discarded.len(), 1);
+    assert_eq!(
+        poll.discarded[0].operation,
+        "control ingress channel instance changed"
+    );
+    let fresh = poll.job.unwrap();
+    assert_eq!(fresh.channel(), Some(new.binding()));
+    assert_eq!(fresh.cose(), &[7]);
+    s.cancel_control_verification(fresh).unwrap();
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        Admission::RateLimited
+    );
+}
+
+#[test]
+fn reconnect_preserves_all_sixteen_slots_and_original_peer_bucket() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let channels = [
+        register(&mut s, 2),
+        register(&mut s, 3),
+        register(&mut s, 4),
+        register(&mut s, 5),
+    ];
+    for now in 1..=4 {
+        s.advance_clock(clock(now * 1000)).unwrap();
+        for channel in &channels {
+            assert_eq!(
+                s.queue_control_candidate_on_channel(channel, &[now as u8; 512])
+                    .unwrap(),
+                Admission::Queued
+            );
+        }
+    }
+    let mut jobs: Vec<_> = (0..16).map(|_| job(&mut s)).collect();
+    let old = &channels[0];
+    s.close_control_ingress_channel(old).unwrap();
+    let new = register(&mut s, 2);
+    assert_eq!(s.control_ingress_usage().object_bytes, 8192);
+    s.advance_clock(clock(5000)).unwrap();
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        Admission::QueueFull
+    );
+    let first = jobs.remove(0);
+    assert_eq!(first.channel(), Some(old.binding()));
+    let mut report = object(4, 3, 7);
+    report.cose = first.cose().to_vec();
+    assert_eq!(
+        s.complete_control_verification(first, verified(report), &[])
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    assert_eq!(s.control_ingress_usage().verifying, 15);
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        Admission::RateLimited
+    );
+    s.advance_clock(clock(6000)).unwrap();
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&new, &[8]).unwrap(),
+        Admission::Queued
+    );
+    for job in jobs {
+        s.cancel_control_verification(job).unwrap();
+    }
+}
+
+#[test]
+fn reopened_owner_rejects_old_channel_even_when_instance_number_matches() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let old = register(&mut s, 2);
+    s.advance_clock(clock(1000)).unwrap();
+    s.queue_control_candidate_on_channel(&old, &[7]).unwrap();
+    let old_job = job(&mut s);
+    drop(s);
+
+    let mut s = w.reopen(1000);
+    let new = register(&mut s, 2);
+    assert_eq!(old.binding(), new.binding());
+    assert_eq!(
+        s.close_control_ingress_channel(&old).unwrap_err().code,
+        Code::Conflict
+    );
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&old, &[7])
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    s.advance_clock(clock(2000)).unwrap();
+    assert_eq!(
+        s.queue_control_candidate_on_channel(&new, &[7]).unwrap(),
+        Admission::Queued
+    );
+    let new_job = job(&mut s);
+    assert_eq!(
+        s.complete_control_verification(old_job, verified(object(4, 3, 7)), &[])
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    assert_eq!(s.control_ingress_usage().verifying, 1);
+    s.cancel_control_verification(new_job).unwrap();
+}
 #[test]
 fn empty_start_fractional_refill_per_peer_and_global_bursts_are_enforced() {
     let w = Workspace::new();

@@ -273,6 +273,25 @@ fn pending_and_leased_verification_must_be_explicitly_drained() {
         0
     );
 }
+
+#[test]
+fn activity_switch_rejects_registered_channel_until_closed() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let old = s
+        .register_control_ingress_channel(ACTIVITY, test_credential(1), test_credential(2))
+        .unwrap();
+    s.stop_control_activity(ACTIVITY).unwrap();
+    let err = s.switch_control_activity(request(&s)).unwrap_err();
+    assert_eq!(err.code, Code::Busy);
+    assert_eq!(err.operation, "activity control ingress channels remain");
+    s.close_control_ingress_channel(&old).unwrap();
+    s.switch_control_activity(request(&s)).unwrap();
+    assert_eq!(
+        s.close_control_ingress_channel(&old).unwrap_err().code,
+        Code::Conflict
+    );
+}
 #[test]
 fn archive_capacity_exact_bytes_and_records_and_stop_without_capacity() {
     for (byte_delta, record_delta, global_delta, pass) in [

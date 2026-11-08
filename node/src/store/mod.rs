@@ -53,8 +53,9 @@ mod outbound_cycle_tests;
 #[cfg(test)]
 mod outbound_scan_tests;
 pub use control_ingress::{
-    ControlIngressAdmission, ControlIngressUsage, ControlVerificationCompletion,
-    ControlVerificationJob, ControlVerificationOutcome, ControlVerificationPoll,
+    ControlIngressAdmission, ControlIngressChannel, ControlIngressUsage,
+    ControlVerificationCompletion, ControlVerificationJob, ControlVerificationOutcome,
+    ControlVerificationPoll,
 };
 mod business_policy;
 #[cfg(test)]

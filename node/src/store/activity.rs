@@ -119,6 +119,12 @@ impl Store {
         if plan.waiting != 0 || plan.verifying != 0 {
             return Err(Error::new(Code::Busy, "activity verification tasks remain"));
         }
+        if self.ingress.has_channels() {
+            return Err(Error::new(
+                Code::Busy,
+                "activity control ingress channels remain",
+            ));
+        }
         if plan.archive_bytes > plan.free_control_bytes
             || plan.archive_records > plan.free_control_records
             || plan.archive_records > plan.free_records
