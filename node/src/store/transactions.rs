@@ -169,12 +169,12 @@ impl Store {
     }
     /// T-B / T-C. Relay never accepts plaintext or security state for an endpoint.
     pub fn receive(&mut self, receive: Receive) -> Result<MessageView> {
-        self.receive_with_admission(receive, None)
+        self.receive_with_admission(receive, None, None)
             .map(|(view, _)| view)
     }
 
     /// Receives a prepared T-C result from an exact ingress instance. A first durable
-    /// insertion may queue a reply; a duplicate view supplies no new ACK opportunity.
+    /// insertion or a matching retransmission with committed receipt work may queue a reply.
     pub fn receive_destination_on_channel(
         &mut self,
         source: &ControlIngressChannel,
@@ -222,10 +222,10 @@ impl Store {
         }
         self.check_registered_ack_channel(activity, &channel, self.clock.monotonic_ms)?;
         let forward_to = next_hop.as_ref().map(credential_key);
-        let (view, inserted) = self.receive_with_admission(receive, forward_to.as_deref())?;
+        let (view, inserted) =
+            self.receive_with_admission(receive, forward_to.as_deref(), Some(&upstream))?;
         let recovery = !inserted
-            && forward_to.is_some()
-            && self.data_ack_eligible(&view.key, &upstream, &self.clock)?
+            && self.data_ack_eligible(&view.key, &upstream, &self.clock, true)?
             && self.data_ack_budget_available(&view.key, channel.peer)?;
         let ack = if inserted || recovery {
             self.queue_committed_ack(
@@ -243,6 +243,7 @@ impl Store {
         &mut self,
         receive: Receive,
         forward_to: Option<&str>,
+        registered_source: Option<&str>,
     ) -> Result<(MessageView, bool)> {
         self.writable()?;
         self.validate_data_admission(
@@ -265,8 +266,10 @@ impl Store {
             return Err(Error::new(Code::InvalidInput, "relay admission"));
         }
         if let Some(view) = existing {
-            if forward_to.is_some() && view.source_neighbor.as_deref() != Some(&receive.neighbor) {
-                return Err(Error::new(Code::Conflict, "relay source changed"));
+            if registered_source
+                .is_some_and(|source| view.source_neighbor.as_deref() != Some(source))
+            {
+                return Err(Error::new(Code::Conflict, "receive source changed"));
             }
             self.data_remaining_at(&receive.message.key, &self.clock)?;
             let revision = self.authorize_business_message(
@@ -279,6 +282,13 @@ impl Store {
                     Code::Conflict,
                     "business authorization revision changed",
                 ));
+            }
+            if registered_source.is_some()
+                && receive.role == Role::Destination
+                && !view.payload_present
+            {
+                // The stored identity alone cannot match the bytes of this retransmission.
+                return Ok((view, false));
             }
             let (deadline, hops): (i64, u8) = self.conn.query_row(
                 "SELECT deadline,hops FROM messages WHERE key=?1",

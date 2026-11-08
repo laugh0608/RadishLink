@@ -34,7 +34,7 @@ fn data_attempts(s: &Store, key: &str) -> String {
 }
 
 #[test]
-fn only_new_destination_insert_queues_and_reply_uses_original_registered_instance() {
+fn destination_ack_merges_retransmission_and_binds_each_reply_to_its_instance() {
     let w = Workspace::new();
     let mut s = w.create();
     let channel = register(&mut s, 2);
@@ -59,7 +59,7 @@ fn only_new_destination_insert_queues_and_reply_uses_original_registered_instanc
         s.receive_destination_on_channel(&channel, destination("one", 0))
             .unwrap()
             .1,
-        Ack::NotEligible
+        Ack::Queued
     );
     s.receive(destination("legacy", 1)).unwrap();
     assert_eq!(s.outbound_acks.len(), 1);
@@ -95,6 +95,252 @@ fn only_new_destination_insert_queues_and_reply_uses_original_registered_instanc
         1
     );
     assert_eq!(data_attempts(&s, "legacy"), "[]");
+    assert!(s.outbound_acks.is_empty());
+    assert_eq!(
+        s.receive_destination_on_channel(&channel, destination("one", 1))
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, destination("one", 1))
+            .unwrap()
+            .1,
+        Ack::Queued
+    );
+    assert_eq!(round(&mut s, &mut cycle, 1250).unwrap().ack_inputs, 1);
+    assert_eq!(
+        s.next_outbound_handoff().unwrap().channel,
+        replacement.binding()
+    );
+}
+
+#[test]
+fn destination_recovers_lost_ack_on_same_boot_reopen_without_reapplying_delivery() {
+    for finalized in [false, true] {
+        let w = Workspace::new();
+        let mut s = w.create();
+        let source = register(&mut s, 2);
+        s.receive_destination_on_channel(&source, destination("one", 0))
+            .unwrap();
+        let mut cycle = s.start_outbound_cycle().unwrap();
+        assert_eq!(round(&mut s, &mut cycle, 1000).unwrap().ack_inputs, 1);
+        let request = s.next_outbound_handoff().unwrap();
+        let output = s.advance_outbound_handoff(
+            &request,
+            OutboundHandoffInput {
+                clock: clock(1000),
+                channel: Some(source.binding()),
+                frame: OutboundFrame::Control { bytes: 127 },
+            },
+            |_, remaining| OutboundWrite::Written(remaining),
+        );
+        assert_eq!(output.result.unwrap(), OutboundWriteProgress::Complete);
+        // The upstream misses the ACK. Receipt work may advance independently.
+        if finalized {
+            s.finalize_receipt("one", b"synthetic intent", b"synthetic proof", 5)
+                .unwrap();
+        }
+        let spent = data_attempts(&s, "one");
+        drop(s);
+
+        let mut s = w.reopen(1001);
+        assert!(s.outbound_acks.is_empty());
+        assert!(s.next_outbound_handoff().is_none());
+        assert_eq!(data_attempts(&s, "one"), spent);
+        let replacement = register(&mut s, 2);
+        let revision = s.revision().unwrap();
+        let (view, ack) = s
+            .receive_destination_on_channel(&replacement, destination("one", 1))
+            .unwrap();
+        assert_eq!(ack, Ack::Queued);
+        assert_eq!(s.revision().unwrap(), revision);
+        assert_eq!(s.history(0, 10).unwrap().len(), 1);
+        assert_eq!(view.receipt_intent_pending, !finalized);
+        assert_eq!(view.evidence_pending, finalized);
+        assert_eq!(data_attempts(&s, "one"), spent);
+
+        let mut cycle = s.start_outbound_cycle().unwrap();
+        assert_eq!(round(&mut s, &mut cycle, 2001).unwrap().ack_inputs, 1);
+        let request = s.next_outbound_handoff().unwrap();
+        assert_eq!(request.channel, replacement.binding());
+        let output = s.advance_outbound_handoff(
+            &request,
+            OutboundHandoffInput {
+                clock: clock(2001),
+                channel: Some(replacement.binding()),
+                frame: OutboundFrame::Control { bytes: 127 },
+            },
+            |offset, remaining| {
+                assert_eq!((offset, remaining), (0, 127));
+                OutboundWrite::Written(remaining)
+            },
+        );
+        assert_eq!(output.result.unwrap(), OutboundWriteProgress::Complete);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&data_attempts(&s, "one")).unwrap()[0]["attempts"],
+            2
+        );
+    }
+}
+
+#[test]
+fn destination_rejects_wrong_source_changed_ciphertext_and_marker_only_recovery() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let source = register(&mut s, 2);
+    let other = register(&mut s, 3);
+    s.receive_destination_on_channel(&source, destination("one", 0))
+        .unwrap();
+    s.close_control_ingress_channel(&source).unwrap();
+    let replacement = register(&mut s, 2);
+
+    let mut wrong_source = destination("one", 1);
+    wrong_source.neighbor = credential_key(&test_credential(3));
+    wrong_source.message.deadline_ms = 5000;
+    assert_eq!(
+        s.receive_destination_on_channel(&other, wrong_source)
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    let mut wrong_payload = destination("one", 1);
+    wrong_payload.message.payload.push(1);
+    wrong_payload.message.deadline_ms = 5000;
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, wrong_payload)
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    assert_eq!(s.message_remaining_ms("one").unwrap(), 10000);
+    assert!(s.outbound_acks.is_empty());
+
+    // Isolate the durable evidence gate from the normal cleanup deadline.
+    s.conn
+        .execute(
+            "UPDATE messages SET state='delivered',payload=NULL WHERE key='one'",
+            [],
+        )
+        .unwrap();
+    let mut marker_only = destination("one", 1);
+    marker_only.message.payload.push(1);
+    marker_only.message.deadline_ms = 5000;
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, marker_only)
+            .unwrap()
+            .1,
+        Ack::NotEligible
+    );
+    assert_eq!(s.message_remaining_ms("one").unwrap(), 10000);
+    assert_eq!(s.history(0, 10).unwrap().len(), 1);
+    assert!(s.outbound_acks.is_empty());
+}
+
+#[test]
+fn destination_rejects_recovery_without_committed_receipt_work() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let source = register(&mut s, 2);
+    s.receive_destination_on_channel(&source, destination("one", 0))
+        .unwrap();
+    s.close_control_ingress_channel(&source).unwrap();
+    let replacement = register(&mut s, 2);
+    // Remove the responsibility in the fixture to exercise the proof gate itself.
+    s.conn
+        .execute("DELETE FROM receipt_intents WHERE message_key='one'", [])
+        .unwrap();
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, destination("one", 1))
+            .unwrap()
+            .1,
+        Ack::NotEligible
+    );
+    assert!(s.outbound_acks.is_empty());
+    assert_eq!(s.history(0, 10).unwrap().len(), 1);
+}
+
+#[test]
+fn destination_revocation_blocks_retransmissions_and_withdraws_recovered_ack() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let source = register(&mut s, 2);
+    s.receive_destination_on_channel(&source, destination("one", 0))
+        .unwrap();
+    s.close_control_ingress_channel(&source).unwrap();
+    let replacement = register(&mut s, 2);
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, destination("one", 1))
+            .unwrap()
+            .1,
+        Ack::Queued
+    );
+    s.block_control_binding(ACTIVITY, test_credential(2))
+        .unwrap();
+    let mut duplicate = destination("one", 1);
+    duplicate.expected_policy_revision = s.business_policy_revision(ACTIVITY).unwrap();
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, duplicate)
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    let mut cycle = s.start_outbound_cycle().unwrap();
+    let report = round(&mut s, &mut cycle, 1000).unwrap();
+    assert_eq!(report.ack_inputs, 0);
+    assert_eq!(report.discarded_queued_acks.len(), 1);
+    assert_eq!(report.discarded_queued_acks[0].code, Code::Conflict);
+    assert_eq!(data_attempts(&s, "one"), "[]");
+    assert!(s.next_outbound_handoff().is_none());
+    assert_eq!(s.history(0, 10).unwrap().len(), 1);
+}
+
+#[test]
+fn destination_recovery_keeps_exhausted_ack_budget_across_reopen() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let source = register(&mut s, 2);
+    let mut cycle = s.start_outbound_cycle().unwrap();
+    for attempt in 0..10 {
+        assert_eq!(
+            s.receive_destination_on_channel(&source, destination("one", 0))
+                .unwrap()
+                .1,
+            Ack::Queued
+        );
+        assert_eq!(
+            round(&mut s, &mut cycle, 1000 + attempt * 250)
+                .unwrap()
+                .ack_inputs,
+            1
+        );
+        assert!(s.next_outbound_handoff().is_some());
+        s.cancel_outbound_handoff();
+    }
+    let spent = data_attempts(&s, "one");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&spent).unwrap()[0]["attempts"],
+        10
+    );
+    assert_eq!(
+        s.receive_destination_on_channel(&source, destination("one", 0))
+            .unwrap()
+            .1,
+        Ack::NotEligible
+    );
+    assert!(s.outbound_acks.is_empty());
+    drop(s);
+
+    let mut s = w.reopen(3251);
+    let replacement = register(&mut s, 2);
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, destination("one", 0))
+            .unwrap()
+            .1,
+        Ack::NotEligible
+    );
+    assert!(s.outbound_acks.is_empty());
+    assert_eq!(data_attempts(&s, "one"), spent);
 }
 
 #[test]
@@ -257,12 +503,7 @@ fn close_before_cutoff_discards_old_instance_and_expiry_discards_other_reply() {
         .unwrap();
     s.close_control_ingress_channel(&old).unwrap();
     let replacement = register(&mut s, 2);
-    assert_eq!(
-        s.receive_destination_on_channel(&replacement, destination("closed", 0))
-            .unwrap()
-            .1,
-        Ack::NotEligible
-    );
+    assert!(s.outbound_acks.is_empty());
     s.receive_destination_on_channel(&replacement, destination("expired", 1))
         .unwrap();
     assert_eq!(s.outbound_acks.len(), 1);
@@ -274,6 +515,12 @@ fn close_before_cutoff_discards_old_instance_and_expiry_discards_other_reply() {
     assert!(s.outbound_acks.is_empty());
     assert_eq!(data_attempts(&s, "closed"), "[]");
     assert_eq!(data_attempts(&s, "expired"), "[]");
+    assert_eq!(
+        s.receive_destination_on_channel(&replacement, destination("expired", 1))
+            .unwrap_err()
+            .code,
+        Code::Expired
+    );
 }
 
 #[test]
@@ -372,8 +619,16 @@ fn failed_or_unknown_receive_does_not_create_a_reply() {
         );
         assert!(s.outbound_acks.is_empty());
         drop(s);
-        let s = w.reopen(0);
+        let mut s = w.reopen(0);
         assert_eq!(s.message("one").unwrap().is_some(), unknown);
         assert!(s.outbound_acks.is_empty());
+        let replacement = register(&mut s, 2);
+        assert_eq!(
+            s.receive_destination_on_channel(&replacement, destination("one", 0))
+                .unwrap()
+                .1,
+            Ack::Queued
+        );
+        assert_eq!(s.history(0, 10).unwrap().len(), 1);
     }
 }

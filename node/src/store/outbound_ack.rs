@@ -27,7 +27,7 @@ pub(super) struct QueuedAckEvent {
 }
 
 impl Store {
-    /// Called after a successful receive COMMIT or a fresh relay retransmission
+    /// Called after a successful receive COMMIT or a fresh data retransmission
     /// matched against its committed responsibility.
     pub(super) fn queue_committed_ack(
         &mut self,
@@ -122,7 +122,7 @@ impl Store {
         match target {
             AckTarget::Data(message) => {
                 let neighbor = credential_key(&channel.peer_credential);
-                if !self.data_ack_eligible(message, &neighbor, clock)? {
+                if !self.data_ack_eligible(message, &neighbor, clock, true)? {
                     return Err(Error::new(
                         Code::Conflict,
                         "queued data ACK responsibility changed",

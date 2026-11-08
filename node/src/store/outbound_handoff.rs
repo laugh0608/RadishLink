@@ -469,7 +469,7 @@ impl Store {
                 check_control_frame(input.frame, 522)
             }
             Responsibility::DataAck(key, neighbor) => {
-                if !self.data_ack_eligible(key, neighbor, &input.clock)? {
+                if !self.data_ack_eligible(key, neighbor, &input.clock, item.registered_ack)? {
                     return Err(Error::new(
                         Code::Conflict,
                         "outbound data ACK responsibility changed",

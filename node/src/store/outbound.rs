@@ -354,7 +354,7 @@ impl Store {
         neighbor: &str,
         clock: &Clock,
     ) -> Result<bool> {
-        if !self.data_ack_eligible(key, neighbor, clock)? {
+        if !self.data_ack_eligible(key, neighbor, clock, false)? {
             return Ok(false);
         }
         let Some(mut slots) = self.ack_slots(key)? else {
@@ -402,17 +402,23 @@ impl Store {
         key: &str,
         neighbor: &str,
         clock: &Clock,
+        registered: bool,
     ) -> Result<bool> {
-        // Old relay rows can retain ciphertext without a scheduled final hop.
-        // Both explicit and queued replies need that durable responsibility and its source.
+        // A relay needs a durable final hop. A registered destination reply also
+        // needs its committed ciphertext and receipt responsibility for the source.
         let stored: Option<bool> = self.conn.query_row(
-            "SELECT m.role='destination' OR (m.role='relay' AND m.state='stored'
+            "SELECT (m.role='destination' AND (NOT ?3 OR (
+                m.state='committed' AND m.payload IS NOT NULL AND m.source_neighbor IS ?2
+                AND (EXISTS(SELECT 1 FROM receipt_intents i WHERE i.message_key=m.key)
+                    OR EXISTS(SELECT 1 FROM queues q
+                        WHERE q.message_key=m.key AND q.kind='evidence' AND q.neighbor=?2)))))
+                OR (m.role='relay' AND m.state='stored'
                 AND m.payload IS NOT NULL AND m.hops>0 AND m.source_neighbor IS ?2
                 AND EXISTS(SELECT 1 FROM queues q JOIN message_data d ON d.message_key=q.message_key
                     WHERE q.message_key=m.key AND q.kind='data' AND q.hops=0
                     AND q.neighbor!=m.source_neighbor AND q.neighbor=lower(hex(d.destination_credential_ref))))
              FROM messages m WHERE m.key=?1",
-            params![key, neighbor], |r| r.get(0),
+            params![key, neighbor, registered], |r| r.get(0),
         ).optional()?;
         let Some(stored) = stored else {
             return Ok(false);
