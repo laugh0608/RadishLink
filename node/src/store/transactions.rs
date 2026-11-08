@@ -169,7 +169,8 @@ impl Store {
     }
     /// T-B / T-C. Relay never accepts plaintext or security state for an endpoint.
     pub fn receive(&mut self, receive: Receive) -> Result<MessageView> {
-        self.receive_with_admission(receive).map(|(view, _)| view)
+        self.receive_with_admission(receive, None)
+            .map(|(view, _)| view)
     }
 
     /// Receives a prepared T-C result from an exact ingress instance. A first durable
@@ -179,18 +180,47 @@ impl Store {
         source: &ControlIngressChannel,
         receive: Receive,
     ) -> Result<(MessageView, OutboundAckAdmission)> {
+        self.receive_on_channel(source, receive, None)
+    }
+
+    /// Commits a prepared T-B result with its final-hop responsibility before queuing an ACK.
+    /// The owner supplies the selected next-hop credential. This does not open that channel.
+    pub fn receive_relay_on_channel(
+        &mut self,
+        source: &ControlIngressChannel,
+        receive: Receive,
+        next_hop: CredentialRef,
+    ) -> Result<(MessageView, OutboundAckAdmission)> {
+        self.receive_on_channel(source, receive, Some(next_hop))
+    }
+
+    fn receive_on_channel(
+        &mut self,
+        source: &ControlIngressChannel,
+        receive: Receive,
+        next_hop: Option<CredentialRef>,
+    ) -> Result<(MessageView, OutboundAckAdmission)> {
         let (activity, channel) = self.control_ingress_channel(source)?;
-        if receive.role != Role::Destination
+        let role = if next_hop.is_some() {
+            Role::Relay
+        } else {
+            Role::Destination
+        };
+        if receive.role != role
             || receive.message.data.identity.activity_id != activity
             || receive.neighbor != credential_key(&channel.peer_credential)
         {
-            return Err(Error::new(
-                Code::Conflict,
-                "destination receive channel context",
-            ));
+            return Err(Error::new(Code::Conflict, "receive channel context"));
+        }
+        if let Some(next_hop) = next_hop
+            && (next_hop != receive.message.data.destination_credential_ref
+                || next_hop == channel.peer_credential)
+        {
+            return Err(Error::new(Code::Conflict, "relay final-hop credential"));
         }
         self.check_registered_ack_channel(activity, &channel, self.clock.monotonic_ms)?;
-        let (view, inserted) = self.receive_with_admission(receive)?;
+        let forward_to = next_hop.as_ref().map(credential_key);
+        let (view, inserted) = self.receive_with_admission(receive, forward_to.as_deref())?;
         let ack = if inserted {
             self.queue_committed_ack(
                 activity,
@@ -203,7 +233,11 @@ impl Store {
         Ok((view, ack))
     }
 
-    fn receive_with_admission(&mut self, receive: Receive) -> Result<(MessageView, bool)> {
+    fn receive_with_admission(
+        &mut self,
+        receive: Receive,
+        forward_to: Option<&str>,
+    ) -> Result<(MessageView, bool)> {
         self.writable()?;
         self.validate_data_admission(
             &receive.message,
@@ -214,7 +248,20 @@ impl Store {
         if receive.role == Role::Origin {
             return Err(Error::new(Code::InvalidInput, "receive role"));
         }
-        if let Some(view) = self.matching_message(&receive.message, receive.role)? {
+        let existing = self.matching_message(&receive.message, receive.role)?;
+        if receive.role == Role::Relay
+            && (forward_to.is_some() || existing.is_none())
+            && (receive.security.is_some()
+                || receive.text.is_some()
+                || receive.receipt_intent.is_some()
+                || receive.remaining_hops == 0)
+        {
+            return Err(Error::new(Code::InvalidInput, "relay admission"));
+        }
+        if let Some(view) = existing {
+            if forward_to.is_some() && view.source_neighbor.as_deref() != Some(&receive.neighbor) {
+                return Err(Error::new(Code::Conflict, "relay source changed"));
+            }
             self.data_remaining_at(&receive.message.key, &self.clock)?;
             let revision = self.authorize_business_message(
                 &receive.message.key,
@@ -243,37 +290,25 @@ impl Store {
             }
             return Ok((view, false));
         }
-        match receive.role {
-            Role::Relay => {
-                if receive.security.is_some()
-                    || receive.text.is_some()
-                    || receive.receipt_intent.is_some()
-                    || receive.remaining_hops == 0
-                {
-                    return Err(Error::new(Code::InvalidInput, "relay admission"));
-                }
-            }
-            Role::Destination => {
+        if receive.role == Role::Destination {
+            receive
+                .security
+                .as_ref()
+                .ok_or_else(|| Error::new(Code::InvalidInput, "receive security state"))?
+                .validate()?;
+            check_text(
                 receive
-                    .security
-                    .as_ref()
-                    .ok_or_else(|| Error::new(Code::InvalidInput, "receive security state"))?
-                    .validate()?;
-                check_text(
-                    receive
-                        .text
-                        .as_deref()
-                        .ok_or_else(|| Error::new(Code::InvalidInput, "receive text"))?,
-                )?;
-                let intent = receive
-                    .receipt_intent
-                    .as_ref()
-                    .ok_or_else(|| Error::new(Code::InvalidInput, "delivery intent"))?;
-                if intent.is_empty() || intent.len() > MAX_CONTROL {
-                    return Err(Error::new(Code::InvalidInput, "delivery intent size"));
-                }
+                    .text
+                    .as_deref()
+                    .ok_or_else(|| Error::new(Code::InvalidInput, "receive text"))?,
+            )?;
+            let intent = receive
+                .receipt_intent
+                .as_ref()
+                .ok_or_else(|| Error::new(Code::InvalidInput, "delivery intent"))?;
+            if intent.is_empty() || intent.len() > MAX_CONTROL {
+                return Err(Error::new(Code::InvalidInput, "delivery intent size"));
             }
-            Role::Origin => unreachable!(),
         }
         self.atomic(|s| {
             s.check_policy_revision(
@@ -300,6 +335,16 @@ impl Store {
                 s.conn.execute(
                     "INSERT INTO control_reservations VALUES(?1,4096)",
                     [&receive.message.key],
+                )?;
+            }
+            if let Some(neighbor) = forward_to {
+                s.insert_queue(
+                    &receive.message.key,
+                    "data",
+                    neighbor,
+                    receive.remaining_hops - 1,
+                    &[],
+                    receive.message.deadline_ms,
                 )?;
             }
             if let Some(body) = &receive.text {

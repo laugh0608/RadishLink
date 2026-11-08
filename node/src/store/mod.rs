@@ -92,6 +92,8 @@ mod maintenance;
 mod receipt_tests;
 mod receipts;
 #[cfg(test)]
+mod relay_admission_tests;
+#[cfg(test)]
 mod reliability_tests;
 mod scheduling;
 #[cfg(test)]

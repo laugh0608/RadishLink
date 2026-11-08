@@ -386,9 +386,16 @@ impl Store {
         neighbor: &str,
         clock: &Clock,
     ) -> Result<bool> {
+        // Old relay rows can retain ciphertext without a scheduled final hop.
+        // Both explicit and queued replies need that durable responsibility and its source.
         let stored: Option<bool> = self.conn.query_row(
-            "SELECT role!='origin' AND (payload IS NOT NULL OR role='destination') FROM messages WHERE key=?1",
-            [key], |r| r.get(0),
+            "SELECT m.role='destination' OR (m.role='relay' AND m.state='stored'
+                AND m.payload IS NOT NULL AND m.hops>0 AND m.source_neighbor IS ?2
+                AND EXISTS(SELECT 1 FROM queues q JOIN message_data d ON d.message_key=q.message_key
+                    WHERE q.message_key=m.key AND q.kind='data' AND q.hops=0
+                    AND q.neighbor!=m.source_neighbor AND q.neighbor=lower(hex(d.destination_credential_ref))))
+             FROM messages m WHERE m.key=?1",
+            params![key, neighbor], |r| r.get(0),
         ).optional()?;
         let Some(stored) = stored else {
             return Ok(false);

@@ -165,7 +165,7 @@ Store 只持有一批有界引用，首版按队首串行推进一个合成帧�
 | 可信时钟及本机控制 | `ClockSource` 是平台接口。Service 的 32 槽是命令邮箱，停止信号不入队，已接纳命令继续排空 | 使用同一拥有者有序处理平台采样和可信控制。关闭闩锁与远程队列分离，普通命令不能延迟所有者停止或封禁到远程队列清空 |
 | 认证邻接和 framing | `Ingress` 按 participant 维护至多四个组装槽，`push` 只消费到第一个完整帧，`take` 转移 body。`expire` 只处理尚未组装完的帧 | 认证层先将活动、双方 participant 与精确凭据交给拥有者。拥有者在本次 owner 下分配唯一、不可回绕的实例标识，同一 participant 同时至多一个活动实例。每次 push/take/close 都先比较实例。关闭旧实例并标记其结果失效后才登记替代实例。尚未返回的旧验签继续占原槽，旧回调不能关闭或填充新的同 participant 槽 |
 | 外层解码与 kind 2/3 验签 | framing 完成仅代表长度有效。`queue_control_candidate_on_channel` 在原队列中关联实例，仍接收不透明 COSE，返回 Queued、AlreadyPending、Known 或拒绝 | 严格解码先区分数据帧、COSE 帧及 `LinkAckV1`。COSE frame kind 与对象内部 kind 分开处理。kind 2/3 候选仍按 FIFO、原速率及 16 槽接纳，未验证字节无退出优先级。实际接线沿用绑定实例的入队与租约，派发和完成复核实例及 owner、域、活动、凭据、政策修订；不能按凭据或 FIFO 位置事后猜测 |
-| 数据与回执 | `receive` 可返回既有 `MessageView`，relay 的 `schedule_forward` 是另一个入口。T-D 由 `finish_delivery` 复核并提交 | 依严格验证结果进入 T-B/T-C/T-D 原入口。交付事实只来自 T-D。回执 COSE kind 1 保持独立验证与资源账本，不借用 kind 2/3 的 16 槽。T-B 的消息、去重、恢复所需转发责任及预留须完整可核对，具体责任映射评审后才启用 custody |
+| 数据与回执 | `receive` 可返回既有 `MessageView`，保留旧的分步中继入口。`receive_relay_on_channel` 联合提交 T-B 转发责任。T-D 由 `finish_delivery` 复核并提交 | 依严格验证结果进入 T-B/T-C/T-D。交付事实只来自 T-D。回执 COSE kind 1 保持独立验证与资源账本，不借用 kind 2/3 的 16 槽。中继确认须有消息、去重、可恢复的转发责任及预留，且绑定原入站实例 |
 | 收到逐跳 ACK | `LinkAckV1` 依靠已认证逐跳通道。`observe_custody` 只暂停数据责任。控制 ACK 通过 `ControlEvent` 的 `Signal::Pause` 终结对应邻居的传播 | 用严格解码的 `ack_kind`、活动、对象引用、custodian 及凭据定位已有责任。活动/凭据须在接纳时有效，通道实例须匹配。接收 ACK 进入终结路径，数据不释放唯一 payload，控制不扩大到其他邻居，也不回 ACK |
 | 待发逐跳 ACK | `OutboundAck` 是显式内部输入，`OutboundCycleInput` 每批至多 16 项。既有计费仍复核责任和次数 | 只从有明确持久接纳依据的本次入站帧生成描述符，绑定原请求、对象和原入站实例。`receive` 的 `Ok` 或控制的 `Known` / `AlreadyPending` / `Merged` 本身不足以生成。丢 ACK 后的合法重复回复仍按原协议评审，须有本次已认证请求、持久事实及明确复核依据。候选遍历、source_neighbor 和收到的 ACK 都不能代造 |
 
@@ -212,7 +212,7 @@ kind 2/3 的等待、leased 及结果待拥有者处理共用原 16 槽，原对
 
 ### 待发 ACK 描述符离线接入
 
-Store 持有合计 16 个描述符。`receive_destination_on_channel` 只从 T-C 明确提交的新插入建立描述符。`complete_control_verification_with_ack` 只从绑定实例的租约产生描述符，并要求原事务新插入控制对象、同一事务已有入站邻居责任且来源未被这次退出封禁。既有视图、Known、Merged、候选扫描和收到的逐跳 ACK 不产生描述符。中继 T-B 的接纳与 `schedule_forward` 当前分开，待核对原子恢复责任后再接入 relay ACK。合法重复请求的 ACK 恢复仍待单独评审。
+Store 持有合计 16 个描述符。`receive_destination_on_channel` 只从 T-C 明确提交的新插入建立描述符。`complete_control_verification_with_ack` 只从绑定实例的租约产生描述符，并要求原事务新插入控制对象、同一事务已有入站邻居责任且来源未被这次退出封禁。既有视图、Known、Merged、候选扫描和收到的逐跳 ACK 不产生描述符。T-B 首次接纳现已接入同一队列，见下节。合法重复请求的 ACK 恢复仍待单独评审。
 
 描述符绑定当前活动、责任和原入站实例。满额时明确返回 `Full`，已提交的接纳保留。拥有者在现有 `process_outbound_cycle_with_handoff` 中用空的显式 ACK 列表消费该队列。冻结和调度使用原 16 个位置，原槽保留到提交明确成功。队列有条目时拒绝与显式 ACK 混用。失效条目在截点复核后丢弃并报告原因，关闭实例会移除其未调度项。明确回滚后仍有效的项留在原槽，Store 隔离时丢弃。明确提交后释放已处理项，限速等未发送决定也不会自动补发。已发布的合成交接在每段写入前复核登记的原实例。见[离线验收](../testing/node-outbound-scheduling.md#待发-ack-描述符离线接续2026-11-08)。
 
@@ -227,3 +227,11 @@ Service 在现有准入锁内移除唯一命令发送端，使空闲接收者唤
 `finish_owner_shutdown` 要求调用方给出所有相关 worker 的 Join 成功结果，且旧通道、短写和租约均已收束，随后才允许关闭 SQLite 和释放锁。失败保留原原因，关闭闩锁不撤销，新的活动和域继续拒绝。若在证明不足时消耗或析构 Store，连接和锁保留到进程退出。当前合成路径验证门禁和状态顺序，真实关闭确认、Join 与超时监督仍待实际接线。见[关闭验收](../testing/node-service-reliability.md#独立停止与收束离线接续2026-11-08)。
 
 [队列、字节和在途工作账本](node-owner-resource-ledger.md)已登记内部逻辑上限、所有权转移、真实平台所缺的硬限制、耗时与拒绝证据。接续的[有界输入评审稿](node-bounded-ingress.md)明确读取额度、下游拒绝和原实例关闭确认；真实接线仍须满足原前置。
+
+### 中继 T-B 原子接纳与恢复
+
+`receive_relay_on_channel` 接收拥有者准备好的中继消息、原入站句柄和选定的下一覆盖层邻接凭据。按 D15 单中继范围，下一跳须为 core 中的目的端凭据且不同于入站凭据。用现有政策、D15 时间和 hop 检查接纳，单笔事务保存原始密文、core、来源和去重事实、控制预留及减一 hop 的数据队列。下一跳实际就绪仍由拥有者的认证观察提供。
+
+明确提交后才为原入站实例排入一个 ACK 描述符，沿原 16 槽、外发控制计费和交接复核。显式 ACK 与待发队列均须检查中继仍有已提交的末跳责任，并匹配原来源。库配额拒绝整笔回滚，ACK 槽满只舍弃确认机会。旧分步入口保留，只有载荷的旧记录不具备确认条件，也不因重复输入补建转发责任。相同来源的合法重复可收紧期限；变更来源、过期或撤销拒绝，重复不重置调度或建立新描述符。
+
+明确回滚、提交未知和进程重开均不补发原描述符。重开后由既有扫描恢复持久队列与剩余额度。接续要单独评审真实重传的 ACK 恢复条件，尤其是提交成功后通知丢失、同凭据重连和撤销的先后。见[离线验收](../testing/node-outbound-scheduling.md#中继接纳转发与重开2026-11-08)。
