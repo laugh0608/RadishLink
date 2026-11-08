@@ -74,6 +74,39 @@ jobs:
           GOVCS: '*:off'
         run: go test -mod=readonly -count=1 -timeout=3m ./...
 
+  offline-script-checks:
+    name: Offline Script Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Check experiment runner syntax
+        shell: bash
+        run: |
+          bash -n scripts/run-sw-g2-mls-rs-spike.sh
+          bash -n scripts/run-sw-i5-harness.sh
+
+      - name: Check Node G0 inputs
+        shell: bash
+        run: |
+          python3 -E -S -B scripts/node_security_graph_inputs.py check
+          python3 -E -S -B -m unittest discover -s scripts -p test_node_security_graph_inputs.py -v
+
+      - name: Run I5 resource self-test
+        shell: bash
+        run: python3 -E -S -B scripts/check-sw-i5-resources.py self-test
+
   candidate-quality:
     name: Candidate Quality
     runs-on: ubuntu-latest
@@ -82,6 +115,7 @@ jobs:
     needs:
       - repo-hygiene
       - t0-offline-tests
+      - offline-script-checks
 
     steps:
       - name: Summarize candidate quality
@@ -89,6 +123,7 @@ jobs:
         env:
           REPO_HYGIENE_RESULT: ${{ needs.repo-hygiene.result }}
           T0_OFFLINE_TESTS_RESULT: ${{ needs.t0-offline-tests.result }}
+          OFFLINE_SCRIPT_CHECKS_RESULT: ${{ needs.offline-script-checks.result }}
         run: |
           {
             echo "## Candidate Quality"
@@ -97,10 +132,13 @@ jobs:
             echo "| --- | --- |"
             echo "| Repo Hygiene | ${REPO_HYGIENE_RESULT} |"
             echo "| T0 Offline Tests | ${T0_OFFLINE_TESTS_RESULT} |"
+            echo "| Offline Script Checks | ${OFFLINE_SCRIPT_CHECKS_RESULT} |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          if [[ "${REPO_HYGIENE_RESULT}" != "success" || "${T0_OFFLINE_TESTS_RESULT}" != "success" ]]; then
-            echo "Candidate quality requires both checks to succeed." >&2
+          if [[ "${REPO_HYGIENE_RESULT}" != "success" ||
+                "${T0_OFFLINE_TESTS_RESULT}" != "success" ||
+                "${OFFLINE_SCRIPT_CHECKS_RESULT}" != "success" ]]; then
+            echo "Candidate quality requires all checks to succeed." >&2
             exit 1
           fi
 

@@ -114,7 +114,7 @@ PR 审查验证实现是否满足已声明规范，不替代对规范本身、�
 
 ## CI 与 required context
 
-`Candidate Quality` 是 Ruleset 唯一绑定的稳定聚合 job。仓库 workflow 配置包含 `Repo Hygiene` 和 `T0 Offline Tests`。其中 `Repo Hygiene` 检查以下内容。
+`Candidate Quality` 是 Ruleset 唯一绑定的稳定聚合 job。仓库 workflow 配置包含 `Repo Hygiene`、`T0 Offline Tests` 和 `Offline Script Checks`。其中 `Repo Hygiene` 检查以下内容。
 
 - 必需治理和项目真相源是否存在；
 - UTF-8、BOM、LF、末尾换行、NUL 和尾随空格；
@@ -137,15 +137,36 @@ PR 审查验证实现是否满足已声明规范，不替代对规范本身、�
 
 ### 已有工具的质量入口演进
 
-2026-11-08 在本地 [PR workflow](../../.github/workflows/pr-check.yml) 接入 `T0 Offline Tests`，与 `Repo Hygiene` 分开运行。仍以目标为 `dev` 或 `master` 的 PR 和手动调度为触发入口，PR 检查候选 head。聚合 job 汇报两项结果，仅当两项均为 `success` 时通过。失败、取消、跳过或结果缺失都会阻止聚合通过。远程运行仍待实际 PR 或获授权调度验证。
+2026-11-08 在本地 [PR workflow](../../.github/workflows/pr-check.yml) 接入 `T0 Offline Tests` 和 `Offline Script Checks`，均与 `Repo Hygiene` 分开运行。仍以目标为 `dev` 或 `master` 的 PR 和手动调度为触发入口，PR 检查候选 head。聚合 job 汇报三项结果，失败、取消、跳过或结果缺失都会阻止聚合通过。远程运行仍待实际 PR 或获授权调度验证。
 
 工具链准备使用 [GitHub 的 setup-go v7.0.0](https://github.com/actions/setup-go/releases/tag/v7.0.0)，固定完整 commit SHA，关闭共享 Action 缓存。Go 固定为同一 1.26 系列的 [1.26.10](https://go.dev/doc/devel/release#go1.26.10)。下载工具链如有需要发生在准备步骤，测试按[本地复现命令](../status/d0-t0-p0-plan.md#已有工具的离线验证)关闭工具链切换、模块代理、校验服务和 VCS 下载。checkout 不保存凭据，测试无项目凭据配置。测试设 3 分钟超时，job 总时限 10 分钟。
 
 本地从 workflow 读取测试命令，在 macOS ARM64、已有 Go 1.26.7、空模块缓存和无 Docker 命令的 PATH 下执行。5 个包的测试通过，`cmd/t0node` 无测试文件；临时失败用例使同一测试命令退出 1。聚合脚本以两项结果的 `success`、`failure`、`cancelled`、`skipped`、空值和未设置组成 36 个组合，仅双成功返回 0。首次 `./scripts/check-repo.sh` 退出 1，指出新 job 的 checkout SHA 不足 40 位；复用既有完整 SHA 后复验通过。测试环境已回收，GitHub runner 与 Go 1.26.10 仍待实际运行。
 
-后续脚本检查按实际覆盖选择已有无网络 self-test、语法与 manifest 检查，逐项核对容器、依赖、凭据和 evidence 副作用。工具链或 Action 更新时复核上游发布版本、完整 SHA 和现有离线回归。
+工具链或 Action 更新时复核上游发布版本、完整 SHA 和现有离线回归。
 
 实验工具维护按已经存在的重复职责收敛：资源监控、精确进程清理、manifest 收口、checksum 与结果分类；候选专属 feature/source/版本规则保留显式配置。改动固定合同消费者时同时检查历史兼容与负例，不新建无实际需求的通用实验框架。
+
+### 实验前置脚本的离线检查
+
+`Offline Script Checks` 复用仓库检查的固定 Action 和 Python 3.13 工具链，单独记录语法、Node G0、I5 三个步骤，job 总时限 5 分钟。从仓库根用已有 Python 3.11+ 复跑。
+
+```bash
+(
+  set -e
+  bash -n scripts/run-sw-g2-mls-rs-spike.sh
+  bash -n scripts/run-sw-i5-harness.sh
+  python3 -E -S -B scripts/node_security_graph_inputs.py check
+  python3 -E -S -B -m unittest discover -s scripts -p test_node_security_graph_inputs.py -v
+  python3 -E -S -B scripts/check-sw-i5-resources.py self-test
+)
+```
+
+- mls-rs 历史 runner 与 I5 runner 仅由 Bash 解析语法。Python 使用标准库和仓库模块，测试环境无需项目凭据。
+- [G0](../testing/node-security-graph-review-package.md#g0-离线输入准备) 对候选 head 的固定基线和 TOML 摘要做只读检查。单元测试只在临时副本验证写入、重算摘要篡改和拒绝路径。固定 manifest/lock 等输入漂移会阻止 PR 检查通过，计划内变更须按既有 G0 评审同步处理。
+- [I5 资源自测](../testing/sw-g4-synthetic-i5-resource-isolation.md#本轮验证记录)使用临时文件和注入的内核、进程及构建结果。实际资源探测和实验启动沿用各自门禁，离线通过只覆盖合成证据。
+
+本地 macOS ARM64、Python 3.14.5 从 workflow 读取命令复验。两份 shell 语法通过，G0 返回 `INPUTS_CHECKED` 与 `execution_ready: false`，G0 19 项和 I5 20 项均通过。临时副本里破坏第二份 shell 语法、篡改固定 lock、注入 I5 自测失败，分别退出 2、2、1。聚合脚本本地验证 216 种状态组合，仅三项均成功时退出 0。测试临时文件已回收，GitHub runner 的 Python 3.13 运行仍待验证。
 
 ## 远程 Ruleset 基线
 

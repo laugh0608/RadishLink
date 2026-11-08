@@ -357,10 +357,13 @@ def check_workflow_contract(errors: list[str]) -> None:
         "permissions:\n  contents: read",
         "name: Repo Hygiene",
         "name: T0 Offline Tests",
+        "name: Offline Script Checks",
         "name: Candidate Quality",
         "if: always()",
         "      - t0-offline-tests\n",
+        "      - offline-script-checks\n",
         "T0_OFFLINE_TESTS_RESULT: ${{ needs.t0-offline-tests.result }}",
+        "OFFLINE_SCRIPT_CHECKS_RESULT: ${{ needs.offline-script-checks.result }}",
         "persist-credentials: false",
         "./scripts/check-repo.sh --base-ref",
     )
