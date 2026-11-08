@@ -146,6 +146,7 @@ impl Store {
         }).inspect(|_| {
             self.ingress=control_ingress::ControlIngress::new(now);
             self.outbound_terminal = None;
+            self.outbound_acks.clear();
         })
     }
     /// Trusted owner explicitly renews a retired UI scope for the current activity.

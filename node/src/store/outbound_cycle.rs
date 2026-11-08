@@ -43,6 +43,7 @@ pub struct OutboundCycleReport {
     pub data_candidates: usize,
     pub ordinary_candidates: usize,
     pub ack_inputs: usize,
+    pub discarded_queued_acks: Vec<Error>,
     pub data_complete: bool,
     pub ordinary_complete: bool,
 }
@@ -70,7 +71,8 @@ impl Store {
     }
 
     /// Offline handoff path. Both callbacks read previously captured, authenticated inputs.
-    /// For ACK events `bind` supplies the exact instance of the verified inbound request.
+    /// Queued replies use their original ingress instance. Explicit legacy ACKs are
+    /// accepted only with an empty managed queue and use the caller's `bind` callback.
     pub fn process_outbound_cycle_with_handoff(
         &mut self,
         cycle: &mut OutboundCycle,
@@ -110,6 +112,13 @@ impl Store {
                 "outbound cycle ACK input limit",
             ));
         }
+        let use_queued_acks = bind.is_some() && input.acknowledgements.is_empty();
+        if bind.is_some() && !use_queued_acks && !self.outbound_acks.is_empty() {
+            return Err(Error::new(
+                Code::Conflict,
+                "explicit and queued outbound ACKs cannot mix",
+            ));
+        }
         let activity = self.current_activity_id()?;
         self.control_live(&activity, input.clock.monotonic_ms)?;
 
@@ -136,7 +145,7 @@ impl Store {
         let exit_candidates = exits.candidates.len();
         let data_candidates = data_page.candidates.len();
         let ordinary_candidates = ordinary_page.candidates.len();
-        let ack_inputs = input.acknowledgements.len();
+        let explicit_ack_inputs = input.acknowledgements.len();
         let data_complete = data_page.complete;
         let ordinary_complete = ordinary_page.complete;
         let mut events = Vec::new();
@@ -179,9 +188,16 @@ impl Store {
             });
         }
         let now = input.clock.monotonic_ms;
+        let (queued_acks, discarded_queued_acks) = if use_queued_acks {
+            self.stage_queued_acks(activity, &input.clock)?
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        let ack_inputs = explicit_ack_inputs + queued_acks.len();
         let handoff = bind
-            .map(|bind| self.prepare_outbound_handoff(activity, &events, bind))
+            .map(|bind| self.prepare_outbound_handoff(activity, &events, &queued_acks, bind))
             .transpose()?;
+        events.extend(queued_acks.into_iter().map(|ack| ack.event));
         let outbound = if events.is_empty() {
             OutboundReport {
                 decisions: Vec::new(),
@@ -191,6 +207,9 @@ impl Store {
             self.process_outbound_batch(input.clock, events)?
         };
         // No fallible work after the successful COMMIT. An Err never publishes these positions.
+        if use_queued_acks {
+            self.outbound_acks.clear();
+        }
         if let Some(prepared) = handoff {
             self.handoff
                 .publish(prepared, input.expected_revision + 1, &outbound);
@@ -205,6 +224,7 @@ impl Store {
             data_candidates,
             ordinary_candidates,
             ack_inputs,
+            discarded_queued_acks,
             data_complete,
             ordinary_complete,
         })

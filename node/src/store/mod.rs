@@ -31,6 +31,10 @@ use connection::StoreConnection;
 mod activity_tests;
 mod outbound;
 pub use outbound::{OutboundDecision, OutboundEvent, OutboundReport};
+mod outbound_ack;
+pub use outbound_ack::OutboundAckAdmission;
+#[cfg(test)]
+mod outbound_ack_tests;
 mod outbound_scan;
 pub use outbound_scan::{OutboundCandidate, OutboundLane, OutboundPage, OutboundScan};
 mod outbound_cycle;
@@ -99,6 +103,7 @@ pub struct Store {
     ingress: control_ingress::ControlIngress,
     handoff: outbound_handoff::HandoffState,
     outbound_terminal: Option<outbound_terminal::PendingTerminal>,
+    outbound_acks: Vec<outbound_ack::PendingAck>,
     conn: StoreConnection,
     limits: Limits,
     clock: Clock,
@@ -239,6 +244,7 @@ impl Store {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             handoff: outbound_handoff::HandoffState::default(),
             outbound_terminal: None,
+            outbound_acks: Vec::new(),
             conn,
             limits,
             clock,
@@ -433,6 +439,7 @@ impl Store {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
             handoff: outbound_handoff::HandoffState::default(),
             outbound_terminal: None,
+            outbound_acks: Vec::new(),
             conn,
             limits,
             clock,
@@ -577,6 +584,10 @@ impl Store {
         self.writable()?;
         self.transact(apply, true)
     }
+    fn quarantine(&mut self) {
+        self.halted = true;
+        self.outbound_acks.clear();
+    }
     fn transact<T>(&mut self, apply: impl FnOnce(&Self) -> Result<T>, ordinary: bool) -> Result<T> {
         self.readable()?;
         self.conn.execute_batch("BEGIN IMMEDIATE;")?;
@@ -607,7 +618,7 @@ impl Store {
             Ok(v) => v,
             Err(e) => {
                 if let Err(rollback) = self.conn.execute_batch("ROLLBACK;") {
-                    self.halted = true;
+                    self.quarantine();
                     return Err(Error::source_error(
                         Code::OutcomeUnknown,
                         "rollback failed",
@@ -628,7 +639,7 @@ impl Store {
             Ok(1)
         };
         if !matches!((&revision, &floor), (Ok(1), Ok(1))) {
-            self.halted = true;
+            self.quarantine();
             return Err(Error::source_error(
                 Code::OutcomeUnknown,
                 "commit revision",
@@ -639,7 +650,7 @@ impl Store {
             ));
         }
         if let Err(e) = self.conn.execute_batch("COMMIT;") {
-            self.halted = true;
+            self.quarantine();
             return Err(Error::source_error(
                 Code::OutcomeUnknown,
                 "commit result",
@@ -652,7 +663,7 @@ impl Store {
                 std::process::exit(72);
             }
             if self.fault == Some(TestFault::AfterCommit) {
-                self.halted = true;
+                self.quarantine();
                 return Err(Error::new(
                     Code::OutcomeUnknown,
                     "test lost commit response",

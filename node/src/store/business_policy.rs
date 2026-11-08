@@ -33,7 +33,7 @@ impl Store {
             matches!(e.code, Code::StoreUnavailable | Code::OutcomeUnknown)
                 || e.operation == "business policy revision exhausted"
         }) {
-            self.halted = true;
+            self.quarantine();
         }
         result
     }

@@ -169,6 +169,41 @@ impl Store {
     }
     /// T-B / T-C. Relay never accepts plaintext or security state for an endpoint.
     pub fn receive(&mut self, receive: Receive) -> Result<MessageView> {
+        self.receive_with_admission(receive).map(|(view, _)| view)
+    }
+
+    /// Receives a prepared T-C result from an exact ingress instance. A first durable
+    /// insertion may queue a reply; a duplicate view supplies no new ACK opportunity.
+    pub fn receive_destination_on_channel(
+        &mut self,
+        source: &ControlIngressChannel,
+        receive: Receive,
+    ) -> Result<(MessageView, OutboundAckAdmission)> {
+        let (activity, channel) = self.control_ingress_channel(source)?;
+        if receive.role != Role::Destination
+            || receive.message.data.identity.activity_id != activity
+            || receive.neighbor != credential_key(&channel.peer_credential)
+        {
+            return Err(Error::new(
+                Code::Conflict,
+                "destination receive channel context",
+            ));
+        }
+        self.check_registered_ack_channel(activity, &channel, self.clock.monotonic_ms)?;
+        let (view, inserted) = self.receive_with_admission(receive)?;
+        let ack = if inserted {
+            self.queue_committed_ack(
+                activity,
+                channel,
+                outbound_ack::AckTarget::Data(view.key.clone()),
+            )
+        } else {
+            OutboundAckAdmission::NotEligible
+        };
+        Ok((view, ack))
+    }
+
+    fn receive_with_admission(&mut self, receive: Receive) -> Result<(MessageView, bool)> {
         self.writable()?;
         self.validate_data_admission(
             &receive.message,
@@ -206,7 +241,7 @@ impl Store {
                     )
                 })?;
             }
-            return Ok(view);
+            return Ok((view, false));
         }
         match receive.role {
             Role::Relay => {
@@ -279,6 +314,7 @@ impl Store {
             Ok(())
         })?;
         self.message(&receive.message.key)?
+            .map(|view| (view, true))
             .ok_or_else(|| Error::new(Code::StoreCorrupt, "received message"))
     }
     /// Schedules a relay's next-hop copy once. A duplicate cannot replenish hop/retry budget.

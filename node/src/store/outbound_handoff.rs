@@ -85,13 +85,20 @@ struct Scope {
 
 pub(super) struct PreparedHandoff {
     scope: Scope,
-    bindings: BTreeMap<Responsibility, Option<OutboundChannel>>,
+    bindings: BTreeMap<Responsibility, HandoffBinding>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct HandoffBinding {
+    channel: Option<OutboundChannel>,
+    registered_ack: bool,
 }
 
 struct Pending {
     position: usize,
     responsibility: Responsibility,
     channel: OutboundChannel,
+    registered_ack: bool,
     partial: Option<(OutboundFrame, usize)>,
 }
 
@@ -145,11 +152,12 @@ impl HandoffState {
             .enumerate()
             .filter_map(|(position, decision)| {
                 let responsibility = decision.output()?;
-                let channel = (*prepared.bindings.get(&responsibility)?)?;
+                let binding = prepared.bindings.get(&responsibility)?;
                 Some(Pending {
                     position,
                     responsibility,
-                    channel,
+                    channel: binding.channel?,
+                    registered_ack: binding.registered_ack,
                     partial: None,
                 })
             })
@@ -169,16 +177,37 @@ impl Store {
         &self,
         activity: ActivityId,
         events: &[OutboundEvent],
+        queued_acks: &[outbound_ack::QueuedAckEvent],
         bind: &mut BindChannel<'_>,
     ) -> Result<PreparedHandoff> {
         let mut bindings = BTreeMap::new();
         let mut instances = BTreeMap::new();
-        for event in events {
+        for event in events
+            .iter()
+            .chain(queued_acks.iter().map(|ack| &ack.event))
+        {
             event.validate_refs()?;
         }
-        for event in events {
-            let channel = bind(event);
-            if let Some(channel) = channel
+        let explicit = events.iter().map(|event| {
+            (
+                event,
+                HandoffBinding {
+                    channel: bind(event),
+                    registered_ack: false,
+                },
+            )
+        });
+        let registered = queued_acks.iter().map(|ack| {
+            (
+                &ack.event,
+                HandoffBinding {
+                    channel: Some(ack.channel),
+                    registered_ack: true,
+                },
+            )
+        });
+        for (event, binding) in explicit.chain(registered) {
+            if let Some(channel) = binding.channel
                 && instances
                     .insert(channel.instance, channel)
                     .is_some_and(|old| old != channel)
@@ -189,8 +218,8 @@ impl Store {
                 ));
             }
             if bindings
-                .insert(event.responsibility(), channel)
-                .is_some_and(|old| old != channel)
+                .insert(event.responsibility(), binding)
+                .is_some_and(|old| old != binding)
             {
                 return Err(Error::new(
                     Code::Conflict,
@@ -361,6 +390,9 @@ impl Store {
         current: Option<OutboundChannel>,
     ) -> Result<()> {
         let channel = item.channel;
+        if item.registered_ack {
+            self.ingress.require_channel(&channel)?;
+        }
         if current != Some(channel) || channel.local != local || channel.peer == local {
             return Err(Error::new(
                 Code::Conflict,

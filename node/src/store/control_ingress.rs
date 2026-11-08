@@ -86,7 +86,7 @@ impl ControlIngress {
     pub(super) fn has_channels(&self) -> bool {
         !self.channels.is_empty()
     }
-    fn require_channel(&self, channel: &OutboundChannel) -> Result<()> {
+    pub(super) fn require_channel(&self, channel: &OutboundChannel) -> Result<()> {
         if self.channels.get(&channel.peer) != Some(channel) {
             return Err(Error::new(
                 Code::Conflict,
@@ -306,6 +306,7 @@ impl Store {
     pub fn close_control_ingress_channel(&mut self, channel: &ControlIngressChannel) -> Result<()> {
         self.control_ingress_channel(channel)?;
         self.ingress.channels.remove(&channel.binding.peer);
+        self.discard_acks_on_channel(&channel.binding);
         Ok(())
     }
 
@@ -497,9 +498,34 @@ impl Store {
         outcome: ControlVerificationOutcome,
         neighbors: &[ControlNeighbor],
     ) -> Result<ControlVerificationCompletion> {
+        self.finish_control_verification(job, outcome, neighbors, false)
+            .map(|(completion, _)| completion)
+    }
+
+    /// A bound, newly inserted control object can queue one reply when its original
+    /// acceptance transaction also created the source neighbor's responsibility.
+    pub fn complete_control_verification_with_ack(
+        &mut self,
+        job: ControlVerificationJob,
+        outcome: ControlVerificationOutcome,
+        neighbors: &[ControlNeighbor],
+    ) -> Result<(ControlVerificationCompletion, OutboundAckAdmission)> {
+        self.finish_control_verification(job, outcome, neighbors, true)
+    }
+
+    fn finish_control_verification(
+        &mut self,
+        job: ControlVerificationJob,
+        outcome: ControlVerificationOutcome,
+        neighbors: &[ControlNeighbor],
+        queue_ack: bool,
+    ) -> Result<(ControlVerificationCompletion, OutboundAckAdmission)> {
         let pending = self.release_control_job(&job)?;
         if matches!(outcome, ControlVerificationOutcome::Rejected) {
-            return Ok(ControlVerificationCompletion::Rejected);
+            return Ok((
+                ControlVerificationCompletion::Rejected,
+                OutboundAckAdmission::NotEligible,
+            ));
         }
         let ControlVerificationOutcome::Verified(object) = outcome else {
             unreachable!()
@@ -525,7 +551,24 @@ impl Store {
             }
             s.accept_control_in_transaction(&object, neighbors)
         })?;
-        Ok(ControlVerificationCompletion::Accepted(admission))
+        let ack = if queue_ack
+            && let ControlAdmission::Inserted(object_ref) = admission
+            && let ControlSource::Channel(channel) = pending.source
+            && neighbors
+                .iter()
+                .any(|neighbor| neighbor.participant == channel.peer)
+            && !(object.fields.kind == ControlKind::Exit
+                && object.fields.issuer == channel.peer_credential)
+        {
+            self.queue_committed_ack(
+                pending.activity,
+                channel,
+                outbound_ack::AckTarget::Control(object_ref),
+            )
+        } else {
+            OutboundAckAdmission::NotEligible
+        };
+        Ok((ControlVerificationCompletion::Accepted(admission), ack))
     }
     /// Bounded metadata only; never exposes queued bytes, credentials or decoded payloads.
     pub fn control_ingress_usage(&self) -> ControlIngressUsage {
