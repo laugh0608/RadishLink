@@ -184,6 +184,7 @@ impl Store {
     }
 
     /// Commits a prepared T-B result with its final-hop responsibility before queuing an ACK.
+    /// A fresh retransmission from the same upstream credential may queue another ACK.
     /// The owner supplies the selected next-hop credential. This does not open that channel.
     pub fn receive_relay_on_channel(
         &mut self,
@@ -206,9 +207,10 @@ impl Store {
         } else {
             Role::Destination
         };
+        let upstream = credential_key(&channel.peer_credential);
         if receive.role != role
             || receive.message.data.identity.activity_id != activity
-            || receive.neighbor != credential_key(&channel.peer_credential)
+            || receive.neighbor != upstream
         {
             return Err(Error::new(Code::Conflict, "receive channel context"));
         }
@@ -221,7 +223,11 @@ impl Store {
         self.check_registered_ack_channel(activity, &channel, self.clock.monotonic_ms)?;
         let forward_to = next_hop.as_ref().map(credential_key);
         let (view, inserted) = self.receive_with_admission(receive, forward_to.as_deref())?;
-        let ack = if inserted {
+        let recovery = !inserted
+            && forward_to.is_some()
+            && self.data_ack_eligible(&view.key, &upstream, &self.clock)?
+            && self.data_ack_budget_available(&view.key, channel.peer)?;
+        let ack = if inserted || recovery {
             self.queue_committed_ack(
                 activity,
                 channel,

@@ -333,6 +333,21 @@ impl Store {
             })
             .transpose()
     }
+    fn data_ack_slot_available(slots: &[AckSlot], participant: ParticipantId) -> bool {
+        match slots.iter().find(|slot| slot.participant == participant) {
+            Some(slot) => slot.attempts < 10,
+            None => slots.len() < 4,
+        }
+    }
+    pub(super) fn data_ack_budget_available(
+        &self,
+        key: &str,
+        participant: ParticipantId,
+    ) -> Result<bool> {
+        Ok(self
+            .ack_slots(key)?
+            .is_some_and(|slots| Self::data_ack_slot_available(&slots, participant)))
+    }
     fn consume_data_ack_in_transaction(
         &self,
         key: &str,
@@ -358,15 +373,17 @@ impl Store {
         let participant: ParticipantId = raw
             .try_into()
             .map_err(|_| Error::new(Code::StoreCorrupt, "ACK participant"))?;
-        let index = slots.iter().position(|s| s.participant == participant);
-        if index.is_some_and(|i| slots[i].attempts >= 10) || (index.is_none() && slots.len() == 4) {
+        if !Self::data_ack_slot_available(&slots, participant) {
             return Ok(false);
         }
         if !self.charge_control_output(clock.monotonic_ms, 127)? {
             return Ok(false);
         }
-        match index {
-            Some(i) => slots[i].attempts += 1,
+        match slots
+            .iter_mut()
+            .find(|slot| slot.participant == participant)
+        {
+            Some(slot) => slot.attempts += 1,
             None => slots.push(AckSlot {
                 participant,
                 attempts: 1,

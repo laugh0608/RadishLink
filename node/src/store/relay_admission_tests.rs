@@ -25,8 +25,30 @@ fn forward(store: &Store, key: &str) -> Option<(String, u8, RetryState)> {
     row.map(|(neighbor, hops, retry)| (neighbor, hops, serde_json::from_str(&retry).unwrap()))
 }
 
+fn relay_round(store: &mut Store, cycle: &mut OutboundCycle, now: i64) -> OutboundCycleReport {
+    store
+        .process_outbound_cycle_with_handoff(
+            cycle,
+            input(store, now, vec![]),
+            |_| Ok(batch(now)),
+            |_| None,
+        )
+        .unwrap()
+}
+
+fn ack_attempts(store: &Store, key: &str) -> u8 {
+    store
+        .conn
+        .query_row(
+            "SELECT coalesce(json_extract(data_ack_budget,'$[0].attempts'),0) FROM messages WHERE key=?1",
+            [key],
+            |row| row.get(0),
+        )
+        .unwrap()
+}
+
 #[test]
-fn relay_commit_binds_ack_to_source_and_restores_forward_without_replaying_ack() {
+fn relay_same_boot_reopen_recovers_lost_ack_only_after_fresh_retransmission() {
     let w = Workspace::new();
     let mut s = w.create();
     let source = register(&mut s, 2);
@@ -45,14 +67,7 @@ fn relay_commit_binds_ack_to_source_and_restores_forward_without_replaying_ack()
     );
 
     let mut cycle = s.start_outbound_cycle().unwrap();
-    let report = s
-        .process_outbound_cycle_with_handoff(
-            &mut cycle,
-            input(&s, 1000, vec![]),
-            |_| Ok(batch(1000)),
-            |_| None,
-        )
-        .unwrap();
+    let report = relay_round(&mut s, &mut cycle, 1000);
     assert_eq!(report.ack_inputs, 1);
     assert!(report.outbound.decisions.iter().any(|decision| matches!(
         decision, OutboundDecision::DataAck { message, neighbor, send: true }
@@ -73,12 +88,16 @@ fn relay_commit_binds_ack_to_source_and_restores_forward_without_replaying_ack()
         },
     );
     assert_eq!(written.result.unwrap(), OutboundWriteProgress::Complete);
+    // The first ACK was handed off locally but the upstream never received it.
     let saved = forward(&s, "one").unwrap();
     assert_ne!(saved.2, retry);
     drop(s);
 
     let mut s = w.reopen(1001);
     assert_eq!(forward(&s, "one").unwrap(), saved);
+    assert_eq!(ack_attempts(&s, "one"), 1);
+    assert!(s.outbound_acks.is_empty());
+    assert!(s.next_outbound_handoff().is_none());
     let replacement = register(&mut s, 2);
     let mut duplicate = relay("one");
     duplicate.message.deadline_ms = 5000;
@@ -86,7 +105,7 @@ fn relay_commit_binds_ack_to_source_and_restores_forward_without_replaying_ack()
         s.receive_relay_on_channel(&replacement, duplicate, test_credential(3))
             .unwrap()
             .1,
-        Ack::NotEligible
+        Ack::Queued
     );
     let mut shortened = saved.2.clone();
     shortened.constrain_deadline(5000).unwrap();
@@ -95,12 +114,21 @@ fn relay_commit_binds_ack_to_source_and_restores_forward_without_replaying_ack()
         s.receive_relay_on_channel(&replacement, relay("one"), test_credential(3))
             .unwrap()
             .1,
-        Ack::NotEligible
+        Ack::Queued
     );
     assert_eq!(forward(&s, "one").unwrap().2, shortened);
     assert_eq!(s.message_remaining_ms("one").unwrap(), 3999);
-    assert!(s.outbound_acks.is_empty());
+    assert_eq!(s.outbound_acks.len(), 1);
+    assert_eq!(ack_attempts(&s, "one"), 1);
     assert!(s.next_outbound_handoff().is_none());
+    let mut cycle = s.start_outbound_cycle().unwrap();
+    let report = relay_round(&mut s, &mut cycle, 2001);
+    assert_eq!(report.ack_inputs, 1);
+    assert_eq!(
+        s.next_outbound_handoff().unwrap().channel,
+        replacement.binding()
+    );
+    assert_eq!(ack_attempts(&s, "one"), 2);
 }
 
 #[test]
@@ -194,6 +222,88 @@ fn relay_ack_requires_durable_forward_and_original_source_even_for_explicit_inpu
 }
 
 #[test]
+fn relay_same_credential_reconnect_requires_fresh_matching_frame() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let old = register(&mut s, 2);
+    s.receive_relay_on_channel(&old, relay("one"), test_credential(3))
+        .unwrap();
+    s.close_control_ingress_channel(&old).unwrap();
+    let replacement = register(&mut s, 2);
+    assert_ne!(old.binding(), replacement.binding());
+    assert!(s.outbound_acks.is_empty());
+    assert_eq!(
+        s.receive_relay_on_channel(&old, relay("one"), test_credential(3))
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    let mut changed = relay("one");
+    changed.message.payload.push(0);
+    assert_eq!(
+        s.receive_relay_on_channel(&replacement, changed, test_credential(3))
+            .unwrap_err()
+            .code,
+        Code::Conflict
+    );
+    assert!(s.outbound_acks.is_empty());
+    assert_eq!(
+        s.receive_relay_on_channel(&replacement, relay("one"), test_credential(3))
+            .unwrap()
+            .1,
+        Ack::Queued
+    );
+    let mut cycle = s.start_outbound_cycle().unwrap();
+    assert_eq!(relay_round(&mut s, &mut cycle, 1000).ack_inputs, 1);
+    assert_eq!(
+        s.next_outbound_handoff().unwrap().channel,
+        replacement.binding()
+    );
+}
+
+#[test]
+fn relay_recovery_stops_at_persisted_ack_limit_even_after_reopen() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let source = register(&mut s, 2);
+    let mut cycle = s.start_outbound_cycle().unwrap();
+    for attempt in 1..=10 {
+        assert_eq!(
+            s.receive_relay_on_channel(&source, relay("one"), test_credential(3))
+                .unwrap()
+                .1,
+            Ack::Queued
+        );
+        let now = 1000 + i64::from(attempt - 1) * 250;
+        assert_eq!(relay_round(&mut s, &mut cycle, now).ack_inputs, 1);
+        assert!(s.next_outbound_handoff().is_some());
+        assert_eq!(ack_attempts(&s, "one"), attempt);
+        s.cancel_outbound_handoff();
+    }
+    let saved = forward(&s, "one").unwrap();
+    assert_eq!(
+        s.receive_relay_on_channel(&source, relay("one"), test_credential(3))
+            .unwrap()
+            .1,
+        Ack::NotEligible
+    );
+    assert!(s.outbound_acks.is_empty());
+    drop(s);
+
+    let mut s = w.reopen(3251);
+    let replacement = register(&mut s, 2);
+    assert_eq!(
+        s.receive_relay_on_channel(&replacement, relay("one"), test_credential(3))
+            .unwrap()
+            .1,
+        Ack::NotEligible
+    );
+    assert_eq!(ack_attempts(&s, "one"), 10);
+    assert_eq!(forward(&s, "one").unwrap(), saved);
+    assert!(s.outbound_acks.is_empty());
+}
+
+#[test]
 fn relay_record_limit_rolls_back_all_rows_but_ack_queue_full_keeps_commit() {
     let w = Workspace::new();
     let limits = Limits {
@@ -246,19 +356,55 @@ fn relay_record_limit_rolls_back_all_rows_but_ack_queue_full_keeps_commit() {
         MAX_CYCLE_ACKS as u64 + 1
     );
     assert_eq!(s.outbound_acks.len(), MAX_CYCLE_ACKS);
+    let overflow = format!("relay{MAX_CYCLE_ACKS:02}");
+    for (key, expected) in [(overflow.as_str(), Ack::Full), ("relay00", Ack::Queued)] {
+        assert_eq!(
+            s.receive_relay_on_channel(&source, relay(key), test_credential(3))
+                .unwrap()
+                .1,
+            expected
+        );
+    }
+    assert_eq!(s.outbound_acks.len(), MAX_CYCLE_ACKS);
+    let mut cycle = s.start_outbound_cycle().unwrap();
+    assert_eq!(
+        relay_round(&mut s, &mut cycle, 1000).ack_inputs,
+        MAX_CYCLE_ACKS
+    );
+    assert_eq!(ack_attempts(&s, &overflow), 0);
+    assert_eq!(
+        s.receive_relay_on_channel(&source, relay(&overflow), test_credential(3))
+            .unwrap()
+            .1,
+        Ack::Queued
+    );
 }
 
 #[test]
-fn relay_ack_is_withdrawn_at_expiry_revocation_or_channel_close() {
-    for (mode, now) in [("expired", 10000), ("revoked", 1000), ("closed", 1000)] {
+fn recovered_relay_ack_is_withdrawn_at_expiry_revocation_or_channel_close() {
+    for (mode, now) in [
+        ("expired", 10000),
+        ("source revoked", 1000),
+        ("destination revoked", 1000),
+        ("closed", 1000),
+    ] {
         let w = Workspace::new();
         let mut s = w.create();
-        let source = register(&mut s, 2);
-        s.receive_relay_on_channel(&source, relay("one"), test_credential(3))
+        let old = register(&mut s, 2);
+        s.receive_relay_on_channel(&old, relay("one"), test_credential(3))
             .unwrap();
+        s.close_control_ingress_channel(&old).unwrap();
+        let source = register(&mut s, 2);
+        assert_eq!(
+            s.receive_relay_on_channel(&source, relay("one"), test_credential(3))
+                .unwrap()
+                .1,
+            Ack::Queued
+        );
         match mode {
-            "revoked" => {
-                s.block_control_binding(ACTIVITY, test_credential(3))
+            "source revoked" | "destination revoked" => {
+                let peer = if mode == "source revoked" { 2 } else { 3 };
+                s.block_control_binding(ACTIVITY, test_credential(peer))
                     .unwrap();
                 let mut new = relay("two");
                 new.expected_policy_revision = s.business_policy_revision(ACTIVITY).unwrap();
@@ -269,31 +415,33 @@ fn relay_ack_is_withdrawn_at_expiry_revocation_or_channel_close() {
                     Code::Conflict
                 );
                 assert!(s.message("two").unwrap().is_none());
+                let mut duplicate = relay("one");
+                duplicate.expected_policy_revision = s.business_policy_revision(ACTIVITY).unwrap();
+                assert_eq!(
+                    s.receive_relay_on_channel(&source, duplicate, test_credential(3))
+                        .unwrap_err()
+                        .code,
+                    Code::Conflict
+                );
             }
             "closed" => s.close_control_ingress_channel(&source).unwrap(),
             _ => {}
         }
         let mut cycle = s.start_outbound_cycle().unwrap();
-        let report = s
-            .process_outbound_cycle_with_handoff(
-                &mut cycle,
-                input(&s, now, vec![]),
-                |_| Ok(batch(now)),
-                |_| None,
-            )
-            .unwrap();
+        let report = relay_round(&mut s, &mut cycle, now);
         assert_eq!(report.ack_inputs, 0, "{mode}");
         if mode != "closed" {
             assert_eq!(report.discarded_queued_acks.len(), 1, "{mode}");
         }
         assert!(s.outbound_acks.is_empty());
         assert!(s.next_outbound_handoff().is_none());
+        assert_eq!(ack_attempts(&s, "one"), 0);
         if mode == "expired" {
-            let mut late = relay("one");
-            late.message.deadline_ms = 10001;
-            assert!(
-                s.receive_relay_on_channel(&source, late, test_credential(3))
-                    .is_err()
+            assert_eq!(
+                s.receive_relay_on_channel(&source, relay("one"), test_credential(3))
+                    .unwrap_err()
+                    .code,
+                Code::Expired
             );
         }
     }
@@ -327,6 +475,44 @@ fn relay_transaction_failure_never_publishes_ack() {
             u64::from(committed)
         );
         assert!(s.outbound_acks.is_empty());
+    }
+}
+
+#[test]
+fn relay_retransmission_that_changes_deadline_requires_known_commit_before_reply() {
+    for (fault, error, deadline) in [
+        (TestFault::BeforeCommit, Code::StoreUnavailable, 10000),
+        (TestFault::AfterCommit, Code::OutcomeUnknown, 5000),
+    ] {
+        let w = Workspace::new();
+        let mut s = w.create();
+        let old = register(&mut s, 2);
+        s.receive_relay_on_channel(&old, relay("one"), test_credential(3))
+            .unwrap();
+        s.close_control_ingress_channel(&old).unwrap();
+        let source = register(&mut s, 2);
+        let mut duplicate = relay("one");
+        duplicate.message.deadline_ms = 5000;
+        s.fault = Some(fault);
+        assert_eq!(
+            s.receive_relay_on_channel(&source, duplicate, test_credential(3))
+                .unwrap_err()
+                .code,
+            error
+        );
+        assert!(s.outbound_acks.is_empty());
+        drop(s);
+
+        let mut s = w.reopen(1);
+        assert_eq!(s.message_remaining_ms("one").unwrap(), deadline - 1);
+        assert!(s.outbound_acks.is_empty());
+        let source = register(&mut s, 2);
+        assert_eq!(
+            s.receive_relay_on_channel(&source, relay("one"), test_credential(3))
+                .unwrap()
+                .1,
+            Ack::Queued
+        );
     }
 }
 
@@ -393,23 +579,17 @@ fn relay_process_exit_reopens_with_either_all_or_none_of_the_responsibility() {
             s.receive_relay_on_channel(&source, relay("one"), test_credential(3))
                 .unwrap()
                 .1,
-            if committed {
-                Ack::NotEligible
-            } else {
-                Ack::Queued
-            }
+            Ack::Queued
         );
         if committed {
             let mut cycle = s.start_outbound_cycle().unwrap();
-            let report = s
-                .process_outbound_cycle(&mut cycle, input(&s, 1000, vec![]), |_| Ok(batch(1000)))
-                .unwrap();
-            assert_eq!(report.ack_inputs, 0);
-            assert!(matches!(
-                report.outbound.decisions.as_slice(),
-                [OutboundDecision::Queue(key, decision)]
+            let report = relay_round(&mut s, &mut cycle, 1000);
+            assert_eq!(report.ack_inputs, 1);
+            assert!(report.outbound.decisions.iter().any(|decision| matches!(
+                decision, OutboundDecision::Queue(key, decision)
                     if key.message == "one" && key.neighbor == PEER_3 && decision.send
-            ));
+            )));
+            assert_eq!(s.next_outbound_handoff().unwrap().channel, source.binding());
         }
     }
 }

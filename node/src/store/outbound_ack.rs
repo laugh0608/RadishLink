@@ -27,7 +27,8 @@ pub(super) struct QueuedAckEvent {
 }
 
 impl Store {
-    /// Called only by the insertion paths after a successful COMMIT.
+    /// Called after a successful receive COMMIT or a fresh relay retransmission
+    /// matched against its committed responsibility.
     pub(super) fn queue_committed_ack(
         &mut self,
         activity: ActivityId,
