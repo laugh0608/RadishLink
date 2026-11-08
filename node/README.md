@@ -28,6 +28,8 @@ cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml
 - `service`：容量 32 的命令队列、可克隆 Client、专属状态线程；支持平台时钟源周期维护，查询已提交事实；关闭接纳后排空已接纳命令并 Join，传播 Store 关闭错误，业务发送仍拒绝。
 - `error`：稳定错误分类与受控诊断原因；默认 Display/Debug 不回显底层输入。
 
+内部拥有者可按通道实例调用 `poll_inbound` 和 `dispatch_inbound_frame`，离线覆盖有界读取、合成分流和新鲜时间复核。`dispatch_control_verification` 为原租约预留一个结果位，`poll_control_verification_result` 收取后沿既有验证接纳路径处理。拥有者停机以 `begin_owner_shutdown` 撤回运行期输入和输出，再以 `finish_owner_shutdown` 核对关闭确认、租约和调用方提供的 Join 结果。实际工作池与传输是后续适配项。见 [有界入站](../docs/architecture/node-bounded-ingress.md)和[派发与结果归还](../docs/testing/node-control-ingress.md#验证派发与结果归还2026-11-08)。
+
 `Store` 写方法是内部集成基础：其调用者将来必须先完成授权、消息认证、proof 验证和安全状态准备。当前测试直接提供不透明合成字节；这些字节没有密码学意义。不能将这些方法直接暴露给 CLI、HTTP 或网络，也不能将 `core_binding` 当作本模块计算/验证的哈希。
 
 `Store::create` 只允许全新目录，`Store::open` 不创建或重置缺失/损坏的库。目录必须为 canonical 0700，状态/锁文件为单链接 0600；这些检查不证明卷已加密或能够抵抗同用户/root 的并发路径替换。平台接入仍须验证受控父目录、用户身份、解锁和锁定生命周期。

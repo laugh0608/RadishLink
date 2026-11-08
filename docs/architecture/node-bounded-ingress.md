@@ -34,7 +34,7 @@ Store 的离线入站轮转按当前帧读取，每步使用一块 **4096-byte �
 
 分类保留[原数据格式](../protocol/node-data-envelope.md#线格式与界限)和[控制格式](../protocol/node-control-propagation.md#逐跳确认与消息类型)：外层 `kind=1` 是数据，`kind=2` 是 COSE 容器，`kind=3` 是 `LinkAckV1`。未严格解码的字节不给退出优先级；COSE 内层 `kind=2/3` 沿原有 16 槽和限速入口，内层 `kind=1` 回执、数据和逐跳 ACK 不借用这 16 槽。格式无效或无权限按原边界拒绝。framing、移交、排入验证及 `Known` / `AlreadyPending` 均不构成持久接纳；此片不新增回 ACK 条件。
 
-离线分流消费原帧。原帧携带拥有者、实例及读取后的采样。分流先核对拥有者和实例，再把原帧借给同步解码回调，之后按拥有者的新采样复核时限、当前活动和凭据。现用回调返回合成结果，实际 COSE 内层类型由未来严格解码器确定。数据和回执在单次同步借用内按原帧 backing capacity 各自检查可用字节。逐跳 ACK 的活动、custodian 和凭据与原实例一致后，才交给既有终结槽。控制候选继续使用 Store 已公布的时钟和现有限速队列。见 [分流实现](../../node/src/store/control_ingress/read/dispatch.rs)和[字节向量与离线分流验收](../testing/node-framing-and-graph-inputs.md#入站字节向量与离线分流2026-11-08)。
+离线分流消费原帧。原帧携带拥有者和实例，读取后的采样记入同一拥有者的运行期时钟下限。分流核对原实例，把原帧借给同步解码回调，再取新采样复核时限、当前活动和凭据。现用回调返回合成结果，实际 COSE 内层类型由未来严格解码器确定。数据和回执在单次同步借用内按原帧 backing capacity 各自检查可用字节。逐跳 ACK 的活动、custodian 和凭据与原实例一致后，才交给既有终结槽。控制候选按解码后采样使用现有限速和队列。入站和外发共同校验运行期时钟下限，验证后的控制接纳随原事务持久化适用的时钟。见 [分流实现](../../node/src/store/control_ingress/read/dispatch.rs)和[时钟衔接验收](../testing/node-control-ingress.md#入站时钟与控制限速衔接2026-11-08)。
 
 关闭采用先失效、后确认的两步。`begin_control_ingress_channel_close` 按精确实例撤下帧槽和就绪标记、待发 ACK 和外发交接，拒绝该实例的新读取、入站接纳、派发与写入。原等待项在验签轮询中丢弃，已派发租约继续占额度，迟到结果只归还原租约。拥有者接线时须在同一有序步骤通知传输层中止短写及丢弃未发送应用输出。见 [两步关闭离线验收](../testing/node-control-ingress.md#实例两步关闭离线验收2026-11-08)。
 

@@ -38,7 +38,7 @@
 | SQLite 日志 | 首期 `journal_mode=DELETE`、`synchronous=EXTRA`，启动读回检查 | WAL + FULL 是可选演进方向，但需管理 checkpoint、长读者及 WAL 容量。首期短文字和串行访问优先降低协调复杂度，不把性能假设当实测 |
 | I/O 与本地 API | Tokio；HTTP 路由候选 Axum；JSON 请求/响应与 WebSocket 状态通知 | 标准库适合纯算法，但手写 HTTP/TLS 不合适；不引入 gRPC、消息 broker 或独立 Web 后端 |
 | 节点传输 | 有线阶段 TCP + TLS 1.3 双向邻居认证；TLS 实现候选 rustls | QUIC/UDP 留给移动链路和媒体证据驱动的选择；TCP 成功写入不产生 custody 或 delivery。邻居 TLS 不替代消息 E2EE |
-| 产品信封编码 | ADR 0006/0007 已接受严格 CBOR/COSE 与有界前缀；密码载荷保持库输出的原始字节 | 精确格式以[数据 envelope](../protocol/node-data-envelope.md)和[控制 profile](../security/node-identity-control-profile.md)为准；当前只实现外层 framing，严格解码和实际认证尚未接入 |
+| 产品信封编码 | ADR 0006/0007 已接受严格 CBOR/COSE 与有界前缀，密码载荷保持库输出的原始字节 | 当前已离线接入有界读取、帧组装和合成分流。严格解码、实际认证和互操作待候选及平台验收。见[数据 envelope](../protocol/node-data-envelope.md)、[控制 profile](../security/node-identity-control-profile.md)及[字节向量](../testing/node-framing-and-graph-inputs.md#入站字节向量与离线分流2026-11-08) |
 | Linux 交付 | ARM64 GNU target、普通非 root 服务、systemd 监督；macOS 用于离线开发 | 不把容器作为实体设备的运行依赖，不从开发机可编译推导 ARM64 可运行；不新增 UTM 或修改 I5 环境 |
 
 SQLite 官方说明 EXTRA 在 DELETE 模式额外同步 journal 删除后的目录；这是选择依据，实际耐久性仍依赖 VFS、文件系统、卡及供电行为。[SQLite PRAGMA](https://sqlite.org/pragma.html#pragma_synchronous)。WAL 的单写者、checkpoint 和附加文件要求见[官方 WAL 文档](https://sqlite.org/wal.html)。
@@ -160,7 +160,7 @@ D17 同 boot 切换和 D18 跨 boot 时钟域见[活动生命周期方案](node-
 
 TLS 1.3 的双向认证只确认当前邻居；目标身份、消息不可变核心、E2EE receipt 与 relay-clear proof 仍由 SW-G2 证明。推荐关闭 0-RTT，明确握手/证书轮换/撤销策略；IP 变更不改变身份，身份变更不能自动覆盖。rustls 支持 TLS 1.3，并有独立密码 provider 选择，最终依赖图须重新审查，不能直接继承旧 spike 许可结论。[rustls 官方 API](https://docs.rs/rustls/0.23.46/rustls/)。
 
-已接受的 D12/D15 v1 使用长度前缀在分配前拒绝超长 frame；严格 CBOR 限定深度、项数、类型及整数范围，拒绝未知字段、重复键和尾随数据，保留认证相关原始字节。v1 不提供可忽略扩展入口，后续扩展须显式评审版本策略。确定性编码依据 [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html#section-4.2)，精确规则以对应协议专题为准；密码库自己的编码不重写为 CBOR。当前仅外层 framing 已实施，严格解码、认证和实际互操作未通过，不发布网络互通声明。
+已接受的 D12/D15 v1 使用长度前缀在分配前拒绝超长 frame。严格 CBOR 限定深度、项数、类型及整数范围，拒绝未知字段、重复键和尾随数据，保留认证相关原始字节。v1 的扩展须显式评审版本策略。确定性编码依据 RFC 8949，精确规则见协议专题，密码载荷按库原始编码传递。Store 已用合成输入验证按实例读取、分流、共享时钟下限和 kind 2/3 验证结果归还。实际签验、工作池与传输待验收。见 [RFC 8949](https://www.rfc-editor.org/rfc/rfc8949.html#section-4.2)、[有界入站](node-bounded-ingress.md)及[控制验证验收](../testing/node-control-ingress.md#验证派发与结果归还2026-11-08)。
 
 以下是初始容量设计表；已有 Node 自有实现的具体上限见[首批记录](../testing/node-service-foundation.md)。ADR 0007 后接受的 frame/time 和控制预留以 [D15](../protocol/node-data-envelope.md) / [D16](../protocol/node-control-propagation.md)为准，D16 已在 schema v4 的准入检查固定保留 1 MiB / 576 记录，config 版本与原总额不变。各项不是性能承诺或已验证的物理运行预算：
 

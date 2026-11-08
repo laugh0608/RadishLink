@@ -399,3 +399,7 @@ utmctl stop B86E1A47-9A67-4ECF-A51F-2B2F29CDB726 --request
 4. 在现有 helper 上完成 daemon/store 及构建运行接入、证据版本绑定和负例，再给出容量超限、域外写入、进程回收与真实构建的有界环境验收包。不开旁路入口，不用本次盘点通过解除运行停止。
 
 本次单次授权已消费；没有安装工具、改身份、创建磁盘、构建、启动 daemon、运行 I5-R 或远程写入。本次结果记录随后更新于既有四份文档；`./scripts/check-repo.sh` 通过（186 文件），`git diff --check` 通过。实测后没有改代码，不重复已通过的离线套件。当次交接时这四份文档尚未提交；所有者随后要求提交，记录为 `c7b0aa1`，未 push。后续环境设计见[准备评审包](sw-g4-synthetic-i5-environment-preparation.md)。
+
+## UTM 配置路径接续（2026-11-08）
+
+`7e65977` 令采集器从 `~/VirtualMachines/utms/RadishLink-I5-Debian13-ARM64.utm/config.plist` 校验身份与隔离配置。控制脚本使用采集器返回的同一文件做摘要复核。上文的旧路径属于当次操作证据。日终以合成数据复跑 guest 采集 45 项和控制脚本 4 项，均通过。实际载体与运行仍按现行宿主和单次操作门核对。见 [采集器](../../scripts/inspect-sw-i5-guest.py)、[控制脚本](../../scripts/sw_i5_utm_control.py)及[测试虚拟机保有上限](../governance/agent-collaboration.md#测试虚拟机保有上限)。
