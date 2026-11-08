@@ -3,12 +3,27 @@ use super::*;
 use crate::framing::Ingress;
 use std::io;
 
+mod dispatch;
+pub use dispatch::{DecodedInbound, InboundDispatch, InboundPayload, InboundPayloadCredit};
+
 const READ_CHUNK_BYTES: usize = 4096;
 
 /// A frame whose backing storage has been transferred to a reserved downstream slot.
 pub struct InboundFrame {
-    pub channel: OutboundChannel,
-    pub body: Vec<u8>,
+    owner: Arc<()>,
+    channel: OutboundChannel,
+    captured: Clock,
+    body: Vec<u8>,
+}
+
+impl InboundFrame {
+    pub fn channel(&self) -> OutboundChannel {
+        self.channel
+    }
+
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
 }
 
 pub enum InboundReadProgress {
@@ -151,7 +166,12 @@ impl Store {
             let reserved = reserve(channel, capacity);
             let body = framing.take(&channel.peer, &after)?.expect("ready frame");
             Ok(if reserved {
-                InboundReadProgress::Frame(InboundFrame { channel, body })
+                InboundReadProgress::Frame(InboundFrame {
+                    owner: self.ingress.owner.clone(),
+                    channel,
+                    captured: after,
+                    body,
+                })
             } else {
                 InboundReadProgress::Discarded
             })
@@ -180,24 +200,25 @@ impl Store {
                 return Err(error);
             }
         };
-        if !attached.is_empty() {
-            let activity = match self.current_activity_id() {
-                Ok(activity) => activity,
-                Err(error) => {
-                    self.fence_inbound_channels(attached, &error, closing);
-                    return Err(error);
-                }
+        if attached.is_empty() {
+            return Ok(());
+        }
+        let activity = match self.current_activity_id() {
+            Ok(activity) => activity,
+            Err(error) => {
+                self.fence_inbound_channels(attached, &error, closing);
+                return Err(error);
+            }
+        };
+        for channel in attached {
+            let result = if expired.contains(&channel.peer) {
+                Err(Error::new(Code::Expired, "frame assembly deadline"))
+            } else {
+                self.check_registered_channel(activity, &channel, clock.monotonic_ms)
             };
-            for channel in attached {
-                let result = if expired.contains(&channel.peer) {
-                    Err(Error::new(Code::Expired, "frame assembly deadline"))
-                } else {
-                    self.check_registered_channel(activity, &channel, clock.monotonic_ms)
-                };
-                if let Err(error) = result {
-                    self.fence_control_channel(channel);
-                    closing.push((channel, error));
-                }
+            if let Err(error) = result {
+                self.fence_control_channel(channel);
+                closing.push((channel, error));
             }
         }
         Ok(())

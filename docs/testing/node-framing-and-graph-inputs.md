@@ -62,3 +62,25 @@ Store 在登记后通过 `open_inbound_stream` 打开帧槽，通过 `mark_inbou
 九项合成用例覆盖最大帧的分片和粘包、下游满额后读取下一帧、`WouldBlock` 与 9999/10000/10001 ms 边界、EOF、超读、非法长度、四实例轮转及停机、开槽失败、撤销与读取期间到期、两步关闭后旧就绪、重开复用实例号和读后时钟回退。
 
 本机使用已缓存的 Rust `1.97.1` 和既有 `Cargo.lock` 验证。`cargo test --offline --locked` 通过 295 项库测试和 2 项 CLI 测试，库测试耗时 162.70 秒。`cargo fmt --check`、离线锁定的全目标 Clippy（`-D warnings`）、`./scripts/check-repo.sh` 和 `git diff --check` 通过。
+
+## 入站字节向量与离线分流（2026-11-08）
+
+[34 个字节向量](../../node/tests/fixtures/inbound-wire-v1.json)沿用 D12、D15 和 D16。每个 `base_bodies` 项按顺序连接 hex 片段及重复段。向量可用 `splice` 在指定 body 偏移核对旧字节后替换，再以 `body_bytes` 核对长度并生成四字节大端前缀。`preserve` 给出原始 body 上的 `[偏移, 长度]`，供未来候选校验 core、MLSMessage、COSE、protected 与 payload 是否原样移交。
+
+| 向量组 | 候选解码时的期望 |
+| --- | --- |
+| `DataFrameV1` / `CoreV1` | 最大 61,704-byte body 包含 216-byte core 与 61,440-byte MLSMessage。保留原始 core 和 MLSMessage。拒绝未知版本/类型、非最短整数、不定长/错误项数、尾随/截断、超长声明、非法 hop 和 core 截止计算溢出 |
+| COSE 外层及 D12 profile | 外层 bstr 的 1 和 512 bytes 可通过外层长度检查，0 和 513 bytes 拒绝。三种内层类型各有结构样例，使用合成字段和全零签名字节。签验须另行验证。错误 tag、旧算法、protected 重复键和未知内层类型在 D12 层拒绝 |
+| `LinkAckV1` | 两类 ACK 的 body 均恰好 123 bytes。拒绝未知 ACK 类型、非最短整数、错误凭据长度和尾随字节。实际来源授权另由原通道及 Store 判定 |
+
+向量测试验证重建、前缀、分块组装及原始切片。`expect` 是供 D14 候选后续逐个验证的解码判定。见 [向量测试](../../node/tests/inbound_vectors.rs)。
+
+[分流实现](../../node/src/store/control_ingress/read/dispatch.rs)先复核原拥有者和通道，再把只读原帧借给同步回调，取得合成解码结果后重新采样并核对当前活动及精确凭据。回执与数据各自提供可用字节，以原帧 backing capacity 计费，只有同步借用期间占用。拒绝、回调失败和正常返回都释放原帧。原始 core、MLSMessage 和 COSE 从同一 backing 取切片。未来如果复制、异步派发或保留解码 scratch，须取得各自额度。
+
+退出和报告仍由原 16 槽、原每邻居和全局速率接纳，使用当前 Store 已公布的时钟。未公布新的采样时拒绝本次接纳。逐跳 ACK 按原实例比对活动、custodian 和凭据，使用原待提交终结槽。数据 ACK 的内部消息键由调用方解析，既有终结检查继续核对该键、原绑定和对应邻居责任。ACK 仍以已持久化的接纳为前置。若遇到已持久化的同一控制对象，是否补发 ACK 仍由原提交、来源和额度检查决定。
+
+七项合成分流用例覆盖数据/回执各自满额与等额、原字节切片、控制 16 槽满额后仍扣限速、逐跳 ACK 两类终结及错误来源、非法分流后下一帧、解码期间到期、撤销、同凭据重连和重开复用实例号。真实传输、严格解码、签验、工作池与 Linux 承载继续按各自前置验收。
+
+`cargo +1.97.1 clippy --offline --locked --manifest-path node/Cargo.toml --all-targets -- -D warnings` 首次以 101 退出，报 `InboundReadProgress::Frame` 的 `large_enum_variant`。帧改为保留原拥有者标识、通道与采样，活动从仍有效的拥有者读取，复验通过。
+
+最终在本机用已缓存的 Rust `1.97.1` 和现有锁文件验证。离线锁定的全量测试通过 302 项库测试、2 项 CLI 测试和 1 项字节向量测试，库测试耗时 161.95 秒。格式检查、全目标 Clippy、向量 JSON 校验、`./scripts/check-repo.sh` 和 `git diff --check` 通过。

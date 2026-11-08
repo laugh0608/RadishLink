@@ -15,7 +15,7 @@ fn open(store: &mut Store, peer: u8, now: i64) -> ControlIngressChannel {
     handle
 }
 
-fn frame(bytes: &[u8]) -> Vec<u8> {
+pub(super) fn frame(bytes: &[u8]) -> Vec<u8> {
     let mut wire = (bytes.len() as u32).to_be_bytes().to_vec();
     wire.extend_from_slice(bytes);
     wire
@@ -80,9 +80,9 @@ fn inbound_read_credit_stops_at_each_prefix_body_chunk_and_frame() {
     }
     assert!(reader.is_empty());
     assert_eq!(delivered.len(), 2);
-    assert_eq!(delivered[0].channel, handle.binding());
-    assert_eq!(delivered[0].body, body);
-    assert_eq!(delivered[1].body, b"next");
+    assert_eq!(delivered[0].channel(), handle.binding());
+    assert_eq!(delivered[0].body(), body);
+    assert_eq!(delivered[1].body(), b"next");
     assert_eq!(store.revision().unwrap(), revision);
     assert!(store.outbound_acks.is_empty());
 }
@@ -110,8 +110,8 @@ fn inbound_read_full_downstream_drops_one_frame_and_keeps_next_boundary() {
             (0 | 2, InboundReadProgress::Pending, None)
             | (1, InboundReadProgress::Discarded, None) => {}
             (3, InboundReadProgress::Frame(result), Some(expected)) => {
-                assert_eq!(result.body, expected);
-                assert_eq!(result.channel, handle.binding());
+                assert_eq!(result.body(), expected);
+                assert_eq!(result.channel(), handle.binding());
             }
             _ => panic!("unexpected inbound frame state"),
         }

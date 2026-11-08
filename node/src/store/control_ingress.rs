@@ -6,7 +6,10 @@ use std::{
 };
 
 mod read;
-pub use read::{InboundFrame, InboundReadProgress, InboundReadStep};
+pub use read::{
+    DecodedInbound, InboundDispatch, InboundFrame, InboundPayload, InboundPayloadCredit,
+    InboundReadProgress, InboundReadStep,
+};
 
 pub const MAX_PENDING_CONTROLS: usize = 16;
 const MAX_CONTROL_BYTES: usize = 512;
@@ -377,7 +380,7 @@ impl Store {
         &mut self,
         channel: &ControlIngressChannel,
     ) -> Result<&mut RegisteredChannel> {
-        self.require_control_channel_owner(channel)?;
+        self.require_control_channel_owner(&channel.owner)?;
         self.ingress
             .channels
             .get_mut(&channel.binding.peer)
@@ -389,7 +392,7 @@ impl Store {
         &self,
         channel: &ControlIngressChannel,
     ) -> Result<(ActivityId, OutboundChannel)> {
-        self.require_control_channel_owner(channel)?;
+        self.require_control_channel_owner(&channel.owner)?;
         self.ingress.require_channel(&channel.binding)?;
         Ok((channel.activity, channel.binding))
     }
@@ -416,8 +419,8 @@ impl Store {
         Ok(())
     }
 
-    fn require_control_channel_owner(&self, channel: &ControlIngressChannel) -> Result<()> {
-        if !Arc::ptr_eq(&channel.owner, &self.ingress.owner) {
+    fn require_control_channel_owner(&self, owner: &Arc<()>) -> Result<()> {
+        if !Arc::ptr_eq(owner, &self.ingress.owner) {
             return Err(Error::new(
                 Code::Conflict,
                 "control ingress channel owner changed",
@@ -439,7 +442,7 @@ impl Store {
         channel: &ControlIngressChannel,
         bytes: &[u8],
     ) -> Result<(ControlIngressAdmission, OutboundAckAdmission)> {
-        self.require_control_channel_owner(channel)?;
+        self.require_control_channel_owner(&channel.owner)?;
         self.queue_control_source(
             channel.activity,
             ControlSource::Channel(channel.binding),
