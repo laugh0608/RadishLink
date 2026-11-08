@@ -120,7 +120,6 @@ struct CommittedBatch {
 #[derive(Default)]
 pub(super) struct HandoffState {
     batch: Option<CommittedBatch>,
-    last_clock: Option<Clock>,
 }
 
 impl HandoffState {
@@ -131,12 +130,6 @@ impl HandoffState {
                 .iter()
                 .any(|item| &item.responsibility == responsibility)
         })
-    }
-
-    pub(super) fn observed_after(&self, clock: &Clock) -> bool {
-        self.last_clock
-            .as_ref()
-            .is_some_and(|last| clock.precedes(last))
     }
 
     pub(super) fn require_drained(&self) -> Result<()> {
@@ -344,8 +337,7 @@ impl Store {
         let mut keep_batch = false;
 
         let result = (|| {
-            self.validate_clock_advance(&input.clock)?;
-            self.handoff.last_clock = Some(input.clock.clone());
+            self.observe_clock(&input.clock)?;
             if batch.scope.domain != self.current_domain_id()? {
                 return Err(Error::new(Code::Conflict, "outbound handoff clock domain"));
             }

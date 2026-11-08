@@ -99,7 +99,8 @@ impl Store {
     /// Trusted caller supplies freshly prepared IDs; no cryptography or pairing is performed.
     pub fn switch_control_activity(&mut self, request: ActivitySwitch) -> Result<ActivityStatus> {
         self.writable()?;
-        let now = self.clock.monotonic_ms;
+        let clock = self.latest_clock().clone();
+        let now = clock.monotonic_ms;
         if request.deadline_ms <= now
             || request
                 .deadline_ms
@@ -141,9 +142,10 @@ impl Store {
             s.conn.execute("INSERT INTO control_activity(activity,local_participant,boot,started,deadline,domain_id) VALUES(?1,?2,?3,?4,?5,(SELECT current_domain FROM meta WHERE id=1))",params![request.activity.as_slice(),request.local_participant.as_slice(),s.clock.boot,now,request.deadline_ms])?;
             s.conn.execute("UPDATE meta SET current_activity=?1 WHERE id=1",[request.activity.as_slice()])?;
             s.conn.execute("UPDATE control_output_rate SET last_ms=?1,frames=0,bytes=0,exit_cursor=NULL,ordinary_cursor=NULL WHERE id=1",[now])?;
-            s.write_clock(&s.clock)?;
+            s.write_clock(&clock)?;
             s.activity_status(request.activity)?.ok_or_else(||Error::new(Code::StoreCorrupt,"new activity missing"))
         }).inspect(|_| {
+            self.clock = clock;
             self.ingress=control_ingress::ControlIngress::new(now);
             self.outbound_terminal = None;
             self.outbound_acks.clear();

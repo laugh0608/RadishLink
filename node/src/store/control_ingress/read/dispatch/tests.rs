@@ -190,18 +190,18 @@ fn inbound_dispatch_reuses_control_queue_and_keeps_full_drop_charged() {
     let w = Workspace::new();
     let mut s = w.create();
     let channels: Vec<_> = (2..=5).map(|peer| open(&mut s, peer, 0)).collect();
+    let revision = s.revision().unwrap();
     let outcome = |admission| InboundDispatch::Control {
         admission,
         ack: OutboundAckAdmission::NotEligible,
     };
     assert_eq!(
-        control(&mut s, &channels[0], 1, 1).unwrap_err().code,
-        Code::Busy
+        control(&mut s, &channels[0], 1, 1).unwrap(),
+        outcome(RateLimited)
     );
     assert_eq!(s.control_ingress_usage().waiting, 0);
     for round in 1..=4 {
         let now = round * 1000;
-        s.advance_clock(clock(now)).unwrap();
         for channel in &channels {
             assert_eq!(
                 control(&mut s, channel, now, round as u8).unwrap(),
@@ -210,7 +210,6 @@ fn inbound_dispatch_reuses_control_queue_and_keeps_full_drop_charged() {
         }
     }
     assert_eq!(s.control_ingress_usage().waiting, MAX_PENDING_CONTROLS);
-    s.advance_clock(clock(5000)).unwrap();
     assert_eq!(
         control(&mut s, &channels[0], 5000, 5).unwrap(),
         outcome(QueueFull)
@@ -244,6 +243,49 @@ fn inbound_dispatch_reuses_control_queue_and_keeps_full_drop_charged() {
     s.cancel_control_verification(job).unwrap();
     assert_eq!(s.control_ingress_usage().waiting, MAX_PENDING_CONTROLS - 1);
     assert!(s.outbound_acks.is_empty());
+    assert_eq!(s.current_clock(), clock(0));
+    assert_eq!(s.revision().unwrap(), revision);
+}
+
+#[test]
+fn inbound_dispatch_charges_post_decode_time_and_shares_it_with_legacy_admission() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    let channel = open(&mut s, 2, 0);
+    let revision = s.revision().unwrap();
+    let frame = read_frame(&mut s, &channel, 999, &[0x83, 1, 2, 0x41, 7]);
+    assert_eq!(
+        s.queue_control_candidate(ACTIVITY, test_credential(2), &[8])
+            .unwrap(),
+        ControlIngressAdmission::RateLimited
+    );
+    assert_eq!(
+        s.dispatch_inbound_frame(
+            frame,
+            |_| Ok(DecodedInbound::Control { cose: 4..5 }),
+            || Ok(clock(1000)),
+            InboundPayloadCredit::default(),
+            no_payload,
+        )
+        .unwrap(),
+        InboundDispatch::Control {
+            admission: ControlIngressAdmission::Queued,
+            ack: OutboundAckAdmission::NotEligible,
+        },
+    );
+    assert_eq!(
+        s.queue_control_candidate(ACTIVITY, test_credential(2), &[8])
+            .unwrap(),
+        ControlIngressAdmission::RateLimited
+    );
+    assert_eq!(s.revision().unwrap(), revision);
+    assert_eq!(s.current_clock(), clock(0));
+    assert_eq!(
+        s.advance_clock(clock(999)).unwrap_err().code,
+        Code::TimeUncertain
+    );
+    assert!(s.is_time_uncertain());
+    assert_eq!(s.revision().unwrap(), revision);
 }
 
 fn link_ack(

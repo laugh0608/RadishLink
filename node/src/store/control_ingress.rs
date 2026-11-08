@@ -230,7 +230,7 @@ impl Store {
         activity: ActivityId,
         source: ControlSource,
     ) -> Result<IngressContext> {
-        let local = self.control_live(&activity, self.clock.monotonic_ms)?;
+        let local = self.control_live(&activity, self.latest_clock().monotonic_ms)?;
         self.reject_local_retirement()?;
         let peer = match source {
             ControlSource::Credential(neighbor) => self.control_ingress_peer(&local, &neighbor)?,
@@ -451,7 +451,7 @@ impl Store {
     }
 
     /// Credential-only preparation for existing internal callers. A channel input uses
-    /// `queue_control_candidate_on_channel`. Current Store clock must already be advanced.
+    /// `queue_control_candidate_on_channel`. The owner supplies time through its clock entry points.
     /// Frame assembly and strict envelope routing are separate prerequisites; the supplied
     /// body is opaque COSE bytes, never parsed to trust a self-reported kind or priority.
     pub fn queue_control_candidate(
@@ -481,7 +481,8 @@ impl Store {
                 "control ingress object size",
             ));
         }
-        if !self.ingress.charge(peer, self.clock.monotonic_ms)? {
+        let now = self.latest_clock().monotonic_ms;
+        if !self.ingress.charge(peer, now)? {
             return Ok((
                 ControlIngressAdmission::RateLimited,
                 OutboundAckAdmission::NotEligible,
@@ -514,12 +515,7 @@ impl Store {
                 .map_err(|_| Error::new(Code::StoreCorrupt, "known control reference"))?;
             let ack = if let ControlSource::Channel(channel) = source
                 && self
-                    .registered_control_ack_progress(
-                        activity,
-                        &channel,
-                        reference,
-                        self.clock.monotonic_ms,
-                    )?
+                    .registered_control_ack_progress(activity, &channel, reference, now)?
                     .is_some_and(|progress| progress.ack_attempts < 10)
             {
                 self.queue_committed_ack(
@@ -706,7 +702,7 @@ impl Store {
             }
             _ => None,
         };
-        let admission = self.policy_atomic(|s| {
+        let admission = self.commit_control_at_latest(|s, now| {
             let context = s.control_ingress_context(pending.activity, pending.source)?;
             if context.policy_revision != pending.revision {
                 return Err(Error::new(
@@ -718,6 +714,7 @@ impl Store {
                 &object,
                 neighbors,
                 ack_channel.map(|channel| channel.peer_credential),
+                now,
             )
         })?;
         let ack = if let (ControlAdmission::Inserted(object_ref), Some(channel)) =

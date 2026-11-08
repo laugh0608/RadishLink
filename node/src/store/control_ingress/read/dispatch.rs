@@ -73,14 +73,7 @@ impl Store {
         let body = frame.body.as_slice();
         let decoded = decode(body);
         let clock = sample_after().inspect_err(|_| self.time_uncertain = true)?;
-        self.validate_clock_advance(&clock)?;
-        if clock.precedes(&frame.captured) {
-            self.time_uncertain = true;
-            return Err(Error::new(
-                Code::TimeUncertain,
-                "inbound dispatch clock regression",
-            ));
-        }
+        self.observe_clock(&clock)?;
         // A change of activity or clock domain replaces the registry and its owner.
         let activity = self.current_activity_id()?;
         self.check_registered_channel(activity, &channel, clock.monotonic_ms)?;
@@ -106,14 +99,6 @@ impl Store {
             ),
             DecodedInbound::Control { cose } => {
                 let bytes = cose_bytes(body, cose)?;
-                // The existing verifier queue and rate buckets share the published
-                // Store clock. Dispatch must not silently charge an older coordinate.
-                if clock != self.clock {
-                    return Err(Error::new(
-                        Code::Busy,
-                        "control ingress needs current Store clock",
-                    ));
-                }
                 let (admission, ack) = self.queue_control_candidate_on_channel(&source, bytes)?;
                 return Ok(InboundDispatch::Control { admission, ack });
             }

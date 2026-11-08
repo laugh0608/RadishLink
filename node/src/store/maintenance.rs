@@ -96,13 +96,29 @@ impl Store {
         })
     }
 
+    pub(super) fn latest_clock(&self) -> &Clock {
+        self.observed_clock
+            .as_ref()
+            .filter(|observed| self.clock.precedes(observed))
+            .unwrap_or(&self.clock)
+    }
+
+    /// I/O steps share a runtime floor. An observation alone does not write SQLite.
+    pub(super) fn observe_clock(&mut self, clock: &Clock) -> Result<()> {
+        self.validate_clock_advance(clock)?;
+        if self.latest_clock().precedes(clock) {
+            self.observed_clock = Some(clock.clone());
+        }
+        Ok(())
+    }
+
     pub(super) fn validate_clock_advance(&mut self, clock: &Clock) -> Result<()> {
         self.writable()?;
         if let Err(error) = clock.validate() {
             self.time_uncertain = true;
             return Err(error);
         }
-        if clock.precedes(&self.clock) || self.handoff.observed_after(clock) {
+        if clock.precedes(self.latest_clock()) {
             self.time_uncertain = true;
             return Err(Error::new(Code::TimeUncertain, "clock regression"));
         }

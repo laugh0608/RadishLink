@@ -12,7 +12,6 @@ const READ_CHUNK_BYTES: usize = 4096;
 pub struct InboundFrame {
     owner: Arc<()>,
     channel: OutboundChannel,
-    captured: Clock,
     body: Vec<u8>,
 }
 
@@ -55,7 +54,7 @@ impl Store {
             return Err(Error::new(Code::Conflict, "inbound stream already open"));
         }
         let result = (|| {
-            self.validate_clock_advance(clock)?;
+            self.observe_clock(clock)?;
             self.check_registered_channel(activity, &binding, clock.monotonic_ms)?;
             let framing = match &mut self.ingress.framing {
                 Some(framing) => framing,
@@ -125,17 +124,7 @@ impl Store {
                 "each completed inbound frame is consumed in its read step"
             );
             let read_result = read(channel, &mut scratch[..credit]);
-            let sampled = sample_after().and_then(|clock| {
-                if clock.precedes(before) {
-                    Err(Error::new(
-                        Code::TimeUncertain,
-                        "inbound clock regression after read",
-                    ))
-                } else {
-                    Ok(clock)
-                }
-            });
-            let after = match sampled {
+            let after = match sample_after() {
                 Ok(clock) => clock,
                 Err(error) => {
                     self.time_uncertain = true;
@@ -169,7 +158,6 @@ impl Store {
                 InboundReadProgress::Frame(InboundFrame {
                     owner: self.ingress.owner.clone(),
                     channel,
-                    captured: after,
                     body,
                 })
             } else {
@@ -185,7 +173,7 @@ impl Store {
         closing: &mut Vec<(OutboundChannel, Error)>,
     ) -> Result<()> {
         let result = (|| {
-            self.validate_clock_advance(clock)?;
+            self.observe_clock(clock)?;
             match &mut self.ingress.framing {
                 Some(framing) => framing.expire(clock),
                 None => Ok(Vec::new()),

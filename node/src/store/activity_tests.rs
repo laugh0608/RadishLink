@@ -98,6 +98,29 @@ fn switched(s: &mut Store) {
     s.stop_control_activity(ACTIVITY).unwrap();
     s.switch_control_activity(request(s)).unwrap();
 }
+
+#[test]
+fn same_boot_switch_starts_new_activity_at_the_latest_observed_clock() {
+    let w = Workspace::new();
+    let mut s = w.create();
+    s.observe_clock(&clock(1000)).unwrap();
+    switched(&mut s);
+    prepare_new(&mut s);
+    assert_eq!(s.current_clock(), clock(1000));
+    assert_eq!(
+        s.queue_control_candidate(NEW, test_credential(12), b"first")
+            .unwrap(),
+        ControlIngressAdmission::RateLimited
+    );
+    let started: i64 = s
+        .conn
+        .query_row("SELECT started FROM current_control_activity", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(started, 1000);
+}
+
 fn prepare_new(s: &mut Store) {
     for n in 11..=15 {
         s.stage_control_binding(

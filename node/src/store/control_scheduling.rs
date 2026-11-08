@@ -165,11 +165,10 @@ impl Store {
         object: ObjectRef,
         neighbor: ParticipantId,
     ) -> Result<bool> {
-        self.control_live(&activity, self.clock.monotonic_ms)?;
-        let report = self.process_outbound_batch(
-            self.clock.clone(),
-            vec![OutboundEvent::ControlAck { object, neighbor }],
-        )?;
+        let clock = self.latest_clock().clone();
+        self.control_live(&activity, clock.monotonic_ms)?;
+        let report = self
+            .process_outbound_batch(clock, vec![OutboundEvent::ControlAck { object, neighbor }])?;
         Ok(report
             .decisions
             .iter()

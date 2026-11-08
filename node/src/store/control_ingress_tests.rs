@@ -560,13 +560,21 @@ fn policy_changes_expiry_and_retiring_refuse_waiting_and_inflight_work() {
         Code::Conflict
     );
     s.advance_clock(clock(3000)).unwrap();
-    queue(&mut s, 2, &[9]).unwrap();
+    let running = lease(&mut s, 2, &[9]);
+    queue(&mut s, 3, &[10]).unwrap();
     s.shorten_control_activity(ACTIVITY, 3100).unwrap();
-    s.advance_clock(clock(3100)).unwrap();
+    s.observe_clock(&clock(3100)).unwrap();
     let poll = s.next_control_verification().unwrap();
     assert_eq!(poll.discarded[0].code, Code::Expired);
     assert!(poll.job.is_none());
     assert_eq!(queue(&mut s, 2, &[9]).unwrap_err().code, Code::Expired);
+    assert_eq!(
+        s.complete_control_verification(running, verified(object(4, 3, 9)), &[])
+            .unwrap_err()
+            .code,
+        Code::Expired
+    );
+    assert_eq!(s.current_clock(), clock(3000));
     let w2 = Workspace::new();
     let mut s = w2.create();
     s.advance_clock(clock(2000)).unwrap();
@@ -702,7 +710,7 @@ fn verified_commit_failure_releases_lease_without_refund_or_partial_policy() {
     for fault in [TestFault::BeforeCommit, TestFault::AfterCommit] {
         let w = Workspace::new();
         let mut s = w.create();
-        s.advance_clock(clock(1000)).unwrap();
+        s.observe_clock(&clock(1000)).unwrap();
         let pending = lease(&mut s, 4, &[7]);
         s.fault = Some(fault);
         assert_eq!(
@@ -717,6 +725,18 @@ fn verified_commit_failure_releases_lease_without_refund_or_partial_policy() {
         );
         assert!(s.is_quarantined());
         assert_eq!(s.control_ingress_usage().verifying, 0);
+        let floor: i64 = s
+            .conn
+            .query_row("SELECT monotonic_ms FROM current_clock", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            floor,
+            if fault == TestFault::BeforeCommit {
+                0
+            } else {
+                1000
+            }
+        );
         drop(s);
         let mut s = w.reopen(1000);
         assert_eq!(

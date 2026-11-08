@@ -74,13 +74,33 @@ impl Store {
         object: PreparedControl,
         neighbors: &[ControlNeighbor],
     ) -> Result<ControlAdmission> {
-        self.policy_atomic(|s| s.accept_control_in_transaction(&object, neighbors, None))
+        self.commit_control_at_latest(|s, now| {
+            s.accept_control_in_transaction(&object, neighbors, None, now)
+        })
     }
+
+    pub(super) fn commit_control_at_latest(
+        &mut self,
+        accept: impl FnOnce(&Self, i64) -> Result<ControlAdmission>,
+    ) -> Result<ControlAdmission> {
+        let clock = self.latest_clock().clone();
+        let admission = self.policy_atomic(|s| {
+            let admission = accept(s, clock.monotonic_ms)?;
+            if clock != s.clock {
+                s.write_clock(&clock)?;
+            }
+            Ok(admission)
+        })?;
+        self.clock = clock;
+        Ok(admission)
+    }
+
     pub(super) fn accept_control_in_transaction(
         &self,
         object: &PreparedControl,
         neighbors: &[ControlNeighbor],
         ack_source: Option<CredentialRef>,
+        now: i64,
     ) -> Result<ControlAdmission> {
         object.fields.validate()?;
         if object.cose.is_empty() || object.cose.len() > 512 || neighbors.len() > 4 {
@@ -90,7 +110,7 @@ impl Store {
             ));
         }
         let f = &object.fields;
-        let local = self.control_live(&f.activity, self.clock.monotonic_ms)?;
+        let local = self.control_live(&f.activity, now)?;
         let issuer = self.control_binding(&f.issuer, &f.issuer_id)?;
         let target = self.control_binding(&f.target, &f.target_id)?;
         if issuer == BindingState::Pending || target == BindingState::Pending {
@@ -172,14 +192,14 @@ impl Store {
                 f.reason,
                 f.payload,
                 object.cose,
-                self.clock.monotonic_ms,
+                now,
                 ack_source.as_ref().map(|source| source.as_slice()),
             ],
         )?;
         // Create neighbor rows before applying exit so the issuer's former trusted channel
         // may retain a terminal slot; output always rechecks the current channel policy.
         for neighbor in neighbors {
-            self.insert_control_neighbor(f.activity, f.reference, *neighbor)?;
+            self.insert_control_neighbor(f.activity, f.reference, *neighbor, now)?;
         }
         if f.kind == ControlKind::Exit {
             self.conn.execute(
@@ -190,13 +210,14 @@ impl Store {
         }
         Ok(ControlAdmission::Inserted(f.reference))
     }
-    pub(super) fn insert_control_neighbor(
+    fn insert_control_neighbor(
         &self,
         activity: ActivityId,
         object: ObjectRef,
         neighbor: ControlNeighbor,
+        now: i64,
     ) -> Result<()> {
-        let local = self.control_live(&activity, self.clock.monotonic_ms)?;
+        let local = self.control_live(&activity, now)?;
         let exists: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM current_control_neighbors WHERE object=?1 AND participant=?2)",
             params![object.as_slice(), neighbor.participant.as_slice()],
@@ -221,7 +242,7 @@ impl Store {
             params![
                 object.as_slice(),
                 neighbor.participant.as_slice(),
-                self.clock.monotonic_ms,
+                now,
                 neighbor.link == Link::Up
             ],
         )?;
@@ -234,7 +255,7 @@ impl Store {
         object: ObjectRef,
         neighbor: ControlNeighbor,
     ) -> Result<()> {
-        self.atomic(|s| s.insert_control_neighbor(activity, object, neighbor))
+        self.atomic(|s| s.insert_control_neighbor(activity, object, neighbor, s.clock.monotonic_ms))
     }
     /// Original immutable bytes for a future authorized transport handoff, never a new signature.
     pub fn control_object(

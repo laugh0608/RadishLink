@@ -116,6 +116,7 @@ pub struct Store {
     conn: StoreConnection,
     limits: Limits,
     clock: Clock,
+    observed_clock: Option<Clock>,
     time_uncertain: bool,
     halted: bool,
     #[cfg(test)]
@@ -262,6 +263,7 @@ impl Store {
             conn,
             limits,
             clock,
+            observed_clock: None,
             time_uncertain: false,
             halted: false,
             #[cfg(test)]
@@ -465,6 +467,7 @@ impl Store {
             conn,
             limits,
             clock,
+            observed_clock: None,
             time_uncertain,
             halted: false,
             #[cfg(test)]
