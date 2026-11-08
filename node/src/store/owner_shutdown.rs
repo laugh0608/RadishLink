@@ -81,6 +81,7 @@ impl Store {
         if shutdown.interrupted_output.is_some() || self.ingress.has_channels() {
             return Err(Error::new(Code::Busy, "owner shutdown channels remain"));
         }
+        self.discard_joined_control_dispatches();
         let ingress = self.control_ingress_usage();
         if ingress.waiting != 0 || ingress.verifying != 0 {
             return Err(Error::new(

@@ -66,9 +66,10 @@ mod outbound_terminal_tests;
 mod owner_shutdown_tests;
 pub use control_ingress::{
     ControlIngressAdmission, ControlIngressChannel, ControlIngressUsage,
-    ControlVerificationCompletion, ControlVerificationJob, ControlVerificationOutcome,
-    ControlVerificationPoll, DecodedInbound, InboundDispatch, InboundFrame, InboundPayload,
-    InboundPayloadCredit, InboundReadProgress, InboundReadStep,
+    ControlVerificationCompletion, ControlVerificationDispatch, ControlVerificationDispatchPoll,
+    ControlVerificationJob, ControlVerificationOutcome, ControlVerificationPoll, DecodedInbound,
+    InboundDispatch, InboundFrame, InboundPayload, InboundPayloadCredit, InboundReadProgress,
+    InboundReadStep,
 };
 mod business_policy;
 #[cfg(test)]

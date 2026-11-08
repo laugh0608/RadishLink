@@ -6,10 +6,13 @@ use std::{
 };
 
 mod read;
+mod verification_dispatch;
 pub use read::{
     DecodedInbound, InboundDispatch, InboundFrame, InboundPayload, InboundPayloadCredit,
     InboundReadProgress, InboundReadStep,
 };
+use verification_dispatch::VerificationState;
+pub use verification_dispatch::{ControlVerificationDispatch, ControlVerificationDispatchPoll};
 
 pub const MAX_PENDING_CONTROLS: usize = 16;
 const MAX_CONTROL_BYTES: usize = 512;
@@ -59,7 +62,7 @@ struct Pending {
     source: ControlSource,
     revision: i64,
     bytes: Arc<[u8]>,
-    leased: bool,
+    verification: VerificationState,
 }
 
 struct RegisteredChannel {
@@ -108,7 +111,8 @@ impl ControlIngress {
         self.channels.values().map(|entry| entry.binding)
     }
     pub(super) fn discard_waiting(&mut self) {
-        self.pending.retain(|pending| pending.leased);
+        self.pending
+            .retain(|pending| !matches!(pending.verification, VerificationState::Waiting));
     }
     pub(super) fn require_channel(&self, channel: &OutboundChannel) -> Result<()> {
         match self.channels.get(&channel.peer) {
@@ -559,7 +563,7 @@ impl Store {
             source,
             revision,
             bytes: Arc::from(bytes),
-            leased: false,
+            verification: VerificationState::Waiting,
         });
         Ok((
             ControlIngressAdmission::Queued,
@@ -570,9 +574,22 @@ impl Store {
     /// Removing a waiting stale item never replenishes rate tokens. Leased stale items still
     /// occupy slots until their worker returns/cancels, preventing unbounded in-flight jobs.
     pub fn next_control_verification(&mut self) -> Result<ControlVerificationPoll> {
+        let (index, discarded) = self.next_waiting_verification()?;
+        Ok(ControlVerificationPoll {
+            job: index.map(|index| self.lease_control_job(index, VerificationState::Manual)),
+            discarded,
+        })
+    }
+
+    fn next_waiting_verification(&mut self) -> Result<(Option<usize>, Vec<Error>)> {
         self.writable()?;
         let mut discarded = Vec::new();
-        while let Some(index) = self.ingress.pending.iter().position(|p| !p.leased) {
+        while let Some(index) = self
+            .ingress
+            .pending
+            .iter()
+            .position(|p| matches!(p.verification, VerificationState::Waiting))
+        {
             let pending = &self.ingress.pending[index];
             let context = self.control_ingress_context(pending.activity, pending.source);
             let refusal = match context {
@@ -591,25 +608,27 @@ impl Store {
                 discarded.push(refusal);
                 continue;
             }
-            let pending = &mut self.ingress.pending[index];
-            pending.leased = true;
-            return Ok(ControlVerificationPoll {
-                discarded,
-                job: Some(ControlVerificationJob {
-                    owner: self.ingress.owner.clone(),
-                    id: pending.id,
-                    activity: pending.activity,
-                    domain: pending.domain,
-                    source: pending.source,
-                    revision: pending.revision,
-                    bytes: pending.bytes.clone(),
-                }),
-            });
+            return Ok((Some(index), discarded));
         }
-        Ok(ControlVerificationPoll {
-            discarded,
-            job: None,
-        })
+        Ok((None, discarded))
+    }
+
+    fn lease_control_job(
+        &mut self,
+        index: usize,
+        verification: VerificationState,
+    ) -> ControlVerificationJob {
+        let pending = &mut self.ingress.pending[index];
+        pending.verification = verification;
+        ControlVerificationJob {
+            owner: self.ingress.owner.clone(),
+            id: pending.id,
+            activity: pending.activity,
+            domain: pending.domain,
+            source: pending.source,
+            revision: pending.revision,
+            bytes: pending.bytes.clone(),
+        }
     }
     fn release_control_job(&mut self, job: &ControlVerificationJob) -> Result<Pending> {
         if !Arc::ptr_eq(&job.owner, &self.ingress.owner)
@@ -624,7 +643,7 @@ impl Store {
             .ingress
             .pending
             .iter()
-            .position(|p| p.id == job.id && p.leased)
+            .position(|p| p.id == job.id && matches!(p.verification, VerificationState::Manual))
             .ok_or_else(|| Error::new(Code::Conflict, "control verification job missing"))?;
         Ok(self
             .ingress
@@ -669,6 +688,16 @@ impl Store {
         queue_ack: bool,
     ) -> Result<(ControlVerificationCompletion, OutboundAckAdmission)> {
         let pending = self.release_control_job(&job)?;
+        self.accept_control_verification(pending, outcome, neighbors, queue_ack)
+    }
+
+    fn accept_control_verification(
+        &mut self,
+        pending: Pending,
+        outcome: ControlVerificationOutcome,
+        neighbors: &[ControlNeighbor],
+        queue_ack: bool,
+    ) -> Result<(ControlVerificationCompletion, OutboundAckAdmission)> {
         if matches!(outcome, ControlVerificationOutcome::Rejected) {
             return Ok((
                 ControlVerificationCompletion::Rejected,
@@ -732,7 +761,12 @@ impl Store {
     }
     /// Bounded metadata only; never exposes queued bytes, credentials or decoded payloads.
     pub fn control_ingress_usage(&self) -> ControlIngressUsage {
-        let verifying = self.ingress.pending.iter().filter(|p| p.leased).count();
+        let verifying = self
+            .ingress
+            .pending
+            .iter()
+            .filter(|p| !matches!(p.verification, VerificationState::Waiting))
+            .count();
         ControlIngressUsage {
             waiting: self.ingress.pending.len() - verifying,
             verifying,
