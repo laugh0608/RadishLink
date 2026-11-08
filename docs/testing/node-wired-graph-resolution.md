@@ -91,3 +91,25 @@ macOS `27.0.1`（Darwin `27.0.0`、arm64），使用现有 Python `3.14.5` 的 `
 3. 先以隔离测试端点验证允许目的地、拒绝目的地、重定向和断网后的行为。测试包括已建立连接及新的请求。之后由宿主提供实际索引域控制与证书验证证据，逐项复核本包网络边界。
 
 本机 `sandbox-exec` 失败与合成探针只覆盖当前 macOS 执行环境。当前候选锁解析缺少已验证的运行根，取得上述证据后再按本包评审单次运行。I5 的宿主与整批预算另行验收。
+
+## Linux 宿主筛选与验收顺序
+
+2026-11-08 复核。当前执行端 `uname -srm` 返回 `Darwin 27.0.0 arm64`。已有资源记录只确认 Mac 和 UTM，尚无已登记、可供本包验收的原生 Linux 宿主。历史 Debian guest 可提供配置参考，其启动授权已消费。仓库 PR 检查虽声明 `ubuntu-latest`，当前工作流没有候选锁所需的写入域、出站控制和收束证据。见 [已有宿主资源记录](sw-g4-synthetic-i5-linux-host-assessment.md#已确认范围与结论)和 [PR 工作流](../../.github/workflows/pr-check.yml)。
+
+登记候选宿主时，提供架构、发行版和内核、可用 CPU/RAM、可独占的两个写入承载、可控制的网络出口和独立监督者归属。宿主可为 `aarch64` 或 `x86_64`，依赖取证仍单列 `aarch64-unknown-linux-gnu`。下面是已有 Linux 上的只读初筛，供确定目标后使用。执行结果只用于筛选，实际拒绝需在运行根内观察。
+
+```bash
+uname -srm
+getconf _NPROCESSORS_ONLN
+awk '/^(MemTotal|SwapTotal):/ { print }' /proc/meminfo
+findmnt -n -o FSTYPE --target /sys/fs/cgroup
+cat /sys/fs/cgroup/cgroup.controllers
+```
+
+| 顺序 | 承载与配置候选 | 放行前须拿到的证据 |
+| --- | --- | --- |
+| 1. 绑定两个写入域 | 优先使用有固定块边界的独占文件系统。工作域预算 `58,720,256` bytes，证据域 `8,388,608` bytes。将日志、文件系统元数据和底层新增写入计入对应域，再确定可用于文件内容的额度。 | 读回实际块设备容量、挂载身份、写入归属与只读路径。合成填满工作域时由系统拒绝新增写入，证据域仍能记录失败。若使用 tmpfs，须另列 inode、内核内存和 swap 归属，核对 `size`、`nr_inodes`、`noswap` 的实际生效情况。见 [Linux tmpfs](https://docs.kernel.org/filesystems/tmpfs.html)。 |
+| 2. 绑定监督者与任务域 | Linux cgroup v2 候选配置为 `memory.max=536870912`、`pids.max=16`、`cpu.max=200000 100000`，子进程继承 128 FD 上限。监督者在任务域外持有回收权限，worker 在执行前进入任务域并无权迁出。 | 读取目标组及祖先限制，记录实际 `memory.events`、`pids.events`、CPU 计量及 FD 拒绝。独立监督者在父进程退出、worker 创建新 session 和超过时限的用例中使用 `cgroup.kill`，核对 `cgroup.events` 的 `populated=0`。`memory.max` 在部分情形允许短暂超出，仍须核对宿主和文件系统开销及整组内存边界。见 [Linux cgroup v2](https://docs.kernel.org/admin-guide/cgroup-v2.html)。 |
+| 3. 绑定出站与撤回 | 宿主须能约束运行身份的实际出口，检查目标域、TLS 信任和索引请求范围。出口单独回收，禁止通过继承 FD 或其他网络命名空间绕过。 | 先在隔离测试端点验证允许的索引请求，以及错误证书、其他目标、跨域重定向和直连地址的拒绝。撤回后验证已开连接失效且新连接失败。正式解析前再绑定 `index.crates.io`、实际 DNS/TLS 路径和审核过的配置。见 [Cargo sparse 协议](https://doc.rust-lang.org/cargo/reference/registry-index.html#sparse-protocol)。 |
+
+建议给回收预留最后 10 秒。自解除 worker 启动屏障起，到第 290 秒即撤回出站并请求任务域回收，第 300 秒前核对网络与进程收束并记录终态。若任一证据缺失，保留失败结果与对象清单，继续隔离该任务。具体宿主、设备、挂载和网络配置确定后，按仓库 L3 规则列出操作、时间及回滚方式，先评审合成验收，再评审单次 Cargo 解析。见 [仓库授权规则](../../AGENTS.md#高风险与停止线)。
