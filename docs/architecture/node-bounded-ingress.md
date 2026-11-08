@@ -56,3 +56,33 @@
 | 可信时间与关闭 | 现有 `Ingress`、Store 登记和停止闩锁只提供逻辑证据 | 给出时钟来源、轮转/维护最长单步、局部关闭与全局 Join 的界限及观测点；计划如何验证持续可读下停止、满额拒绝、局部关闭失败与资源归还 |
 
 2026-11-08 接续按上表只读复核。既有 BSP 记录可以定位镜像和内核，缺可用台架、镜像本体来源核验及运行配置。Node manifest/lock 未接入拟议的 Tokio/rustls，仍无实际逐跳适配接口可核对握手、缓冲、限额执行和原连接关闭。可信时间源、读取及关停时限也没有运行证据。真实入口继续停止，T-B 只消费已准备好的合成输入验证持久事务。见[中继接纳验收](../testing/node-outbound-scheduling.md#中继接纳转发与重开2026-11-08)。
+
+## Tokio/rustls 候选接入评审（2026-11-08）
+
+优先评审由拥有者分步驱动 `Tokio TcpStream` 和 `rustls ConnectionCommon` 的方案。源码对照版本为 Tokio `1.54.1`、rustls `0.23.46`、tokio-rustls `0.26.6`，用于固定本次观察。依赖版本、features、密码 provider、完整依赖图和接入接口仍待决策。
+
+`tokio-rustls` 的 `poll_read` 在按调用方 slice 拷贝明文前可以多次从底层读入并处理 TLS 记录，握手也在一次推进中循环读写。`poll_write` 返回的进度可能只到 rustls 缓冲。当前缺少把这些循环直接映射到拥有者单步额度的依据。rustls `set_buffer_limit` 只约束经 `writer()` 写入的应用数据，接收侧和 TLS 自身生成的握手、告警输出须单独封账。Tokio `timeout` 无法抢占未让出执行权的调用，必须单列 TLS 解析与密码调用的工作量。见 [tokio-rustls 读取与握手源码](https://github.com/rustls/tokio-rustls/blob/v/0.26.6/src/common/mod.rs)、[写入与刷新语义](https://docs.rs/tokio-rustls/0.26.6/tokio_rustls/#why-do-i-need-to-call-poll_flush)、[rustls 缓冲配置](https://docs.rs/rustls/0.23.46/rustls/struct.ConnectionCommon.html#method.set_buffer_limit)和 [Tokio timeout](https://docs.rs/tokio/latest/tokio/time/fn.timeout.html)。
+
+### 接口与额度检查点
+
+| 边界 | 执行点与满额行为 |
+| --- | --- |
+| 接受连接与认证 | 在进入 TLS 前为未认证连接预留 FD、握手状态、任务和字节额度，设独立的绝对截止。预留失败时拒绝，内核监听 backlog 另计。禁用 0-RTT，核对 TLS 1.3 双向认证结果与当前活动、participant、原准入政策和精确凭据。恢复会话若纳入设计，须证明当前政策仍被复核。`is_handshaking()` 转为 `false` 后仍可能有握手记录待发送，须用实际待写状态决定后续调度。完成原 Store 登记和 framing 开槽后才允许交付应用明文。 |
+| 传输单步与就绪 | 分别限制每轮 socket 调用次数、密文读写字节和 TLS 状态推进次数。用显式限额的 `Read` / `Write` 适配器调用 `read_tls` / `write_tls`，再分步调用 `process_new_packets`、`reader()` / `writer()`。额度为零时不发起 socket 调用，不向 rustls 伪造 EOF，不把额度耗尽当作内核 `WouldBlock` 清除就绪。真实 `WouldBlock` 等待对应 socket 就绪。已缓冲的 TLS 明文在获得新额度后仍须能被轮转，无需新 socket 事件；每实例保留至多一个待处理标记。见 [Tokio TcpStream 就绪语义](https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.try_io)和 [rustls I/O](https://docs.rs/rustls/0.23.46/rustls/struct.ConnectionCommon.html#method.read_tls)。 |
+| 缓冲与截止 | 分别核算 socket 收发缓冲、TLS 密文与明文滞留、握手证书链及待发记录、应用暂存与 framing、下游和分配器开销。在各自可分配或接纳的入口执行上限，无法证明上限的部分保留接线停止。握手、TLS 滞留和空闲分别定界；保留首个非空 `push` 后 10 秒的 framing 截止。拥有者每步前后检查适用期限；用连续可读和复杂握手负载测量最大单步和维护延迟，结合源码与配置证明硬界限。 |
+| 应用输出与关闭 | 区分应用写入 TLS 的明文偏移、密文提交 socket 的进度和已提交的协议事实；前两者均不生成逐跳 ACK 或接纳事实。撤销、过期、停止或失败使精确实例进入关闭中，丢弃用户态未发送的应用输出。常规 TLS 告警或 `close_notify` 只可在能证明限时且不会刷新已撤回应用输出的路径发送。TLS 截断、正常 EOF 与 socket 错误分别保留原因，均进入原实例收束。 |
+| 本地关闭确认 | 候选为单一所有者持有完整 socket 与 TLS 状态，读写任务和业务 worker 不持有可独立存活的句柄。关闭时撤下就绪，确认最后一个本地 I/O 所有者已退出并释放 socket，若有 I/O 任务则实际 Join 后才确认原实例。`abort()` 发出取消请求，丢弃 `JoinHandle` 会分离任务。Linux 中关闭 FD 后阻塞调用仍可能完成，FD 也可能被复用，故所有确认按精确实例归属。超时仍保留关闭中和原额度，禁止替代登记。见 [Tokio JoinHandle](https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html)和 [Linux close(2)](https://man7.org/linux/man-pages/man2/close.2.html#CAVEATS)。 |
+
+### 故障注入与证据
+
+用合成身份和流量记录精确实例、阶段、单调时刻、额度与实际字节数、拒绝原因、socket 释放和任务 Join 顺序。分别记录应用偏移和密文字节计数；由 Store 核对接纳、ACK、租约归还和同 boot 重开后的事实。运行资源需记录配置上限、实际分配峰值、FD/任务数和最长单步；测得峰值仅适用于对应平台和负载。握手/关闭期限和各层传输额度待以目标平台和选定依赖图定值。
+
+| 注入方式 | 验收观测 | 既有离线证据 |
+| --- | --- | --- |
+| 握手停在首段，占满握手槽后再连；另用错误、过期或撤销凭据，以及 0-RTT 数据 | 超额连接在分配 TLS 状态前拒绝，停滞连接按原截止退出。无提前应用读取、framing 槽、提交或 ACK；原资源收束后新连接才能使用腾出的额度。 | Store 拒绝未知或不适用身份、活动及过期工作；实际握手、0-RTT、backlog 与回收待测。 |
+| 逐字节给前缀并拼接下一帧；半帧分别在 9999、10000、10001 ms 尝试完成，再单测全程无就绪、TLS 截断和适配器报告超读 | 9999 ms 仍可按当前额度尝试完成，10000 ms 起拒绝；无新事件也按原截止维护。拼接不越过当前帧，截断或超读不移交、不确认。记录首次明文字节到首次 `push` 的间隔。 | framing 覆盖分片、拼接、精确到期和维护。socket/TLS 定时、截断和超读联动待测。 |
+| 四个应用实例持续可读，另连第五个；填满下游和 TLS 各向缓冲，让接收方停止读取并注入假就绪 | 按层记录拒绝和内存，轮转仍能执行维护及停止。`WouldBlock` 不推进偏移、不延长原期限；额度恢复后已缓冲明文可继续。不为满额帧增加副本、队列或 ACK。 | 四个 framing 槽和 16 个控制验签等待/租约槽的满额行为已覆盖；传输缓冲、就绪恢复和实际轮转延迟待测。 |
+| 应用短写后撤销或关停，延迟 I/O Join，同时让原实例的验证结果到达 | 关闭中停止新 socket 写入、入站派发和旧结果提交。超时仍保留原实例；迟到结果只归还旧租约。取得 socket 释放和 Join 证据后才确认原实例。同 boot 重开对照提交事实，未接纳的输入不得产生 ACK。 | 短写、撤销、原租约和逻辑停机有离线证据；关闭中接线、TLS 用户态待发丢弃和实际 Join 待测。 |
+| 关闭确认前后各用同凭据重连，向新实例投递旧就绪、重复关闭确认和旧验证回调，另覆盖 FD 复用 | 确认前拒绝替代实例；确认后只允许新实例的合法工作提交，旧通知不抢占新槽，旧回调不改写新实例或归还新额度。 | Store 覆盖同凭据重连、旧结果释放和旧等待项清理；真实 FD 复用及 I/O 回调次序待测。 |
+
+本次以 Rust `1.97.1` 对 `node/Cargo.toml` 运行 `cargo test --offline --locked --lib` 的四组筛选，`framing::tests` 12 项、`store::control_ingress_tests` 18 项、`store::outbound_handoff_tests` 14 项、`store::owner_shutdown_tests` 2 项均通过。真实接线仍需要已审查的依赖图、可用 Linux ARM64 台架、可信时间和上述传输观测。HW1 当前优先评审的 Armbian 镜像及其信任缺口以[首轮评审记录](../hardware/hardware-validation-plan.md#首轮范围与镜像信任评审2026-11-08)为准。
