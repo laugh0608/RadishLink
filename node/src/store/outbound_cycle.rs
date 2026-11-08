@@ -64,9 +64,32 @@ impl Store {
         &mut self,
         cycle: &mut OutboundCycle,
         input: OutboundCycleInput,
+        observe: impl FnMut(&OutboundCandidate) -> Result<Batch>,
+    ) -> Result<OutboundCycleReport> {
+        self.run_outbound_cycle(cycle, input, observe, None)
+    }
+
+    /// Offline handoff path. Both callbacks read previously captured, authenticated inputs.
+    /// For ACK events `bind` supplies the exact instance of the verified inbound request.
+    pub fn process_outbound_cycle_with_handoff(
+        &mut self,
+        cycle: &mut OutboundCycle,
+        input: OutboundCycleInput,
+        observe: impl FnMut(&OutboundCandidate) -> Result<Batch>,
+        mut bind: impl FnMut(&OutboundEvent) -> Option<OutboundChannel>,
+    ) -> Result<OutboundCycleReport> {
+        self.run_outbound_cycle(cycle, input, observe, Some(&mut bind))
+    }
+
+    fn run_outbound_cycle(
+        &mut self,
+        cycle: &mut OutboundCycle,
+        input: OutboundCycleInput,
         mut observe: impl FnMut(&OutboundCandidate) -> Result<Batch>,
+        bind: Option<&mut outbound_handoff::BindChannel<'_>>,
     ) -> Result<OutboundCycleReport> {
         self.validate_clock_advance(&input.clock)?;
+        self.handoff.require_drained()?;
         cycle.data.check_scope(self)?;
         cycle.ordinary.check_scope(self)?;
         if self.revision()? != input.expected_revision {
@@ -156,6 +179,9 @@ impl Store {
             });
         }
         let now = input.clock.monotonic_ms;
+        let handoff = bind
+            .map(|bind| self.prepare_outbound_handoff(activity, &events, bind))
+            .transpose()?;
         let outbound = if events.is_empty() {
             OutboundReport {
                 decisions: Vec::new(),
@@ -165,6 +191,10 @@ impl Store {
             self.process_outbound_batch(input.clock, events)?
         };
         // No fallible work after the successful COMMIT. An Err never publishes these positions.
+        if let Some(prepared) = handoff {
+            self.handoff
+                .publish(prepared, input.expected_revision + 1, &outbound);
+        }
         cycle.data = data;
         cycle.ordinary = ordinary;
         cycle.last_ms = Some(now);

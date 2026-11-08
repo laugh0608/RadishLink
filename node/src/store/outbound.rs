@@ -36,27 +36,72 @@ pub struct OutboundReport {
 }
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-enum Responsibility {
+pub enum OutboundResponsibility {
     Queue(QueueKey),
     Control(ObjectRef, ParticipantId),
     DataAck(String, String),
     ControlAck(ObjectRef, ParticipantId),
 }
+use OutboundResponsibility as Responsibility;
+
+fn validate_message_refs(message: &str, neighbor: &str) -> Result<()> {
+    check_ref(message)?;
+    check_ref(neighbor)
+}
+
+impl OutboundEvent {
+    pub(super) fn validate_refs(&self) -> Result<()> {
+        match self {
+            Self::Queue(event) => {
+                validate_message_refs(&event.queue.message, &event.queue.neighbor)
+            }
+            Self::DataAck { message, neighbor } => validate_message_refs(message, neighbor),
+            _ => Ok(()),
+        }
+    }
+
+    pub(super) fn responsibility(&self) -> Responsibility {
+        match self {
+            Self::Queue(event) => Responsibility::Queue(event.queue.clone()),
+            Self::Control(event) => Responsibility::Control(event.object, event.neighbor),
+            Self::DataAck { message, neighbor } => {
+                Responsibility::DataAck(message.clone(), neighbor.clone())
+            }
+            Self::ControlAck { object, neighbor } => Responsibility::ControlAck(*object, *neighbor),
+        }
+    }
+}
+
+impl OutboundDecision {
+    pub(super) fn output(&self) -> Option<Responsibility> {
+        match self {
+            Self::Queue(key, decision) if decision.send => Some(Responsibility::Queue(key.clone())),
+            Self::Control(decision) if decision.send => {
+                Some(Responsibility::Control(decision.object, decision.neighbor))
+            }
+            Self::DataAck {
+                message,
+                neighbor,
+                send: true,
+            } => Some(Responsibility::DataAck(message.clone(), neighbor.clone())),
+            Self::ControlAck {
+                object,
+                neighbor,
+                send: true,
+            } => Some(Responsibility::ControlAck(*object, *neighbor)),
+            _ => None,
+        }
+    }
+}
 impl Responsibility {
     fn validate(&self) -> Result<()> {
         match self {
-            Self::Queue(k) => {
-                check_ref(&k.message)?;
-                check_ref(&k.neighbor)?;
-            }
-            Self::DataAck(m, n) => {
-                check_ref(m)?;
-                check_ref(n)?;
-            }
-            _ => {}
+            Self::Queue(key) => validate_message_refs(&key.message, &key.neighbor),
+            Self::DataAck(message, neighbor) => validate_message_refs(message, neighbor),
+            _ => Ok(()),
         }
-        Ok(())
     }
+
     fn data(&self) -> bool {
         matches!(
             self,
@@ -85,11 +130,13 @@ impl Store {
         events: Vec<OutboundEvent>,
     ) -> Result<OutboundReport> {
         self.validate_clock_advance(&clock)?;
+        self.handoff.require_drained()?;
         if events.is_empty() || events.len() > scheduling::MAX_QUEUE_EVENTS {
             return Err(Error::new(Code::InvalidInput, "outbound batch size"));
         }
         let mut merged: BTreeMap<Responsibility, Option<Batch>> = BTreeMap::new();
         for e in events {
+            e.validate_refs()?;
             let (key, batch) = match e {
                 OutboundEvent::Queue(e) => (Responsibility::Queue(e.queue), Some(e.batch)),
                 OutboundEvent::Control(e) => (
@@ -108,7 +155,6 @@ impl Store {
                     (Responsibility::ControlAck(object, neighbor), None)
                 }
             };
-            key.validate()?;
             if batch.is_some_and(|b| b.now_ms != clock.monotonic_ms) {
                 return Err(Error::new(Code::InvalidInput, "outbound batch coordinate"));
             }
@@ -293,18 +339,7 @@ impl Store {
         neighbor: &str,
         clock: &Clock,
     ) -> Result<bool> {
-        let exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM messages WHERE key=?1)",
-            [key],
-            |r| r.get(0),
-        )?;
-        if !exists {
-            return Ok(false);
-        }
-        self.authorize_business_message(key, Some(neighbor), clock.monotonic_ms)?;
-        self.data_remaining_at(key, clock)?;
-        let stored:bool=self.conn.query_row("SELECT role!='origin' AND (payload IS NOT NULL OR role='destination') FROM messages WHERE key=?1",[key],|r|r.get(0))?;
-        if !stored {
+        if !self.data_ack_eligible(key, neighbor, clock)? {
             return Ok(false);
         }
         let Some(mut slots) = self.ack_slots(key)? else {
@@ -344,6 +379,23 @@ impl Store {
             params![key, encoded],
         )?;
         Ok(true)
+    }
+    pub(super) fn data_ack_eligible(
+        &self,
+        key: &str,
+        neighbor: &str,
+        clock: &Clock,
+    ) -> Result<bool> {
+        let stored: Option<bool> = self.conn.query_row(
+            "SELECT role!='origin' AND (payload IS NOT NULL OR role='destination') FROM messages WHERE key=?1",
+            [key], |r| r.get(0),
+        ).optional()?;
+        let Some(stored) = stored else {
+            return Ok(false);
+        };
+        self.authorize_business_message(key, Some(neighbor), clock.monotonic_ms)?;
+        self.data_remaining_at(key, clock)?;
+        Ok(stored)
     }
     pub(super) fn check_outbound_invariants(&self) -> Result<()> {
         self.outbound_cursor("exit_cursor")?;

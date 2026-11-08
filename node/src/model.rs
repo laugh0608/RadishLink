@@ -159,6 +159,17 @@ pub struct Clock {
     pub trusted_utc: Option<crate::data::UtcInterval>,
 }
 impl Clock {
+    pub(crate) fn precedes(&self, previous: &Self) -> bool {
+        self.boot != previous.boot
+            || self.monotonic_ms < previous.monotonic_ms
+            || previous
+                .utc_lower_ms()
+                .is_some_and(|old| self.utc_lower_ms().is_none_or(|new| new < old))
+            || previous
+                .utc_upper_ms()
+                .is_some_and(|old| self.utc_upper_ms().is_none_or(|new| new < old))
+    }
+
     pub fn utc_lower_ms(&self) -> Option<i64> {
         self.trusted_utc.map(|v| v.lower_ms)
     }

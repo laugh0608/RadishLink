@@ -102,17 +102,7 @@ impl Store {
             self.time_uncertain = true;
             return Err(error);
         }
-        if clock.boot != self.clock.boot
-            || clock.monotonic_ms < self.clock.monotonic_ms
-            || self
-                .clock
-                .utc_lower_ms()
-                .is_some_and(|w| clock.utc_lower_ms().is_none_or(|n| n < w))
-            || self
-                .clock
-                .utc_upper_ms()
-                .is_some_and(|u| clock.utc_upper_ms().is_none_or(|n| n < u))
-        {
+        if clock.precedes(&self.clock) || self.handoff.observed_after(clock) {
             self.time_uncertain = true;
             return Err(Error::new(Code::TimeUncertain, "clock regression"));
         }

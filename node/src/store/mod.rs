@@ -37,6 +37,14 @@ mod outbound_cycle;
 pub use outbound_cycle::{
     MAX_CYCLE_ACKS, OutboundAck, OutboundCycle, OutboundCycleInput, OutboundCycleReport,
 };
+mod outbound_handoff;
+#[cfg(test)]
+mod outbound_handoff_tests;
+pub use outbound::OutboundResponsibility;
+pub use outbound_handoff::{
+    OutboundChannel, OutboundFrame, OutboundHandoffInput, OutboundHandoffRequest,
+    OutboundHandoffStep, OutboundWrite, OutboundWriteProgress,
+};
 mod control_ingress;
 #[cfg(test)]
 mod outbound_cycle_recovery_tests;
@@ -84,6 +92,7 @@ const DB_PAGES: i64 = 32768; // 128 MiB at the required 4096-byte page size; jou
 
 pub struct Store {
     ingress: control_ingress::ControlIngress,
+    handoff: outbound_handoff::HandoffState,
     conn: StoreConnection,
     limits: Limits,
     clock: Clock,
@@ -222,6 +231,7 @@ impl Store {
         }
         Ok(Self {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
+            handoff: outbound_handoff::HandoffState::default(),
             conn,
             limits,
             clock,
@@ -414,6 +424,7 @@ impl Store {
             || upper.is_some_and(|u| clock.utc_upper_ms().is_none_or(|n| n < u));
         let mut s = Self {
             ingress: control_ingress::ControlIngress::new(clock.monotonic_ms),
+            handoff: outbound_handoff::HandoffState::default(),
             conn,
             limits,
             clock,

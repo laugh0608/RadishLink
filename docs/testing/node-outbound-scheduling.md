@@ -138,6 +138,27 @@ git diff --check
 
 收尾 fmt、仓库检查（322 文件）、55 个本地 Markdown 锚点及 `git diff --check` 通过。manifest/lock、全部 SQL、根入口、原 retry/外发算法及 Service/CLI 未变；Cargo.lock SHA-256 仍为 `b5bb6b889765b5005bb20645ad5b1bf1b09573451dbad966cfa12d0ec68fbd24`。测试及故障子进程均已退出，临时库由测试清理，无本任务后台进程；日志与缓存保留。dev 相对本地 origin/dev ahead 4，本批未暂存/提交，未 fetch/push 或改变远程状态。生产 run 仍拒绝；许可证/R2/Phase B、新图 G1/G2、可信 boot/UTC、真实密码/设备/VM/网络及数据迁移停止线保持。
 
+## 单次交接离线接续（2026-11-08）
+
+按[单次交接设计](../architecture/node-outbound-owner.md#单次交接与撤销设计2026-11-08)复核了单批滞留、末次尝试与后到终结的区分、复核与合成写入的顺序。首批使用队首串行推进，以合成回调报告写入结果和关闭要求。没有新的持久行、配置、依赖或 Service/CLI 入口。
+
+14 项定向用例覆盖五类提交后交接、无关 Store 提交、无绑定/否决/重复、原计费不变、提交前失败与提交未知、短写续写偏移、撤销后原通道关闭、同凭据重连、有效 custody 暂停、单调与 UTC 期限、最后一次控制机会、原始自身退出例外、写入失败和旧拥有者拒绝。下一批及旧队列调度入口在当前批未清空时返回 `Busy`。
+
+仍需真实输入路由提供认证后的通道实例与终结事件。用例里的关闭是需关闭哪个实例的结果，完整写入是回调报告；实际通道关闭、字节所有权、可信时钟、端到端安全和 worker Join 未验证。
+
+使用既有 Rust 1.97.1 工具链、离线锁定依赖和合成临时数据库。
+
+```bash
+RUSTUP_AUTO_INSTALL=0 cargo +1.97.1 fmt --manifest-path node/Cargo.toml -- --check
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml store::outbound_handoff_tests
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 clippy --offline --locked --manifest-path node/Cargo.toml --all-targets -- -D warnings
+RUSTUP_AUTO_INSTALL=0 CARGO_TARGET_DIR="$PWD/.cache/node/target" cargo +1.97.1 test --offline --locked --manifest-path node/Cargo.toml --quiet
+```
+
+增补重开负例时，定向测试退出 101。测试在重开后仅推进 1 ms，空桶无法发出新 ACK，测试对空项解包。改用原 4 frames/s 允许新 ACK 的最早 250 ms 补充间隔，保留生产限速。补充采集前引用长度检查时，同一命令首次退出 101，`E0599` 指出持久轮转位置仍需原责任校验入口。保留该入口，并让它与采集入口复用同一引用校验。
+
+最终定向 14/14、默认并行全量 234 项库测试与 2 项 CLI 测试通过，库测试耗时 128.66 秒。fmt、Clippy、仓库检查和 `git diff --check` 通过。测试子进程均已退出，改动留在工作区，未暂存、提交或推送。
+
 上述交接后，所有者明确要求提交工作区，再回顾当天提交、核对文档并单独作日终文档提交；同步周期本地提交据此授权，不包含 push 或继续新的实现工作。
 
 同步周期随后已提交为 `c4ffb5b`。当天提交、代码与文档核对、最新接续及最终工作区状态统一见[11 月 2 日回顾](../status/2026-11-02-progress.md)，前述“未提交”保留各批交接时点，不表示当前仍未提交。

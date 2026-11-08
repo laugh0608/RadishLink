@@ -118,6 +118,10 @@ impl Decision {
     }
 }
 impl RetryState {
+    pub(crate) fn may_handoff(&self, now_ms: i64) -> bool {
+        self.phase == Phase::Active && self.link == Link::Up && now_ms < self.deadline_ms
+    }
+
     pub(crate) fn deadline_ms(&self) -> i64 {
         self.deadline_ms
     }
