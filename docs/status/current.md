@@ -47,7 +47,7 @@ I1–I5-I 已提交并通过有限离线验证；容量核验和受限双构建 
 | mls-rs `0.56.0` | D2：同一固定 94-package 图 Phase A `PASS`；D 的旧 feature-gate `STOP` 保留 | [Phase A 记录](../testing/sw-g2-mls-rs-phase-a-authorization.md)；工具通过不等于分发义务或安全适配完成 |
 | mls-rs 许可证证据 | R1/R1b 传输负向；R1c-R 为 `STOP/license-evidence`；R1d-L 为 `STOP/license-disposition` | [补证与复核包](../testing/sw-g2-mls-rs-license-notice-review.md)、[处置评审](../testing/sw-g2-mls-rs-license-disposition-review.md)；R2 前置未满足 |
 | `SW-G2 / SW-V1..V3` | E2EE 决策未通过，后续正式场景未执行 | [决策包](../security/e2ee-sw-g2-decision-package.md)；没有已验证 E2EE 或产品软件闭环 |
-| `HW` | HW1 预算取舍和台架验收表已整理，仍处于 `HW-G0`。b1 镜像与双接口有纸面依据，按原预算未见可行的完整三节点报价 | [预算取舍](../hardware/poc-purchase-list.md#hw1-预算取舍2026-11-08)、[台架验收表](../hardware/hardware-validation-plan.md#hw1-台架验收表2026-11-08) |
+| `HW` | 仍处于 `HW-G0`。首轮按完整三节点准备，优先评审 Armbian 镜像，实际到手额和首轮新上限待定 | [预算取舍](../hardware/poc-purchase-list.md#hw1-预算取舍2026-11-08)、[台架验收表](../hardware/hardware-validation-plan.md#hw1-台架验收表2026-11-08)、[首轮评审记录](../hardware/hardware-validation-plan.md#首轮范围与镜像信任评审2026-11-08) |
 | `RF` | 上海地区输入已确认，SKU/配置与法规结论未关闭，保持 `RF-R0` | [法规预检](../regulatory/radio-compliance.md)，采购与发射暂停 |
 
 mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/MIT 正文；`debug_tree 0.4.0` 缺绑定固定源码的 MIT notice/holder，`r-efi 6.0.0` 的 `AUTHORS` 含完整 MIT 正文与归属，但缺另两项声明 alternative 的完整正文。前者的 R1d-U-P/I 已完成澄清设计及离线 helper，公开发送 X 与只读收集 R 均未执行；后者等待独立法律评审后再分流。这是证据和处置缺口，不是许可证不存在、违法或候选淘汰结论。
@@ -60,7 +60,7 @@ mls-rs 当前实质缺口：R1c-R 已为 9 个 mls-rs package 取得 Apache-2.0/
 
 [帧边界与 G0 输入准备](../testing/node-framing-and-graph-inputs.md)仅覆盖 4 邻居/64 KiB/10 秒组装及 7957-byte 可复现审阅包。framing 未接入 transport/Service；D15/D16 内部持久字段已实施，业务身份与活动/撤销已在内部事务关联；共享外发/轮转及 kind 2/3 入站限速/有界等待已完成内部接线，当前域/活动的候选分页与同步离线拥有者周期已完成；真实输入路由/验证工作池、传输公平与输出交接、可信 boot/UTC 与真实配对/签验仍缺，严格 CBOR/MLS 未接入。D18 只开放内部合成边界，没有 Service/CLI 恢复命令；[新图 G1/G2](../testing/node-security-graph-review-package.md)缺真实硬资源、网络和进程监督证据，未执行。许可证/R2、Phase B、可信平台和真实运行停止线不变。
 
-HW1 已按所有者既有查价比较分期、调整额度与改选硬件。暂缓功率计的三节点小计为 1824 元，仍超首轮上限 824 元。整套上限 3000 元，累计支出基线为 0 元。下一决策是确认首轮目标和额度，再核对到手明细、BSP 来源与维护、串口及恢复路径，见[预算取舍](../hardware/poc-purchase-list.md#hw1-预算取舍2026-11-08)和[台架验收表](../hardware/hardware-validation-plan.md#hw1-台架验收表2026-11-08)。
+所有者已选择 HW1 首轮按完整三节点准备，镜像优先评审 Armbian。暂缓功率计的已知小计为 1824 元，仍超现行首轮上限 824 元。首轮新上限、实际到手额及预留待确认，整套上限 3000 元，累计支出基线为 0 元。Armbian 已定位固定镜像及签名小文件，本体验签与 ZERO 3E 兼容性待核对。见[预算取舍](../hardware/poc-purchase-list.md#hw1-预算取舍2026-11-08)和[首轮评审记录](../hardware/hardware-validation-plan.md#首轮范围与镜像信任评审2026-11-08)。
 
 2026-10-18 已完成 RPC/宿主生命周期、初始化与容量评审、合成暂存收尾、执行合同纯校验、原生初始化和 P/N/S/W 生命周期的离线实现，最新实现提交为 `fa48743`。完整提交清单、代码/文档核对与[接下来的事项](2026-10-18-progress.md#接下来的事项)见当天回顾。宿主保守 897 秒/绝对 900 秒、guest 540 秒不变；真实 FD loader、来源/物理边界及运行授权仍缺，离线结果不证明 Linux/UTM 实测通过。
 

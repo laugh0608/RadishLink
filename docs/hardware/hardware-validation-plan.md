@@ -223,6 +223,60 @@ Linux A ── Ethernet/USB ── Linux B ── Ethernet/USB ── Linux C
 
 本次结论是 HW-G0 的 HW1 目标与验收材料可交所有者评审。HW-G1 待关闭交付、镜像来源/维护、Mac 串口和预算缺口，样本与阈值待按用途冻结。当前 gate 仍为 HW-G0，预算与采购决定由所有者另行确认。
 
+## HW1 镜像、串口与恢复预检（2026-11-08）
+
+适用于 ZERO 3E 2GB 候选的单板预检与完整三节点方案。复核范围为公开发行元数据、小型发布文本、源码说明和本机工具版本。镜像、驱动与 wheel 本体的核验和到货实测列入后续操作包。预算路径仍待决定。见[HW1 预算取舍](poc-purchase-list.md#hw1-预算取舍2026-11-08)。
+
+### 镜像发布与 BSP 证据
+
+| 对象 | 本次复核得到的依据 | 关闭条件 |
+| --- | --- | --- |
+| 标准 microSD 镜像 | `rsdk-b1` release ID `232385470`，公开 API 返回 `immutable: false`。`radxa-zero3_bookworm_kde_b1.output_512.img.xz` 资产 ID `272946966`、1454086428 bytes，API SHA-256 与先前记录一致。发布页标准镜像和 UFS 镜像分别列出。见[发布页](https://github.com/radxa-build/radxa-zero3/releases/tag/rsdk-b1)与[发布 API](https://api.github.com/repos/radxa-build/radxa-zero3/releases/tags/rsdk-b1) | 绑定标准镜像文件名、资产 ID、长度、SHA-256 与 SHA-512。任何字段漂移先重新评审 |
+| 发布者校验文本 | `radxa-zero3_bookworm_kde_b1.sha512sum` 资产 ID `272947609`，1211 bytes，文本实算 SHA-256 为 `d24da388805952397ea7d5f5df3cbac88d5255ff71d451da4ea04a0101d1422d`，与 API 一致。标准镜像行的 SHA-512 为 `6f9f67df6f997bef41aac2cc568ebb4b7820216be1256a49ce472cb877684c08ad793ff726da3155a02f0eab60b2b2c9318168b3cf8fab81849ae91e8724f10d`，与发布正文一致。见[资产列表](https://github.com/radxa-build/radxa-zero3/releases/expanded_assets/rsdk-b1) | 后续对压缩镜像本体实算双摘要并对比固定值。两份摘要来自同一发布渠道，来源核验独立判定 |
+| 镜像来源 | `rsdk-b1` 指向 commit `756ccb960867b08e29315fdad24c2dbba5557957`，GitHub 报告该提交签名有效。公开 attestation API 按上述镜像 SHA-256 查询返回 HTTP 404，资产列表也未找到镜像签名。当前只有提交签名和发布者摘要。见[提交](https://github.com/radxa-build/radxa-zero3/commit/756ccb960867b08e29315fdad24c2dbba5557957)和[证明查询 API](https://docs.github.com/en/rest/repos/attestations#list-attestations) | 取得能绑定镜像摘要的可验证发布证据，或由所有者对官方渠道加固定摘要能否作为有限隔离台架的信任依据作明确裁决。来源待定时停止写卡 |
+| 内核与有线接口 | `6.1.84-10` 发行资产中，`linux-image-6.1.84-10-rk2410-nocsf_6.1.84-10_arm64.deb` 为 `272705121`，`linux-image-radxa-zero3_6.1.84-10_all.deb` 为 `272705123`。已定位的打包/内核 commit 包含 ZERO 3E 设备树、USB Host 与 `r8152` 的源码依据。见[固定内核发布](https://github.com/radxa-pkg/linux-rk2410-nocsf/releases/tag/6.1.84-10)与[版本证据](#镜像与接口版本证据2026-10-24) | 后续核对镜像内实际包版本、DTB、网卡 VID/PID 与驱动绑定，记录双接口并行与重枚举结果。发布资产目前只定位到元数据 |
+| 引导与固件 | 在 `radxa-pkg/u-boot-rk2410` 的 `2017.09-51` 同一发布中，已定位 `u-boot-radxa-zero3_2017.09-51-4db083c_all.deb`（`272669737`）与 `u-boot-rk2410_2017.09-51-f7a5177_arm64.deb`（`272669738`）。该发布标签指向 `d849b92181d0e960d13d20e54e39c9c696c05dec`。复算 b1 包表摘要后，确认内核和两个引导包版本与发布条目一致，固件待核对象为 `radxa-firmware=0.2.22`、`firmware-realtek=20241210-1`。见[固定 U-Boot 发布](https://github.com/radxa-pkg/u-boot-rk2410/releases/tag/2017.09-51)与[发布 API](https://api.github.com/repos/radxa-pkg/u-boot-rk2410/releases/tags/2017.09-51) | 核对镜像实际引导组件与包中 payload，保留精确版本的来源、版权/许可文件与固件归属。发布标签只能定位分发入口，引导二进制与源码的映射及固件来源仍缺 |
+| 更新与维护 | 公开 rk3566 包索引复核到内核 `6.1.84-18` 和 U-Boot `2017.09-62`，与 b1 包表不同。见[厂商包索引](https://github.com/radxa-repo/rk3566-bookworm/blob/main/pkgs.json) | 将 b1 固定隔离基线的用途和更新另案列清。更新评审须取得精确仓库签名链、包差量、对应许可材料、回退基线及维护责任。实际许可与维护范围仍待关闭 |
+
+另读取 `radxa-zero3_bookworm_kde_b1.build-512-image` 的 3513 bytes 文本，实算 SHA-256 与发布 API 一致。脚本文本按文件系统和分区数据计算截断位置，写卡容量判断应使用实际解压后的镜像字节数。后续只按已核验的标准镜像制卡。见[构建文本发布条目](https://github.com/radxa-build/radxa-zero3/releases/expanded_assets/rsdk-b1)。
+
+### Mac 串口的来源与判定
+
+本机只读复核为 macOS 27.0.1（26A434）、arm64、Python 3.14.5。该解释器未找到 `serial` 模块，`termios` 未提供 `B1500000`。pySerial 固定源码的 Darwin 分支可通过 `IOSSIOSPEED` 请求 1500000 baud，驱动接受速率与有效收发仍需到货后验证。见[pySerial 固定源码](https://github.com/pyserial/pyserial/blob/0e7634747568547b8a7f9fd0c48ed74f16af4b23/serial/serialposix.py)。
+
+| 步骤 | 来源与通过条件 | 停止条件 |
+| --- | --- | --- |
+| 固定工具 | PyPI wheel 候选 `pyserial-3.5-py2.py3-none-any.whl`，90585 bytes，SHA-256 `c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0`。独立工具环境在获准安装后核对 wheel 摘要、Python 版本、模块版本和终端入口。见[PyPI 文件记录](https://pypi.org/project/pyserial/3.5/#files)与[固定源码许可证](https://github.com/pyserial/pyserial/blob/0e7634747568547b8a7f9fd0c48ed74f16af4b23/LICENSE.txt) | 摘要、工具入口或解释器不符时停止，先核对固定输入 |
+| 确认驱动绑定 | 到货后先辨认现有 macOS 驱动是否产生与适配器 VID/PID 一一对应的串口，再评审驱动增量。WCH 固定 revision `09629694b207cdce66861b6fe821b68993507be9` 列出 `CH34xVCPDriver.dmg`（3948032 bytes，Git blob `280ccbee87645ba1c4ffee2ac6fa3c88a03b75b7`）及 `.pkg`。如需安装，先绑定产物、独立 SHA-256、签名主体、公证状态、当前系统支持及精确卸载路径。见[WCH 固定目录记录](https://api.github.com/repos/WCHSoftGroup/ch34xser_macos/contents?ref=09629694b207cdce66861b6fe821b68993507be9)与[厂商说明](https://github.com/WCHSoftGroup/ch34xser_macos/blob/09629694b207cdce66861b6fe821b68993507be9/README.md) | 设备对应关系、来源或系统支持不清时停止。系统扩展与安装另走精确授权 |
+| 适配器回环 | 先在适配器端验证 3.3 V 设置，板卡保持未连接。对唯一端口以 1500000、8N1、无硬件/软件流控进行受控回环，记录合成输入长度、摘要、收发计数与错误。回环应按 manifest 的观察窗完整返回输入 | 无法设置速率、回显不一致或错误不可解释时停在回环。回环结果只用于本适配器和当前驱动组合 |
+| 板端冷启动 | 移除回环，再按 UART2_M0 接线，适配器 RX 接板 pin 8 TX、TX 接 pin 10 RX、共地接 pin 6，使用 3.3 V TTL，供电脚留空。先只收冷启动日志，出现预期登录提示后再在授权范围内交互。见[板端接口](https://docs.radxa.com/en/zero/zero3/hardware-design/hardware-interface) | 乱码、缺启动阶段、提示与预期不符或无法安全退出时保存脱敏诊断，停止该节点的后续用例 |
+
+### 写卡前的核验与备卡救援
+
+1. 来源判定通过后，未来操作包冻结下载位置、压缩镜像的固定长度和双摘要、解压及暂存上限。解压验证后记录原始镜像字节数及 SHA-256，确认授权目标卡的真实容量足够。压缩摘要漂移、解压失败或超额时停止。
+2. 目标只允许选中经确认可覆盖的系统卡或恢复卡。写前用读卡器、物理标签与容量复核目标，插拔后重新确认路径。写后在首次启动前从目标介质回读原始镜像长度的范围，比对 SHA-256。目标不明或回读不符时保留原因，停止上电。
+3. 原卡故障时先记录节点、故障点、卡的脱敏编号和最后已确认的持久标记，再隔离原卡。诊断原介质须先审定只读获取方式。备卡使用核验通过的基线镜像，逐台记录首次启动、串口、版本和重新配置结果。单板阶段只覆盖该板，三节点阶段复用备卡前重新确认目标和授权。
+4. 恢复节点若无法安全重用原有应用状态，按 Node 的独立恢复验收处理身份与状态。备卡的启动结果归入 `HW1-05`，后续消息、去重和确认结果归入 `HW1-08`。见[到货后的验收顺序](#到货后的验收顺序)。
+
+当前纸面结论为候选文件和对应验收步骤已定位。待关闭项包括镜像来源信任与固件许可/维护、交付版本和成本，以及串口驱动绑定与实测。当前仍为 HW-G0，以上供 HW-G1 复核及后续 HW-G3 操作包使用。
+
+### 首轮范围与镜像信任评审（2026-11-08）
+
+首轮暂按现有 1000 元上限与整套 3000 元上限评审。若选择单板，采购评审使用 748 元物料小计，距上限的 252 元须同时覆盖供电线缺口、实际价差、税运和预留。运行范围限该板的 `HW1-01/02`、本地关机与备卡启动。若选择首轮完整三节点，先明确新的首轮上限，再以暂缓功率计的 1824 元小计加实际费用核算。维持 1000 元且要求完整三节点时，先提交全套替代 BOM。见[预算取舍](poc-purchase-list.md#hw1-预算取舍2026-11-08)。
+
+| 镜像路径 | 已取得的依据 | 待裁决与后续证据 |
+| --- | --- | --- |
+| 保留 Radxa b1 | 固定发行元数据、压缩镜像长度与双摘要，b1 包表、内核和引导候选已定位。提交签名与镜像证明分别记录。见[镜像发布与 BSP 证据](#镜像发布与-bsp-证据) | 优先取得绑定镜像摘要的可验证发布证据。若考虑用官方发布渠道与固定摘要作为有限隔离台架的信任依据，由所有者明确接受该用途，限该候选、纯有线隔离环境及合成数据。镜像本体双摘要、设备与软件前置仍按各自步骤核对 |
+| 要求镜像本体签名，评审 Armbian 备选 | 官方 ZERO 3 页面列 `Armbian 26.8.1 Minimal (CLI)`、Debian 13、vendor 内核 `6.1.115`。通过官方入口取得对应的 `.sha` 与 `.asc` 小文件。见[板型发布页](https://armbian.com/boards/radxa-zero3)、[校验文本入口](https://dl.armbian.com/radxa-zero3/Trixie_vendor_minimal.sha)和[签名入口](https://dl.armbian.com/radxa-zero3/Trixie_vendor_minimal.asc) | 绑定本体、签名和获审签名者，按官方流程验签。再核对 3E 的实际 revision、设备树、双有线接口、UART、备卡恢复、BSP 许可及维护来源。候选核对结果供所有者决定是否改用该镜像。见[发布验签说明](https://docs.armbian.com/getting-started/choosing-an-image/#download-and-verification) |
+
+Armbian 的校验文本指向 `Armbian_26.8.1_Radxa-zero3_trixie_vendor_6.1.115_minimal.img.xz`，期望 SHA-256 为 `e78de9cb4b2d8ff1710c65c509d08faef1ba88c07fc3276b9dd637597e8234e8`。取得的 `.asc` 为 833 bytes，签名文件自身的 SHA-256 为 `559efd4683d27d533206509d68d7b318ce893551faf38399f047490c9a9137c3`。初次直连归档镜像的两次小文件读取均在 TLS 握手阶段超时，经官方下载入口复核成功。当前只核对小文件及标识，镜像本体与实际签名验证待执行。当前 PATH 可定位 `xz`、`shasum` 与 `diskutil`，未找到 `gpg`，备选验签还须绑定现有合格工具或单独评审安装。
+
+所有者已选择首轮准备完整三节点，并优先评审 Armbian 的镜像签名路径。首轮新上限仍待明确，以暂缓功率计的 1824 元小计加实际费用和预留核算。下一份 BOM 复核逐项绑定三台交付 revision、赠送线数量、配件、税运、退换和预留。费用核齐后按 `3000 − 实际首轮支出` 核对后续余额，另列功率测量、交互、双端音频及携带供电的增量。
+
+Armbian 官方下载入口的 HEAD 请求落到同名归档，响应长度为 394195116 bytes，供后续绑定压缩本体使用。验签评审先固定镜像长度、镜像和签名摘要、可用工具版本，以及从官方发布资料确认的签名主钥指纹。未来使用独立钥匙环，显式绑定 `gpg --verify <签名文件> <压缩镜像>` 的两个输入，核对实际签名键与获审主钥的关系。记录摘要、指纹、工具与验签结果。任何输入漂移、验签失败或身份不符时停止。通过后再核对 3E 设备树、双有线、串口和备卡路径，决定是否采用为台架基线。见[官方镜像入口](https://dl.armbian.com/radxa-zero3/Trixie_vendor_minimal)与[GnuPG 验签说明](https://www.gnupg.org/documentation/manuals/gnupg/Operational-GPG-Commands.html)。
+
+当前为 HW-G0。HW-G2 采购评审等待实际到手额、首轮新上限和候选预检结论。写卡、首次启动及故障操作在具备设备和精确范围后进入 HW-G3。
+
 ## Gate 与授权
 
 ### HW-G0：目标与非目标
