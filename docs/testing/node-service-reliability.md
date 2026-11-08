@@ -188,4 +188,4 @@ Service 关闭唯一命令发送端作为独立停止信号，沿用原准入锁
 
 四项新增用例验证满邮箱无需 Stop 命令槽、部分写入和晚到验证的收束、未登记部分帧的精确关闭、Join 失败保留来源及旧活动/域拒绝、未确认时 SQLite 与 owner 锁不释放。既有排空查询、状态线程 panic、gate poison、连接关闭与释放错误的测试继续保留。
 
-既有 Rust 1.97.1 和锁定依赖下，离线定向 `shutdown` 5/5、`service::tests` 8/8 通过。默认并行全量 255 项库测试和 2 项 CLI 测试通过，库测试耗时 154.88 秒。fmt、Clippy `--all-targets -- -D warnings`、仓库检查、链接核对和 `git diff --check` 均通过。测试进程已退出，接续改动留在工作区，未暂存、提交或推送。
+既有 Rust 1.97.1 和锁定依赖下，离线定向 `shutdown` 5/5、`service::tests` 8/8 通过。默认并行全量 255 项库测试和 2 项 CLI 测试通过，库测试耗时 154.88 秒。fmt、Clippy `--all-targets -- -D warnings`、仓库检查、链接核对和 `git diff --check` 均通过。测试进程已退出；所有者随后授权本地提交为 `1eeff29`，未推送。真实平台的资源、耗时和拒绝证据缺口见[资源账本](../architecture/node-owner-resource-ledger.md)。
